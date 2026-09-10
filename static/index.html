@@ -30,7 +30,7 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
   </div>
 </div>
 
-<h2>Qualifying zones</h2><div class="card"><table><thead><tr><th>Zone</th><th>Direction</th><th>Range</th><th>Grade</th><th>Touches</th><th>Sweep</th></tr></thead><tbody id="zones"></tbody></table></div>
+<h2>Intraday / scalp zones</h2><p class="section-note">D1/H4 provide institutional context. Plotted reaction locations are generated from nearby H1/M15 structure; M1 remains the trigger.</p><div class="card"><table><thead><tr><th>Zone</th><th>TF</th><th>Direction</th><th>Range</th><th>Grade</th><th>Touches</th><th>Sweep</th></tr></thead><tbody id="zones"></tbody></table></div>
 <h2>News</h2><div class="card"><table><thead><tr><th>Time</th><th>Event</th><th>Impact</th><th>Released</th></tr></thead><tbody id="news"></tbody></table></div>
 <h2>Validator / audit state</h2><div class="card"><code id="issues"></code></div>
 </div>
@@ -69,11 +69,11 @@ function render(s){
  const aAge=a.generated_at?ageSeconds(a.generated_at):null;
  document.getElementById('analysisMeta').textContent=a.generated_at?`Generated ${fmtTime(a.generated_at)} · ${aAge}s ago · valid until ${fmtTime(a.valid_until)}`:'No completed analysis yet.';
  cards('summary',[
-   ['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
+   ['Trading profile',s.trading_profile||'INTRADAY_SCALP','ok','H1/M15 location · M1 execution'],['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
  ]);
  document.getElementById('schedule').innerHTML=(sch.sessions||[]).map(x=>{const st=x.status|| (x.completed?'DONE':x.window_active?'DUE_RETRYING':'WAITING'); const label=st==='DONE'?'<span class="ok">DONE</span>':st==='DUE_RETRYING'?'<span class="warn">DUE / RETRYING</span>':st==='RECOVERY_DUE'?'<span class="warn">RECOVERY DUE</span>':'WAITING'; return `<tr><td>${esc(x.session)}</td><td>${esc(fmtTime(x.scheduled_analysis_at))}</td><td>${esc(fmtTime(x.catchup_until))}</td><td>${label}</td></tr>`;}).join('')||'<tr><td colspan="4">No scheduler state</td></tr>';
  document.getElementById('runs').innerHTML=(sch.recent_runs||[]).slice(0,5).map(x=>`<tr><td>${esc(fmtTime(x.ts))}</td><td>${esc(x.kind)}</td><td>${esc(x.status)}</td><td>${esc(x.details)}</td></tr>`).join('')||'<tr><td colspan="4">No scheduled runs yet</td></tr>';
- document.getElementById('zones').innerHTML=(a.zones||[]).map(z=>`<tr><td>${esc(z.zone_id)}</td><td>${esc(z.direction)}</td><td>${esc(z.zone_low)} – ${esc(z.zone_high)}</td><td>${esc(z.grade)}</td><td>${esc(z.touch_count)}</td><td>${esc(z.requires_sweep)}</td></tr>`).join('')||'<tr><td colspan="6">No qualifying zones</td></tr>';
+ document.getElementById('zones').innerHTML=(a.zones||[]).map(z=>`<tr><td>${esc(z.zone_id)}</td><td>${esc(z.source_tf)}</td><td>${esc(z.direction)}</td><td>${esc(z.zone_low)} – ${esc(z.zone_high)}</td><td>${esc(z.grade)}</td><td>${esc(z.touch_count)}</td><td>${esc(z.requires_sweep)}</td></tr>`).join('')||'<tr><td colspan="7">No qualifying intraday zones</td></tr>';
  document.getElementById('news').innerHTML=(s.news||[]).map(n=>`<tr><td>${esc(fmtTime(n.ts))}</td><td>${esc(n.title)}</td><td>${esc(n.impact)}</td><td>${esc(n.released)}</td></tr>`).join('')||'<tr><td colspan="4">No stored news events</td></tr>';
  document.getElementById('issues').textContent=JSON.stringify({no_trade_reason:a.no_trade_reason,issues:a.validator_issues||[],heartbeat:s.heartbeat,history_context:hist,scheduler_now:sch.now_local,last_push:s.event_kind||'state',server_ts:s.server_ts||null},null,2);
 }

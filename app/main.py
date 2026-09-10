@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         DB.audit("service.stop", "system", "shutdown")
 
 
-app = FastAPI(title="Institutional SMC AI Cloud", version="1.6.1", lifespan=lifespan)
+app = FastAPI(title="Institutional SMC AI Cloud", version="1.7.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -50,7 +50,7 @@ def health():
     return {
         "ok": True,
         "service": "institutional-smc-ai-cloud",
-        "version": "1.6.1",
+        "version": "1.7.0",
         "paper_only": SETTINGS.paper_only,
         "ai_enabled": SETTINGS.ai_enabled,
         "ai_configured": any([
@@ -68,6 +68,7 @@ def health():
         "session_snapshot_max_age_seconds": SETTINGS.session_snapshot_max_age_seconds,
         "history_full_max_age_hours": SETTINGS.history_full_max_age_hours,
         "history_protocol": 3,
+        "trading_profile": SETTINGS.trading_profile,
     }
 
 
@@ -199,6 +200,7 @@ def _dashboard_payload(event_kind: str = "state") -> str:
     state["history_context"]["last_full_sync_at"] = full.generated_at.isoformat() if full else None
     state["history_context"]["last_full_sync_reason"] = full.snapshot_reason if full else None
     state["scheduler"] = scheduler_status()
+    state["trading_profile"] = SETTINGS.trading_profile
     state["event_kind"] = event_kind
     state["server_ts"] = datetime.now(timezone.utc).isoformat()
     return json.dumps(state, separators=(",", ":"))
@@ -245,6 +247,7 @@ def dashboard_state(actor: str = Depends(require_admin)):
     state["history_context"]["last_full_sync_at"] = full.generated_at.isoformat() if full else None
     state["history_context"]["last_full_sync_reason"] = full.snapshot_reason if full else None
     state["scheduler"] = scheduler_status()
+    state["trading_profile"] = SETTINGS.trading_profile
     return state
 
 

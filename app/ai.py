@@ -72,7 +72,10 @@ def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict
     return {
         "instruction": (
             "Analyze the complete supplied historical context across XAU D1/H4/H1/M15 and DXY D1/H4/H1, plus deterministic candidate zones. "
-            "Use the long history to distinguish continuation locations from reversal locations and to assess freshness, mitigation, liquidity and premium/discount context. "
+            "TRADING PROFILE IS INTRADAY_SCALP: D1/H4 are directional/liquidity context, not distant swing-entry zones; H1 defines the intraday framework and M15 supplies/refines the actionable reaction locations. "
+            "Prefer the nearest fresh H1>M15 or M15 institutional locations that can reasonably trade during the active session. Reject a candidate that is technically valid but behaves like a remote swing POI. "
+            "Use the long history to distinguish continuation locations from reversal/transition locations and to assess freshness, mitigation, liquidity and premium/discount context. "
+            "A reversal scalp still requires genuine institutional evidence; DXY support and a fresh M15 transition can strengthen it, while the M1 EA must demand stronger reversal displacement. "
             "You may select, reject, downgrade, or describe candidate zones, but you MUST NOT invent or modify numeric price levels. "
             "M1 is execution-only and is not supplied here; never claim that an entry trigger has already occurred. "
             "The EA execution order is STRICT: liquidity sweep -> MSS with genuine displacement -> Fibonacci retracement location -> "

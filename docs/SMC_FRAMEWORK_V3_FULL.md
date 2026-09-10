@@ -7,10 +7,10 @@ The objective is not to predict every move. The objective is to identify only hi
 ## 1. Timeframe architecture
 
 XAUUSD:
-- D1 = macro structure and external dealing range.
-- H4 = major institutional structure.
-- H1 = immediate intraday structural framework.
-- M15 = contextual refinement and zone quality only.
+- D1 = macro structure, external dealing range and higher-timeframe liquidity context. It is context, not a default scalp-entry zone source.
+- H4 = major institutional structure and directional risk context. It is context, not a default scalp-entry zone source.
+- H1 = immediate intraday structural framework and parent location layer.
+- M15 = primary intraday/scalp reaction-location and refinement layer.
 - M1 = execution timeframe only, handled by MT5, not by this cloud analyst.
 
 DXY:
@@ -78,16 +78,20 @@ Determine immediate directional structure, latest structural break, current deal
 ### M15
 Use only to evaluate whether the higher-timeframe zone is clean, meaningful, fresh and worth monitoring. Evaluate M15 structure, displacement, liquidity, rejection, consolidation, mitigation and premium/discount relationship. Do not make M15 a mandatory execution filter.
 
-## 6. Zone construction and quality
+## 6. Zone construction and quality — INTRADAY_SCALP profile
 
-Prioritize institutional references in this order:
-1. D1 zone.
-2. H4 zone.
-3. H1 zone.
-4. M15 refinement inside the higher-timeframe zone.
-5. M1 execution structure after price reaches the zone.
+The default trading profile is `INTRADAY_SCALP`. D1/H4 still control the institutional narrative, but remote D1/H4 swing POIs are not exported as executable M1 zones merely because they exist.
 
-A zone should have at least two meaningful independent confluences; three or more are preferred. Typical confluences include HTF OB/FVG, liquidity extreme, displacement origin, premium/discount, higher-timeframe structure, DXY alignment, session liquidity and a relevant psychological level.
+Prioritize institutional references in this order for actionable zones:
+1. D1/H4 structure, liquidity and directional risk as context.
+2. H1 immediate intraday framework and parent displacement location.
+3. M15 fresh displacement origin / OB-BB-FVG reaction area, preferably nested in or related to H1.
+4. Nearby M15 liquidity (equal highs/lows, session-side liquidity where observable) as sweep context.
+5. M1 execution structure after price reaches the authorized intraday zone.
+
+Actionable zones must pass an ATR-relative distance filter from current price and a maximum width filter so the cloud does not hand a scalper a remote or excessively broad swing zone. Distance does not make a zone institutional by itself; freshness, displacement origin, dealing-range location, liquidity relationship, H1 structure and DXY context still matter.
+
+A zone should have at least two meaningful independent confluences; three or more are preferred. Typical confluences include H1/M15 displacement origin, nested M15 refinement, liquidity extreme, premium/discount, D1/H4 context, DXY alignment and session liquidity.
 
 Never invent an artificial zone just to generate a trade.
 
@@ -154,9 +158,9 @@ Below B+ = NO_TRADE.
 
 ## 11. Trend and counter-trend
 
-With-trend setups should align D1/H4/H1 where possible and require institutional location plus M1 sweep/MSS/displacement/FVG/OB pullback.
+With-trend intraday setups should respect D1/H4 context and preferably align H1/M15, but the actual reaction location should be H1/M15 and reasonably reachable during the active session. M1 still requires sweep/MSS/displacement/FVG/OB pullback.
 
-Counter-trend setups are permitted only from significant D1/H4 institutional locations with liquidity sweep, strong rejection, meaningful M1 reversal, strong displacement, fresh FVG/OB, sufficient clear run and no strong DXY contradiction. M15 displacement is not mandatory.
+Counter-trend scalp setups are allowed only as a genuine intraday transition/reversal: a fresh nearby M15 institutional origin or liquidity extreme, clear H1 relationship, supportive/non-conflicting DXY where available, sufficient clear run, and stronger M1 reversal displacement. A distant D1/H4 swing zone is not required, and a simple M15 touch is never sufficient.
 
 ## 12. Session context
 

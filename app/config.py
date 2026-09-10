@@ -79,6 +79,16 @@ class Settings:
     min_clear_run_with_trend_pips: float = _float("MIN_CLEAR_RUN_WITH_TREND_PIPS", 50.0)
     min_clear_run_counter_trend_pips: float = _float("MIN_CLEAR_RUN_COUNTER_TREND_PIPS", 100.0)
 
+    # Intraday/scalping profile. D1/H4 remain structural context; H1/M15 generate
+    # the executable reaction map that is refined by the M1 execution EA.
+    trading_profile: str = os.getenv("TRADING_PROFILE", "INTRADAY_SCALP").upper()
+    intraday_max_distance_h1_atr: float = _float("INTRADAY_MAX_DISTANCE_H1_ATR", 2.5)
+    intraday_max_distance_d1_atr: float = _float("INTRADAY_MAX_DISTANCE_D1_ATR", 0.35)
+    intraday_max_zone_width_m15_atr: float = _float("INTRADAY_MAX_ZONE_WIDTH_M15_ATR", 2.5)
+    intraday_h1_lookback: int = _int("INTRADAY_H1_LOOKBACK", 180)
+    intraday_m15_lookback: int = _int("INTRADAY_M15_LOOKBACK", 320)
+    intraday_max_candidates: int = _int("INTRADAY_MAX_CANDIDATES", 8)
+
     nonce_ttl_seconds: int = _int("NONCE_TTL_SECONDS", 300)
     rate_limit_per_minute: int = _int("RATE_LIMIT_PER_MINUTE", 120)
 
