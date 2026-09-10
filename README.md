@@ -1,3 +1,7 @@
+# Institutional SMC Cloud v3.8.1
+
+**Major-news revalidation:** every high-impact USD news cluster triggers a full-history H4/H1 zone revalidation around T-10 and T+10. New M1 entries are locked between the checkpoints; existing demo positions continue deterministic SL/BE/trailing management. M15 is used only to qualify the published zone and never delays M1 execution afterward.
+
 # Institutional SMC Cloud v3.8 — H4/H1 Primary Zones, M15 Qualification, M1 Execution
 
 GitHub/Railway-ready cloud service for the demo/paper Institutional SMC project.

@@ -126,10 +126,21 @@ class Settings:
     news_provider: str = os.getenv("NEWS_PROVIDER", "mt5_calendar").lower()
     tradingeconomics_api_key: str = os.getenv("TRADINGECONOMICS_API_KEY", "")
     news_poll_minutes: int = _int("NEWS_POLL_MINUTES", 10)
-    news_pre_blackout_minutes: int = _int("NEWS_PRE_BLACKOUT_MINUTES", 10)
-    news_post_cooldown_minutes: int = _int("NEWS_POST_COOLDOWN_MINUTES", 5)
-    # Keep retrying post-news reanalysis for this long after the cooldown, waiting for a fresh post-release snapshot.
+
+    # Major-news zone revalidation policy. Every high-impact USD release gets
+    # one analysis around T-10 minutes and another around T+10 minutes. The
+    # pre-release analysis reassesses/refreshes the H4/H1 zone map before the
+    # blackout, while the post-release analysis verifies which zones survived
+    # the repricing before M1 execution can resume.
+    news_pre_analysis_minutes: int = _int("NEWS_PRE_ANALYSIS_MINUTES", 10)
+    news_post_analysis_minutes: int = _int("NEWS_POST_ANALYSIS_MINUTES", 10)
+    pre_news_catchup_minutes: int = _int("PRE_NEWS_CATCHUP_MINUTES", 9)
     post_news_catchup_minutes: int = _int("POST_NEWS_CATCHUP_MINUTES", 30)
+
+    # Execution blackout is intentionally aligned with the two revalidation
+    # checkpoints: lock at T-10 and remain locked through T+10.
+    news_pre_blackout_minutes: int = _int("NEWS_PRE_BLACKOUT_MINUTES", 10)
+    news_post_cooldown_minutes: int = _int("NEWS_POST_COOLDOWN_MINUTES", 10)
 
     dashboard_enabled: bool = _bool("DASHBOARD_ENABLED", True)
 

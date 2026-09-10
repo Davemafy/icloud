@@ -83,7 +83,7 @@ def blackout_state(now: datetime | None = None) -> tuple[bool, str, list[NewsEve
             continue
         pre = e.ts - timedelta(minutes=SETTINGS.news_pre_blackout_minutes)
         post = e.ts + timedelta(minutes=SETTINGS.news_post_cooldown_minutes)
-        if pre <= now <= post:
+        if pre <= now < post:
             active.append(e)
             reasons.append(f"{e.title} @ {e.ts.isoformat()}")
     return bool(active), "; ".join(reasons), active

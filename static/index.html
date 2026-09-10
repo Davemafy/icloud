@@ -13,7 +13,7 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
 <h2>Live MT5 feed</h2><p class="section-note">Pushed instantly from the latest Data Bridge snapshot; no browser polling or AI call is required.</p>
 <div class="grid" id="live"></div>
 
-<h2>Historical analysis context</h2><p class="section-note">Heavy history is synced at bridge startup, before each session, and after high-impact USD news. Live updates are merged into this context.</p>
+<h2>Historical analysis context</h2><p class="section-note">Heavy history is synced at bridge startup, before each session, and at T-10 / T+10 around every high-impact USD news cluster. Live updates are merged into this context.</p>
 <div class="grid" id="history"></div>
 
 <h2>Last institutional analysis</h2><p class="section-note" id="analysisMeta">No completed analysis yet.</p>
@@ -31,7 +31,7 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
 </div>
 
 <h2>Intraday / scalp zones</h2><p class="section-note">H4/H1 are the primary institutional supply/demand zone authority. M15 is consumed only while qualifying the zone; once published, M1 is the sole execution trigger with no further M15 delay.</p><div class="card"><table><thead><tr><th>Zone</th><th>TF</th><th>Direction</th><th>Range</th><th>Grade</th><th>Touches</th><th>Sweep</th></tr></thead><tbody id="zones"></tbody></table></div>
-<h2>News</h2><div class="card"><table><thead><tr><th>Time</th><th>Event</th><th>Impact</th><th>Released</th></tr></thead><tbody id="news"></tbody></table></div>
+<h2>News</h2><p class="section-note">High-impact USD news is revalidated around T-10 and T+10. New M1 entries are locked between those checkpoints; existing demo positions continue deterministic SL/BE/trailing management.</p><div class="card"><table><thead><tr><th>Time</th><th>Event</th><th>Impact</th><th>Released</th></tr></thead><tbody id="news"></tbody></table></div>
 <h2>Validator / audit state</h2><div class="card"><code id="issues"></code></div>
 </div>
 <script>

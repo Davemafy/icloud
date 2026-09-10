@@ -192,17 +192,65 @@ def mark_manual_analysis_satisfies_session(result, reason: str, now_utc: datetim
     return run_key
 
 
-def post_news_run_keys(now_utc: datetime | None = None) -> list[tuple[str, str, datetime]]:
-    """Return post-news analyses due after cooldown with a retry/catch-up window."""
-    now_utc = now_utc or datetime.now(timezone.utc)
-    out = []
+def _major_news_clusters() -> list[dict]:
+    """Group simultaneous high-impact USD events into one market revalidation.
+
+    CPI variants, PPI + claims, or other releases can share the exact same
+    timestamp. They create one repricing event in the market, so one deep
+    H4/H1 zone revalidation per timestamp is both sufficient and materially
+    more efficient than spending several identical AI calls back-to-back.
+    """
+    grouped: dict[str, dict] = {}
     for e in stored_news():
         if e.currency.upper() != "USD" or e.impact.upper() != "HIGH":
             continue
-        run_at = e.ts + timedelta(minutes=SETTINGS.news_post_cooldown_minutes)
+        ts = e.ts.astimezone(timezone.utc)
+        key = ts.isoformat()
+        bucket = grouped.setdefault(key, {"event_ts": ts, "events": []})
+        bucket["events"].append(e)
+
+    out: list[dict] = []
+    for key, bucket in grouped.items():
+        events = bucket["events"]
+        titles = sorted({e.title for e in events})
+        out.append({
+            "cluster_key": str(int(bucket["event_ts"].timestamp())),
+            "event_ts": bucket["event_ts"],
+            "title": " + ".join(titles),
+            "event_ids": [e.event_id for e in events],
+        })
+    return sorted(out, key=lambda x: x["event_ts"])
+
+
+def pre_news_run_keys(now_utc: datetime | None = None) -> list[tuple[str, str, datetime]]:
+    """Return T-10 major-news zone revalidations due before release.
+
+    The target is NEWS_PRE_ANALYSIS_MINUTES before the release. Retries are
+    allowed only before the event itself; a missed pre-news analysis is never
+    executed after the release under the wrong market regime.
+    """
+    now_utc = now_utc or datetime.now(timezone.utc)
+    out = []
+    for cluster in _major_news_clusters():
+        event_ts = cluster["event_ts"]
+        run_at = event_ts - timedelta(minutes=SETTINGS.news_pre_analysis_minutes)
+        configured_end = run_at + timedelta(minutes=SETTINGS.pre_news_catchup_minutes)
+        window_end = min(configured_end, event_ts - timedelta(seconds=1))
+        if run_at <= now_utc <= window_end:
+            out.append((f"news_pre:{cluster['cluster_key']}", cluster["title"], event_ts))
+    return out
+
+
+def post_news_run_keys(now_utc: datetime | None = None) -> list[tuple[str, str, datetime]]:
+    """Return T+10 major-news zone revalidations with a retry window."""
+    now_utc = now_utc or datetime.now(timezone.utc)
+    out = []
+    for cluster in _major_news_clusters():
+        event_ts = cluster["event_ts"]
+        run_at = event_ts + timedelta(minutes=SETTINGS.news_post_analysis_minutes)
         window_end = run_at + timedelta(minutes=SETTINGS.post_news_catchup_minutes)
         if run_at <= now_utc <= window_end:
-            out.append((f"news:{e.event_id}:{run_at.isoformat()}", e.title, e.ts))
+            out.append((f"news_post:{cluster['cluster_key']}", cluster["title"], event_ts))
     return out
 
 
@@ -298,9 +346,13 @@ def scheduler_status(now_utc: datetime | None = None) -> dict:
         "session_catchup_minutes": SETTINGS.session_catchup_minutes,
         "session_active_recovery": SETTINGS.session_active_recovery,
         "snapshot_max_age_seconds": SETTINGS.session_snapshot_max_age_seconds,
+        "news_pre_analysis_minutes": SETTINGS.news_pre_analysis_minutes,
+        "news_post_analysis_minutes": SETTINGS.news_post_analysis_minutes,
+        "news_pre_blackout_minutes": SETTINGS.news_pre_blackout_minutes,
+        "news_post_cooldown_minutes": SETTINGS.news_post_cooldown_minutes,
         "active_session": current["session"] if current else None,
         "sessions": rows,
-        "recent_runs": DB.list_scheduler_runs(10),
+        "recent_runs": DB.list_scheduler_runs(12),
     }
 
 
@@ -378,6 +430,50 @@ async def scheduler_loop():
                     await EVENTS.publish("scheduler")
                     DB.audit("session.analysis_failed", "scheduler", f"{name}/{mode}: {exc}")
 
+            # Major USD news is revalidated twice: around T-10 and T+10.
+            # M15 is used only inside the cloud zone-qualification pass; once a
+            # zone is published, M1 remains the sole execution trigger.
+            for run_key, title, event_ts in pre_news_run_keys(now):
+                if DB.scheduler_ran(run_key):
+                    continue
+                live = load_latest_snapshot()
+                snap = load_analysis_snapshot()
+                if live is None:
+                    DB.audit("pre_news.waiting", "scheduler", f"{title}: no live snapshot yet")
+                    continue
+                age = _snapshot_age_seconds(now, live)
+                if age > SETTINGS.session_snapshot_max_age_seconds:
+                    DB.audit("pre_news.waiting", "scheduler", f"{title}: waiting for fresher live snapshot age={age:.0f}s")
+                    continue
+                if snap is None:
+                    DB.audit("pre_news.waiting", "scheduler", f"{title}: waiting for FULL_HISTORY context")
+                    continue
+                full = load_latest_full_snapshot()
+                target_at = event_ts.astimezone(timezone.utc) - timedelta(minutes=SETTINGS.news_pre_analysis_minutes)
+                required_full_at = target_at - timedelta(seconds=90)
+                if full is None or full.generated_at.astimezone(timezone.utc) < required_full_at:
+                    got = "none" if full is None else f"{full.generated_at.isoformat()} reason={full.snapshot_reason}"
+                    DB.audit(
+                        "pre_news.waiting", "scheduler",
+                        f"{title}: waiting for T-10 FULL_HISTORY; required>={required_full_at.isoformat()} got={got}",
+                    )
+                    continue
+                try:
+                    result = await run_production_analysis(snap, reason=f"pre_news:{title}:auto")
+                    DB.mark_scheduler_run(
+                        run_key, "pre_news", "success",
+                        f"{title} analysis_id={result.analysis_id} mode={result.ea_mode.value} ai={result.ai_used}",
+                    )
+                    DB.audit(
+                        "pre_news.analysis_success", "scheduler",
+                        f"{title}: run_key={run_key} analysis_id={result.analysis_id} ea={result.ea_mode.value}",
+                    )
+                    await EVENTS.publish("scheduler")
+                except Exception as exc:
+                    DB.mark_scheduler_run(run_key, "pre_news", "failed", str(exc))
+                    DB.audit("pre_news.analysis_failed", "scheduler", f"{title}: {exc}")
+                    await EVENTS.publish("scheduler")
+
             for run_key, title, event_ts in post_news_run_keys(now):
                 if DB.scheduler_ran(run_key):
                     continue
@@ -389,19 +485,24 @@ async def scheduler_loop():
                         DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for fresher live snapshot age={age:.0f}s")
                         continue
                     full = load_latest_full_snapshot()
-                    required_full_at = event_ts.astimezone(timezone.utc) + timedelta(minutes=SETTINGS.news_post_cooldown_minutes)
+                    required_full_at = event_ts.astimezone(timezone.utc) + timedelta(minutes=SETTINGS.news_post_analysis_minutes)
                     if full is None or full.generated_at.astimezone(timezone.utc) < required_full_at:
-                        DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for post-news FULL_HISTORY sync after {required_full_at.isoformat()}")
+                        DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for T+10 FULL_HISTORY sync after {required_full_at.isoformat()}")
                         continue
                     try:
                         result = await run_production_analysis(snap, reason=f"post_news:{title}:auto")
                         DB.mark_scheduler_run(
                             run_key, "post_news", "success",
-                            f"{title} analysis_id={result.analysis_id} mode={result.ea_mode.value}",
+                            f"{title} analysis_id={result.analysis_id} mode={result.ea_mode.value} ai={result.ai_used}",
+                        )
+                        DB.audit(
+                            "post_news.analysis_success", "scheduler",
+                            f"{title}: run_key={run_key} analysis_id={result.analysis_id} ea={result.ea_mode.value}",
                         )
                         await EVENTS.publish("scheduler")
                     except Exception as exc:
                         DB.mark_scheduler_run(run_key, "post_news", "failed", str(exc))
+                        DB.audit("post_news.analysis_failed", "scheduler", f"{title}: {exc}")
                         await EVENTS.publish("scheduler")
                 elif live is None:
                     DB.audit("post_news.waiting", "scheduler", f"{title}: no live snapshot yet")
