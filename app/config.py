@@ -79,9 +79,9 @@ class Settings:
     min_clear_run_with_trend_pips: float = _float("MIN_CLEAR_RUN_WITH_TREND_PIPS", 50.0)
     min_clear_run_counter_trend_pips: float = _float("MIN_CLEAR_RUN_COUNTER_TREND_PIPS", 100.0)
 
-    # Intraday/scalping profile. D1/H4 remain structural context; H1/M15 generate
-    # the executable reaction map that is refined by the M1 execution EA.
-    trading_profile: str = os.getenv("TRADING_PROFILE", "INTRADAY_SCALP").upper()
+    # Intraday/scalping profile. H4/H1 are the primary supply/demand/POI authority;
+    # M15 is consumed only for one-time zone qualification; M1 is the sole live trigger.
+    trading_profile: str = os.getenv("TRADING_PROFILE", "INTRADAY_HTF_ZONE_M1").upper()
     intraday_max_distance_h1_atr: float = _float("INTRADAY_MAX_DISTANCE_H1_ATR", 2.5)
     intraday_max_distance_d1_atr: float = _float("INTRADAY_MAX_DISTANCE_D1_ATR", 0.35)
     intraday_max_zone_width_m15_atr: float = _float("INTRADAY_MAX_ZONE_WIDTH_M15_ATR", 2.5)

@@ -90,43 +90,57 @@ def _direction_bias(direction: Direction) -> Bias:
     return Bias.BULLISH if direction == Direction.BUY_ONLY else Bias.BEARISH
 
 
-def _intraday_zone_grade(
+def _primary_zone_grade(
     direction: Direction,
+    h4_bias: Bias,
     h1_bias: Bias,
-    m15_bias: Bias,
     overall: Bias,
     implication: DxyImplication,
     touches: int,
-    nested_h1: bool,
+    h4_h1_pair: bool,
+    m15_confirmation_score: int,
+    source_tf: str,
 ) -> Grade:
-    """Grade an intraday location without turning D1/H4 swing POIs into entries.
+    """Grade a H4/H1 institutional zone for intraday/scalp use.
 
-    H1 and M15 are the location/transition layers. D1/H4 remain context. A clean
-    M15 reversal against H1 can still qualify as A when DXY supports it and the
-    origin is fresh; M1 must then prove the reversal with stronger displacement.
+    H4/H1 are the *location authority*. M15 is consumed here only as a zone-quality
+    input. It never becomes a post-publication entry gate; once an A/A+ zone is
+    published, the M1 EA may react immediately when price reaches it and the M1
+    sweep/MSS/displacement sequence appears.
     """
     wanted = _direction_bias(direction)
     if touches >= 2 or implication == DxyImplication.CONFLICTS:
         return Grade.B_PLUS
 
-    aligned_h1 = h1_bias == wanted
-    aligned_m15 = m15_bias == wanted
+    h4_ok = h4_bias in {wanted, Bias.NEUTRAL}
+    h1_ok = h1_bias in {wanted, Bias.NEUTRAL}
     overall_ok = overall in {wanted, Bias.NEUTRAL}
 
-    if nested_h1 and aligned_h1 and overall_ok:
-        if aligned_m15 and touches == 0 and implication == DxyImplication.SUPPORTS:
+    # Best case: the same institutional side is represented on both H4 and H1,
+    # M15 confirms the POI at analysis time, the zone is fresh, and DXY supports.
+    if h4_h1_pair and h4_ok and h1_ok and overall_ok and m15_confirmation_score >= 2:
+        if touches == 0 and m15_confirmation_score >= 3 and implication == DxyImplication.SUPPORTS:
             return Grade.A_PLUS
         return Grade.A
 
-    if aligned_m15 and h1_bias in {wanted, Bias.NEUTRAL} and overall_ok:
-        if aligned_h1 and touches == 0 and implication == DxyImplication.SUPPORTS:
+    # A clean H1 demand/supply zone is valid for intraday execution when it sits
+    # inside non-conflicting H4 context and has M15 qualification already present.
+    if source_tf == "H1" and h1_bias == wanted and h4_ok and overall_ok and m15_confirmation_score >= 1:
+        if touches == 0 and m15_confirmation_score >= 3 and implication == DxyImplication.SUPPORTS:
             return Grade.A_PLUS
         return Grade.A
 
-    # Intraday reversal exception: fresh M15 order-flow transition + supportive
-    # DXY can authorize the location as A, but the EA still needs stronger M1 proof.
-    if aligned_m15 and h1_bias != wanted and touches == 0 and implication == DxyImplication.SUPPORTS:
-        return Grade.A
+    # H4-only POIs are accepted only when narrow/reachable and strongly confirmed
+    # by M15. In practice the width/distance filters below eliminate swing-style POIs.
+    if source_tf == "H4" and h4_bias == wanted and overall_ok and m15_confirmation_score >= 2:
+        return Grade.A if touches <= 1 else Grade.B_PLUS
+
+    # Counter-H4 intraday reversal: allow only a fresh H1 reversal zone with a
+    # strong, already-observed M15 qualification and supportive DXY. M1 still has
+    # to prove the reversal; M15 is not checked again at execution time.
+    if source_tf == "H1" and h1_bias == wanted and h4_bias not in {wanted, Bias.NEUTRAL}:
+        if touches == 0 and m15_confirmation_score >= 3 and implication == DxyImplication.SUPPORTS:
+            return Grade.A
 
     return Grade.B_PLUS
 
@@ -136,12 +150,16 @@ def _zone_overlap(low1: float, high1: float, low2: float, high2: float, padding:
 
 
 def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
-    """Build the INTRADAY_SCALP institutional map from the supplied history.
+    """Build the intraday institutional map using H4/H1 as zone authority.
 
-    D1/H4 define macro/major structure and directional risk. They are deliberately
-    not emitted as executable zones by default. H1 supplies the intraday framework;
-    M15 supplies/refines the actual reaction locations. M1 remains the sole trigger.
-    Every numeric level is still derived only from observed OHLC.
+    Architecture:
+      D1 + DXY D1/H4/H1 = macro/intermarket context.
+      XAU H4/H1         = primary supply/demand / institutional POI construction.
+      XAU M15           = one-time zone qualification/refinement evidence only.
+      XAU M1            = sole execution authority after the zone is published.
+
+    No standalone M15 zone is exported. Crucially, the published plan contains no
+    requirement to wait for a later M15 candle, close, displacement or confirmation.
     """
     missing_x = REQUIRED_XAU.difference(snapshot.xau.keys())
     missing_d = REQUIRED_DXY.difference(snapshot.dxy.keys())
@@ -177,12 +195,12 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
         "M15": snapshot.xau["M15"].atr or atr(x_m15),
     }
     d1_atr = max(tf_atr["D1"], snapshot.point_size * 10)
+    h4_atr = max(tf_atr["H4"], snapshot.point_size * 10)
     h1_atr = max(tf_atr["H1"], snapshot.point_size * 10)
     m15_atr = max(tf_atr["M15"], snapshot.point_size * 10)
 
-    # Intraday locations are bounded by both immediate H1 volatility and the
-    # current daily volatility envelope. This removes far-away swing POIs such as
-    # zones several H1 ATRs from current price.
+    # Keep H4/H1 authority while preventing a valid-but-remote swing POI from being
+    # presented as an immediate scalp zone. Reachability is a filter, not a source.
     distance_cap = max(
         m15_atr * 4.0,
         min(
@@ -190,33 +208,93 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
             d1_atr * SETTINGS.intraday_max_distance_d1_atr,
         ),
     )
-    max_zone_width = max(m15_atr * SETTINGS.intraday_max_zone_width_m15_atr, snapshot.point_size * 30)
+    # A parent H4 zone is preferably refined by H1. The remaining execution zone
+    # must still be compact enough for intraday risk; M15 does not define its price.
+    max_zone_width = max(
+        m15_atr * SETTINGS.intraday_max_zone_width_m15_atr,
+        h1_atr * 0.70,
+        snapshot.point_size * 30,
+    )
 
-    h1_hi, h1_lo, h1_eq = recent_range(x_h1, min(96, len(x_h1)))
-    m15_hi, m15_lo, m15_eq = recent_range(x_m15, min(64, len(x_m15)))
+    h4_hi, h4_lo, h4_eq = recent_range(x_h4, min(120, len(x_h4)))
+    h1_hi, h1_lo, h1_eq = recent_range(x_h1, min(120, len(x_h1)))
+    m15_hi, m15_lo, m15_eq = recent_range(x_m15, min(96, len(x_m15)))
 
-    bear_votes = sum(x == Bias.BEARISH for x in (b_x_h4, b_x_h1, b_x_m15))
-    bull_votes = sum(x == Bias.BULLISH for x in (b_x_h4, b_x_h1, b_x_m15))
-    overall = Bias.BEARISH if bear_votes >= 2 else Bias.BULLISH if bull_votes >= 2 else Bias.NEUTRAL
+    # H4/H1, not M15, determine the immediate institutional thesis. D1 remains
+    # macro context. H1 receives precedence when H4 is neutral; disagreement is
+    # deliberately neutral rather than being resolved by M15.
+    if b_x_h4 == b_x_h1 and b_x_h4 != Bias.NEUTRAL:
+        overall = b_x_h4
+    elif b_x_h4 == Bias.NEUTRAL and b_x_h1 != Bias.NEUTRAL:
+        overall = b_x_h1
+    elif b_x_h1 == Bias.NEUTRAL and b_x_h4 != Bias.NEUTRAL:
+        overall = b_x_h4
+    else:
+        overall = Bias.NEUTRAL
     implication = _dxy_implication(overall, b_d_h4, b_d_h1)
 
+    # M15 evidence is calculated once, during zone creation. It is not exported as
+    # a future gate. Same-side displacement nested in the H4/H1 POI is strongest;
+    # structural alignment and relevant liquidity provide additional evidence.
+    m15_origins: dict[Direction, list] = {}
+    for direction, bias in ((Direction.BUY_ONLY, Bias.BULLISH), (Direction.SELL_ONLY, Bias.BEARISH)):
+        m15_origins[direction] = displacement_origins(
+            x_m15,
+            bias,
+            m15_atr,
+            lookback=min(SETTINGS.intraday_m15_lookback, len(x_m15)),
+            limit=12,
+            body_atr_multiple=0.80,
+        )
+
+    tolerance = max(m15_atr * 0.15, snapshot.point_size * 10)
+    m15_ssl = equal_liquidity(x_m15, "SSL", tolerance=tolerance, lookback=min(320, len(x_m15)))
+    m15_bsl = equal_liquidity(x_m15, "BSL", tolerance=tolerance, lookback=min(320, len(x_m15)))
+
+    def m15_qualify(direction: Direction, low: float, high: float) -> tuple[int, list[str]]:
+        wanted = _direction_bias(direction)
+        padding = max(m15_atr * 0.35, snapshot.point_size * 20)
+        nested = next(
+            (item for item in m15_origins[direction] if _zone_overlap(item[0], item[1], low, high, padding=padding)),
+            None,
+        )
+        aligned = b_x_m15 == wanted
+        sweep_level = m15_ssl if direction == Direction.BUY_ONLY else m15_bsl
+        liquidity_near = sweep_level is not None and (low - padding) <= sweep_level <= (high + padding)
+
+        score = 0
+        evidence: list[str] = []
+        if nested is not None:
+            score += 2
+            evidence.append(
+                f"M15 qualification: same-side displacement origin overlaps parent POI (origin_index={nested[2]}); consumed at analysis time"
+            )
+        if aligned:
+            score += 1
+            evidence.append(f"M15 qualification: structural context aligns {wanted.value}; consumed at analysis time")
+        if liquidity_near:
+            score += 1
+            evidence.append(
+                f"M15 qualification: relevant {'SSL' if direction == Direction.BUY_ONLY else 'BSL'} liquidity sits at/near parent POI; consumed at analysis time"
+            )
+        if score == 0:
+            evidence.append("M15 qualification: no independent confirmation; zone remains watch/B+ unless other deterministic rules reject it")
+        evidence.append("M15 role ENDS at zone publication; no later M15 candle/close/displacement is required for entry")
+        return min(score, 3), evidence
+
     zones: List[Zone] = []
+    used_h1: set[tuple[Direction, int]] = set()
 
     def targets(direction: Direction, low: float, high: float):
+        # M15/H1 liquidity can provide intraday targets, but M15 is not an entry gate.
         if direction == Direction.BUY_ONLY:
-            t1 = m15_eq if m15_eq > high else m15_hi
-            t2 = h1_eq if h1_eq > t1 else h1_hi
-            if t1 <= high:
-                t1 = None
-            if t2 is not None and t2 <= (t1 if t1 is not None else high):
-                t2 = None
-            return t1, t2
-        t1 = m15_eq if m15_eq < low else m15_lo
-        t2 = h1_eq if h1_eq < t1 else h1_lo
-        if t1 >= low:
-            t1 = None
-        if t2 is not None and t2 >= (t1 if t1 is not None else low):
-            t2 = None
+            candidates = [x for x in (m15_eq, m15_hi, h1_eq, h1_hi, h4_eq) if x is not None and x > high]
+            candidates = sorted(set(candidates))
+        else:
+            candidates = [x for x in (m15_eq, m15_lo, h1_eq, h1_lo, h4_eq) if x is not None and x < low]
+            candidates = sorted(set(candidates), reverse=True)
+        t1 = candidates[0] if candidates else None
+        t2 = candidates[1] if len(candidates) > 1 else None
         return t1, t2
 
     def add_zone(
@@ -227,7 +305,7 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
         source_tf: str,
         touch_bars,
         touch_start: int,
-        nested_h1: bool,
+        h4_h1_pair: bool,
         provenance: list[str],
         extra_confluences: list[str] | None = None,
     ) -> None:
@@ -236,8 +314,9 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
             return
         if high - low > max_zone_width:
             return
-        # A pullback/scalp POI may overlap current price, but a buy zone should not
-        # sit materially above it and a sell zone should not sit materially below it.
+
+        # Keep an intraday pullback POI on the logical side of price. Small overlap
+        # is allowed because analysis may occur while price is already interacting.
         side_tolerance = m15_atr * 0.50
         if direction == Direction.BUY_ONLY and low > current + side_tolerance:
             return
@@ -247,13 +326,29 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
         touches = _touch_count_since(touch_bars, low, high, touch_start)
         if touches >= 3:
             return
-        if any(_zone_overlap(low, high, z.zone_low, z.zone_high, padding=m15_atr * 0.05) and z.direction == direction for z in zones):
+        if any(
+            _zone_overlap(low, high, z.zone_low, z.zone_high, padding=m15_atr * 0.05)
+            and z.direction == direction
+            for z in zones
+        ):
             return
 
-        grade = _intraday_zone_grade(direction, b_x_h1, b_x_m15, overall, implication, touches, nested_h1)
+        m15_score, m15_evidence = m15_qualify(direction, low, high)
+        grade = _primary_zone_grade(
+            direction,
+            b_x_h4,
+            b_x_h1,
+            overall,
+            implication,
+            touches,
+            h4_h1_pair,
+            m15_score,
+            source_tf,
+        )
+
         wanted = _direction_bias(direction)
-        setup_type = "CONTINUATION" if b_x_h1 == wanted else "REVERSAL/TRANSITION"
-        local_location = "discount" if midpoint <= m15_eq else "premium"
+        setup_type = "CONTINUATION" if overall == wanted else "REVERSAL/TRANSITION"
+        h4_location = "discount" if midpoint <= h4_eq else "premium"
         h1_location = "discount" if midpoint <= h1_eq else "premium"
         t1, t2 = targets(direction, low, high)
         reversal = setup_type != "CONTINUATION"
@@ -262,27 +357,26 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
             min_disp = max(min_disp, 1.30)
 
         confluences = [
-            f"{source_tf} observed displacement origin/refinement",
-            f"M15 {local_location}; H1 {h1_location}",
+            f"{source_tf} observed institutional displacement-origin supply/demand POI",
+            f"H4 {h4_location}; H1 {h1_location}",
             f"freshness={_freshness(touches)} touches={touches}",
-            f"profile={SETTINGS.trading_profile}; distance={abs(midpoint-current):.3f} <= cap={distance_cap:.3f}",
-            f"setup={setup_type}",
-            f"HTF context D1={b_x_d1.value} H4={b_x_h4.value} H1={b_x_h1.value} M15={b_x_m15.value}",
-            "M1-only execution after liquidity sweep, MSS and genuine displacement",
+            f"intraday reachability distance={abs(midpoint-current):.3f} <= cap={distance_cap:.3f}",
+            f"setup={setup_type}; H4={b_x_h4.value} H1={b_x_h1.value} D1={b_x_d1.value}",
         ]
+        confluences.extend(m15_evidence)
         if extra_confluences:
             confluences.extend(extra_confluences)
         if implication == DxyImplication.SUPPORTS:
             confluences.append("DXY H4/H1 intermarket implication supports direction")
         elif implication == DxyImplication.CONFLICTS:
-            confluences.append("DXY H4/H1 conflict; stronger M1 displacement required")
+            confluences.append("DXY H4/H1 conflicts; deterministic grade ceiling is B+ and stronger M1 proof is required")
 
         if direction == Direction.BUY_ONLY:
             sweep = "SSL"
-            invalidation = "No bullish M1 MSS/displacement after SSL sweep at the intraday zone, or decisive acceptance below the observed origin."
+            invalidation = "Decisive acceptance below the H4/H1 demand POI, or failure of the required bullish M1 sweep/MSS/displacement sequence."
         else:
             sweep = "BSL"
-            invalidation = "No bearish M1 MSS/displacement after BSL sweep at the intraday zone, or decisive acceptance above the observed origin."
+            invalidation = "Decisive acceptance above the H4/H1 supply POI, or failure of the required bearish M1 sweep/MSS/displacement sequence."
 
         zones.append(Zone(
             zone_id=zone_id,
@@ -301,128 +395,131 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
             invalidation=invalidation,
             confluences=confluences,
             notes=[
-                "Intraday/scalping execution zone; D1/H4 are context, not a distant swing-entry mandate.",
-                f"Classification={setup_type}. M1 trigger remains mandatory.",
-                f"DXY implication={implication.value}.",
+                "Primary institutional zone is derived from H4/H1 supply-demand/displacement structure.",
+                f"M15 qualification score={m15_score}/3 was frozen when this zone was created.",
+                "After publication, M15 has NO gating/veto role. M1 may execute immediately when its own sequence is valid.",
+                f"Classification={setup_type}; DXY implication={implication.value}.",
             ],
             provenance=provenance,
         ))
 
-    # Cache recent M15 displacement origins. They are the primary intraday POIs
-    # and also serve as refinements nested within a nearby H1 displacement origin.
-    m15_origins: dict[Direction, list] = {}
+    # Primary zone inventory from H4 and H1 only. M15 never creates an independent
+    # candidate zone. H1 nested/adjacent to an H4 POI is preferred because it keeps
+    # higher-timeframe authority while making the risk box practical for a scalper.
+    h4_origins: dict[Direction, list] = {}
+    h1_origins: dict[Direction, list] = {}
     for direction, bias in ((Direction.BUY_ONLY, Bias.BULLISH), (Direction.SELL_ONLY, Bias.BEARISH)):
-        m15_origins[direction] = displacement_origins(
-            x_m15,
+        h4_origins[direction] = displacement_origins(
+            x_h4,
             bias,
-            m15_atr,
-            lookback=min(SETTINGS.intraday_m15_lookback, len(x_m15)),
-            limit=10,
+            h4_atr,
+            lookback=min(max(240, SETTINGS.intraday_h1_lookback * 2), len(x_h4)),
+            limit=6,
             body_atr_multiple=0.80,
         )
-
-    # H1 establishes the intraday framework. Prefer a nested M15 origin as the
-    # actual zone boundary; use the H1 body only when it is already narrow enough.
-    for direction, bias in ((Direction.BUY_ONLY, Bias.BULLISH), (Direction.SELL_ONLY, Bias.BEARISH)):
-        h1_origins = displacement_origins(
+        h1_origins[direction] = displacement_origins(
             x_h1,
             bias,
             h1_atr,
             lookback=min(SETTINGS.intraday_h1_lookback, len(x_h1)),
-            limit=5,
+            limit=10,
             body_atr_multiple=0.80,
         )
+
+    for direction in (Direction.BUY_ONLY, Direction.SELL_ONLY):
         ordinal = 0
-        for h1_low, h1_high, h1_origin_idx, h1_disp_idx in h1_origins:
-            h1_mid = (h1_low + h1_high) / 2.0
-            if abs(h1_mid - current) > distance_cap + h1_atr * 0.25:
+        pair_padding = max(h1_atr * 0.20, m15_atr * 0.50)
+        for h4_low, h4_high, h4_origin_idx, h4_disp_idx in h4_origins[direction]:
+            h4_mid = (h4_low + h4_high) / 2.0
+            if abs(h4_mid - current) > distance_cap + h1_atr * 0.75:
                 continue
-            padding = max(m15_atr * 0.50, h1_atr * 0.10)
-            nested = next(
+
+            nested_h1 = next(
                 (
-                    item for item in m15_origins[direction]
-                    if _zone_overlap(item[0], item[1], h1_low, h1_high, padding=padding)
+                    item
+                    for item in h1_origins[direction]
+                    if _zone_overlap(item[0], item[1], h4_low, h4_high, padding=pair_padding)
                     and abs(((item[0] + item[1]) / 2.0) - current) <= distance_cap
                 ),
                 None,
             )
             ordinal += 1
-            if nested is not None:
-                low, high, m15_origin_idx, m15_disp_idx = nested
+            if nested_h1 is not None:
+                h1_low, h1_high, h1_origin_idx, h1_disp_idx = nested_h1
+                used_h1.add((direction, h1_origin_idx))
                 add_zone(
-                    f"Z_SCALP_H1M15_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                    direction, low, high, "H1>M15", x_m15, m15_disp_idx + 1, True,
+                    f"Z_INTRADAY_H4H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
+                    direction,
+                    h1_low,
+                    h1_high,
+                    "H4>H1",
+                    x_h1,
+                    h1_disp_idx + 1,
+                    True,
                     [
-                        f"XAU:H1:displacement_origin:{h1_origin_idx}",
-                        f"XAU:M15:refinement_origin:{m15_origin_idx}",
-                        "XAU:M15:intraday_dealing_range",
+                        f"XAU:H4:parent_displacement_origin:{h4_origin_idx}",
+                        f"XAU:H1:refined_supply_demand_origin:{h1_origin_idx}",
+                        "XAU:M15:zone_qualification_only",
                     ],
-                    ["M15 origin nested in/adjacent to observed H1 institutional origin"],
+                    ["H1 supply/demand POI is nested in/adjacent to same-side H4 institutional POI"],
                 )
             else:
+                # H4-only POI is retained only if it is already compact/reachable;
+                # otherwise the width filter drops it rather than exporting a swing box.
                 add_zone(
-                    f"Z_SCALP_H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                    direction, h1_low, h1_high, "H1", x_h1, h1_disp_idx + 1, True,
-                    [f"XAU:H1:displacement_origin:{h1_origin_idx}", "XAU:M15:intraday_dealing_range"],
-                    ["No clean nested M15 origin found; H1 body retained only if intraday width/distance filters pass"],
+                    f"Z_INTRADAY_H4_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
+                    direction,
+                    h4_low,
+                    h4_high,
+                    "H4",
+                    x_h4,
+                    h4_disp_idx + 1,
+                    False,
+                    [
+                        f"XAU:H4:supply_demand_origin:{h4_origin_idx}",
+                        "XAU:M15:zone_qualification_only",
+                    ],
+                    ["No matching H1 refinement; H4 POI retained only because intraday width/distance filters passed"],
                 )
 
-    # Add nearby M15 displacement origins directly. These supply continuation and
-    # transition/reversal scalp locations even when no H1 body nests perfectly.
+    # Add unused H1 institutional POIs. They remain primary zones in their own right
+    # when H4 context does not conflict fatally and M15 has already qualified them.
     for direction in (Direction.BUY_ONLY, Direction.SELL_ONLY):
         ordinal = 0
-        for low, high, origin_idx, displacement_idx in m15_origins[direction]:
+        for h1_low, h1_high, h1_origin_idx, h1_disp_idx in h1_origins[direction]:
+            if (direction, h1_origin_idx) in used_h1:
+                continue
             ordinal += 1
             add_zone(
-                f"Z_SCALP_M15_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                direction, low, high, "M15", x_m15, displacement_idx + 1, False,
-                [f"XAU:M15:displacement_origin:{origin_idx}", "XAU:H1:intraday_framework"],
+                f"Z_INTRADAY_H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
+                direction,
+                h1_low,
+                h1_high,
+                "H1",
+                x_h1,
+                h1_disp_idx + 1,
+                False,
+                [
+                    f"XAU:H1:supply_demand_origin:{h1_origin_idx}",
+                    "XAU:H4:parent_context",
+                    "XAU:M15:zone_qualification_only",
+                ],
             )
 
-    # Equal-liquidity areas stay visible as B+ watch zones. They are useful for a
-    # scalper because the sweep itself may create the M1 event, but they do not
-    # become executable unless the configured B+ policy is explicitly enabled.
-    tolerance = max(m15_atr * 0.15, snapshot.point_size * 10)
-    ssl = equal_liquidity(x_m15, "SSL", tolerance=tolerance, lookback=min(240, len(x_m15)))
-    bsl = equal_liquidity(x_m15, "BSL", tolerance=tolerance, lookback=min(240, len(x_m15)))
-    if ssl is not None and ssl <= current and abs(ssl - current) <= distance_cap:
-        low = ssl - max(m15_atr * 0.25, snapshot.point_size * 20)
-        high = ssl + max(m15_atr * 0.10, snapshot.point_size * 10)
-        touches = _touch_count(x_m15, low, high, lookback=min(240, len(x_m15)))
-        if touches < 3 and high - low <= max_zone_width:
-            zones.append(Zone(
-                zone_id="Z_SCALP_M15_BUY_LIQ", direction=Direction.BUY_ONLY,
-                zone_low=low, zone_high=high, grade=Grade.B_PLUS, source_tf="M15-LIQ",
-                touch_count=touches, freshness=_freshness(touches), requires_sweep="SSL",
-                min_displacement_atr=1.20, min_rr=2.0, target1=m15_eq if m15_eq > high else m15_hi, target2=h1_eq if h1_eq > high else h1_hi,
-                invalidation="SSL sweep fails to produce bullish M1 MSS/displacement or price accepts below the reaction area.",
-                confluences=["M15 equal/similar lows", "intraday distance filter passed", "M1 reversal proof required"],
-                notes=["Intraday reversal watch zone; B+ remains non-executable by default."],
-                provenance=["XAU:M15:equal_liquidity:SSL", "XAU:H1:intraday_framework"],
-            ))
-    if bsl is not None and bsl >= current and abs(bsl - current) <= distance_cap:
-        low = bsl - max(m15_atr * 0.10, snapshot.point_size * 10)
-        high = bsl + max(m15_atr * 0.25, snapshot.point_size * 20)
-        touches = _touch_count(x_m15, low, high, lookback=min(240, len(x_m15)))
-        if touches < 3 and high - low <= max_zone_width:
-            zones.append(Zone(
-                zone_id="Z_SCALP_M15_SELL_LIQ", direction=Direction.SELL_ONLY,
-                zone_low=low, zone_high=high, grade=Grade.B_PLUS, source_tf="M15-LIQ",
-                touch_count=touches, freshness=_freshness(touches), requires_sweep="BSL",
-                min_displacement_atr=1.20, min_rr=2.0, target1=m15_eq if m15_eq < low else m15_lo, target2=h1_eq if h1_eq < low else h1_lo,
-                invalidation="BSL sweep fails to produce bearish M1 MSS/displacement or price accepts above the reaction area.",
-                confluences=["M15 equal/similar highs", "intraday distance filter passed", "M1 reversal proof required"],
-                notes=["Intraday reversal watch zone; B+ remains non-executable by default."],
-                provenance=["XAU:M15:equal_liquidity:BSL", "XAU:H1:intraday_framework"],
-            ))
-
-    # Nearest intraday locations first. H1>M15 refinements win tie-breaks, followed
-    # by H1 and direct M15. D1/H4 are intentionally absent from the plotted map.
-    tf_rank = {"H1>M15": 0, "H1": 1, "M15": 2, "M15-LIQ": 3}
-    zones.sort(key=lambda z: (abs(((z.zone_low + z.zone_high) / 2.0) - current), tf_rank.get(z.source_tf, 9)))
+    # Nearest actionable HTF POIs first. H4>H1 confluence wins tie-breaks, followed
+    # by H1 and compact H4-only zones. There are intentionally no M15/M15-LIQ zones.
+    tf_rank = {"H4>H1": 0, "H1": 1, "H4": 2}
+    grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 3}
+    zones.sort(
+        key=lambda z: (
+            grade_rank.get(z.grade, 9),
+            abs(((z.zone_low + z.zone_high) / 2.0) - current),
+            tf_rank.get(z.source_tf, 9),
+        )
+    )
     zones = zones[:max(1, SETTINGS.intraday_max_candidates)]
 
-    reason = None if zones else "No nearby intraday institutional candidate survived H1/M15 freshness, width and ATR-distance filters."
+    reason = None if zones else "No reachable H4/H1 institutional supply-demand candidate survived freshness, width, distance and M15-at-analysis qualification filters."
     executable = [z for z in zones if z.grade in {Grade.A, Grade.A_PLUS} or (SETTINGS.bplus_executable and z.grade == Grade.B_PLUS)]
     dirs = {z.direction for z in executable}
     if dirs == {Direction.BUY_ONLY}:
@@ -434,7 +531,7 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
     else:
         mode = Direction.NO_TRADE
         if zones and reason is None:
-            reason = "Only B+ intraday watch zones are present; B+ execution is disabled."
+            reason = "Only B+ H4/H1 watch zones are present; B+ execution is disabled."
 
     if snapshot.spread_points > SETTINGS.max_spread_points:
         mode = Direction.NO_TRADE
@@ -445,30 +542,58 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
     atr_brief = ", ".join(f"{tf}={tf_atr[tf]:.3f}" for tf in ("D1", "H4", "H1", "M15"))
     now = snapshot.generated_at
     return InstitutionalAnalysis(
-        analysis_id=str(uuid.uuid4()), generated_at=now,
+        analysis_id=str(uuid.uuid4()),
+        generated_at=now,
         valid_until=now + timedelta(minutes=SETTINGS.plan_valid_minutes),
-        snapshot_id=snapshot_id(snapshot), session=snapshot.session,
-        current_xau_price=current, current_dxy_price=current_dxy,
-        bid=snapshot.bid, ask=snapshot.ask, spread_points=snapshot.spread_points, spread_price=snapshot.spread_price,
-        xau_d1_atr=tf_atr["D1"], xau_h4_atr=tf_atr["H4"], xau_h1_atr=tf_atr["H1"], xau_m15_atr=tf_atr["M15"],
-        dxy_d1_bias=b_d_d1, dxy_h4_bias=b_d_h4, dxy_h1_bias=b_d_h1,
-        xau_d1_bias=b_x_d1, xau_h4_bias=b_x_h4, xau_h1_bias=b_x_h1, xau_m15_context=b_x_m15,
-        overall_bias=overall, dxy_implication=implication,
+        snapshot_id=snapshot_id(snapshot),
+        session=snapshot.session,
+        current_xau_price=current,
+        current_dxy_price=current_dxy,
+        bid=snapshot.bid,
+        ask=snapshot.ask,
+        spread_points=snapshot.spread_points,
+        spread_price=snapshot.spread_price,
+        xau_d1_atr=tf_atr["D1"],
+        xau_h4_atr=tf_atr["H4"],
+        xau_h1_atr=tf_atr["H1"],
+        xau_m15_atr=tf_atr["M15"],
+        dxy_d1_bias=b_d_d1,
+        dxy_h4_bias=b_d_h4,
+        dxy_h1_bias=b_d_h1,
+        xau_d1_bias=b_x_d1,
+        xau_h4_bias=b_x_h4,
+        xau_h1_bias=b_x_h1,
+        xau_m15_context=b_x_m15,
+        overall_bias=overall,
+        dxy_implication=implication,
         primary_liquidity="SSL below current price" if overall == Bias.BEARISH else "BSL above current price" if overall == Bias.BULLISH else "BOTH SIDES / UNRESOLVED",
-        expected_sequence="D1/H4 context -> H1/M15 intraday location -> liquidity sweep -> M1 MSS + displacement -> Fibonacci -> fresh OB/BB/FVG -> M1 confirmation -> entry -> SL/TP -> BE -> dynamic trail",
-        retail_trap="Avoid chasing current price. Wait for price to trade into a nearby session-relevant H1/M15 institutional location and prove the M1 liquidity event.",
-        overall_invalidation="A decisive H1 structural break against the intraday thesis, or invalidation of its parent H4 context, requires a fresh analysis.",
-        trader_brief=(
-            f"{SETTINGS.trading_profile} institutional map generated from {history_counts}. "
-            f"D1/H4 are context only; H1/M15 create plotted execution locations. "
-            f"ATR14: {atr_brief}. Intraday zone distance cap={distance_cap:.3f}. "
-            f"Spread={snapshot.spread_points:.1f} pts. M1 remains sole execution authority."
+        expected_sequence=(
+            "D1/DXY context -> H4/H1 institutional zone -> M15 zone qualification COMPLETE -> zone published -> "
+            "price reaches zone -> M1 liquidity sweep -> M1 MSS + genuine displacement -> Fibonacci -> fresh M1 OB/BB/FVG -> "
+            "M1 confirmation -> entry -> structural SL/liquidity TP -> BE -> dynamic trail"
         ),
-        zones=zones, ea_mode=mode, no_trade_reason=reason,
+        retail_trap=(
+            "Do not chase price or wait for a new M15 signal after publication. The zone was already qualified with M15; "
+            "at the POI, judge only the required M1 liquidity/MSS/displacement sequence."
+        ),
+        overall_invalidation=(
+            "A decisive H1 structural break that invalidates the published POI, or invalidation of its H4 parent context, requires a fresh cloud analysis."
+        ),
+        trader_brief=(
+            f"{SETTINGS.trading_profile} map generated from {history_counts}. "
+            "H4/H1 are the primary institutional supply-demand/POI authority. M15 is consumed only while qualifying each zone and has no post-publication gate. "
+            f"ATR14: {atr_brief}. Intraday zone distance cap={distance_cap:.3f}; width cap={max_zone_width:.3f}. "
+            f"Spread={snapshot.spread_points:.1f} pts. M1 is the sole live execution authority."
+        ),
+        zones=zones,
+        ea_mode=mode,
+        no_trade_reason=reason,
         post_news=any(x.currency.upper() == "USD" and x.impact.upper() == "HIGH" and x.released for x in snapshot.news),
-        source_fingerprint=snapshot_fingerprint(snapshot)[:24], approved=False,
-        prompt_version="SMC_V3_7_INTRADAY_SCALP",
+        source_fingerprint=snapshot_fingerprint(snapshot)[:24],
+        approved=False,
+        prompt_version="SMC_V3_8_H4H1_ZONE_M15_QUAL_M1_EXEC",
     )
+
 
 def active_plan_text(analysis: InstitutionalAnalysis, zone_id: Optional[str] = None) -> str:
     selected = None

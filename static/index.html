@@ -30,7 +30,7 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
   </div>
 </div>
 
-<h2>Intraday / scalp zones</h2><p class="section-note">D1/H4 provide institutional context. Plotted reaction locations are generated from nearby H1/M15 structure; M1 remains the trigger.</p><div class="card"><table><thead><tr><th>Zone</th><th>TF</th><th>Direction</th><th>Range</th><th>Grade</th><th>Touches</th><th>Sweep</th></tr></thead><tbody id="zones"></tbody></table></div>
+<h2>Intraday / scalp zones</h2><p class="section-note">H4/H1 are the primary institutional supply/demand zone authority. M15 is consumed only while qualifying the zone; once published, M1 is the sole execution trigger with no further M15 delay.</p><div class="card"><table><thead><tr><th>Zone</th><th>TF</th><th>Direction</th><th>Range</th><th>Grade</th><th>Touches</th><th>Sweep</th></tr></thead><tbody id="zones"></tbody></table></div>
 <h2>News</h2><div class="card"><table><thead><tr><th>Time</th><th>Event</th><th>Impact</th><th>Released</th></tr></thead><tbody id="news"></tbody></table></div>
 <h2>Validator / audit state</h2><div class="card"><code id="issues"></code></div>
 </div>
@@ -69,7 +69,7 @@ function render(s){
  const aAge=a.generated_at?ageSeconds(a.generated_at):null;
  document.getElementById('analysisMeta').textContent=a.generated_at?`Generated ${fmtTime(a.generated_at)} · ${aAge}s ago · valid until ${fmtTime(a.valid_until)}`:'No completed analysis yet.';
  cards('summary',[
-   ['Trading profile',s.trading_profile||'INTRADAY_SCALP','ok','H1/M15 location · M1 execution'],['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
+   ['Trading profile',s.trading_profile||'INTRADAY_HTF_ZONE_M1','ok','H4/H1 zone · M15 qualified once · M1 execution'],['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
  ]);
  document.getElementById('schedule').innerHTML=(sch.sessions||[]).map(x=>{const st=x.status|| (x.completed?'DONE':x.window_active?'DUE_RETRYING':'WAITING'); const label=st==='DONE'?'<span class="ok">DONE</span>':st==='DUE_RETRYING'?'<span class="warn">DUE / RETRYING</span>':st==='RECOVERY_DUE'?'<span class="warn">RECOVERY DUE</span>':'WAITING'; return `<tr><td>${esc(x.session)}</td><td>${esc(fmtTime(x.scheduled_analysis_at))}</td><td>${esc(fmtTime(x.catchup_until))}</td><td>${label}</td></tr>`;}).join('')||'<tr><td colspan="4">No scheduler state</td></tr>';
  document.getElementById('runs').innerHTML=(sch.recent_runs||[]).slice(0,5).map(x=>`<tr><td>${esc(fmtTime(x.ts))}</td><td>${esc(x.kind)}</td><td>${esc(x.status)}</td><td>${esc(x.details)}</td></tr>`).join('')||'<tr><td colspan="4">No scheduled runs yet</td></tr>';

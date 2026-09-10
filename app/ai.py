@@ -72,13 +72,14 @@ def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict
     return {
         "instruction": (
             "Analyze the complete supplied historical context across XAU D1/H4/H1/M15 and DXY D1/H4/H1, plus deterministic candidate zones. "
-            "TRADING PROFILE IS INTRADAY_SCALP: D1/H4 are directional/liquidity context, not distant swing-entry zones; H1 defines the intraday framework and M15 supplies/refines the actionable reaction locations. "
-            "Prefer the nearest fresh H1>M15 or M15 institutional locations that can reasonably trade during the active session. Reject a candidate that is technically valid but behaves like a remote swing POI. "
-            "Use the long history to distinguish continuation locations from reversal/transition locations and to assess freshness, mitigation, liquidity and premium/discount context. "
-            "A reversal scalp still requires genuine institutional evidence; DXY support and a fresh M15 transition can strengthen it, while the M1 EA must demand stronger reversal displacement. "
-            "You may select, reject, downgrade, or describe candidate zones, but you MUST NOT invent or modify numeric price levels. "
-            "M1 is execution-only and is not supplied here; never claim that an entry trigger has already occurred. "
-            "The EA execution order is STRICT: liquidity sweep -> MSS with genuine displacement -> Fibonacci retracement location -> "
+            "TRADING ARCHITECTURE IS H4/H1 PRIMARY ZONE -> M15 ONE-TIME ZONE QUALIFICATION -> M1 EXECUTION. "
+            "XAU H4 and H1 are the primary institutional supply/demand and POI authority. Prefer same-side H4>H1 confluence, then clean H1 POIs, while rejecting remote or excessively broad swing-style locations. "
+            "M15 may strengthen, weaken, or help qualify an H4/H1 candidate using already-observed structure, displacement, liquidity, mitigation, and premium/discount evidence. M15 MUST NOT create a standalone execution zone. "
+            "CRITICAL: M15 usage ENDS when the cloud publishes the zone. Once a zone is published, do NOT require a later M15 candle close, M15 displacement, M15 engulf, M15 confirmation, or M15 re-check before M1 execution. "
+            "Use D1 and DXY D1/H4/H1 as macro/intermarket context, and use the long history to distinguish continuation from reversal/transition while assessing freshness, mitigation, liquidity, and dealing-range location. "
+            "You may select, reject, downgrade, or describe deterministic candidate zones, but you MUST NOT invent or modify numeric price levels. "
+            "M1 is execution-only and is not supplied here; never claim that an entry trigger has already occurred. As soon as price reaches an authorized published zone, M1 alone may validate execution. "
+            "The EA execution order after zone publication is STRICT: liquidity sweep -> MSS with genuine displacement -> Fibonacci retracement location -> "
             "fresh OB/Breaker Block/FVG confluence -> M1 confirmation -> entry -> structural SL/cloud liquidity TP -> break-even/dynamic trailing. "
             "B+ is watchlist/off by default. Return NO TRADE whenever evidence is insufficient."
         ),

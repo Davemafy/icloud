@@ -8,9 +8,9 @@ The objective is not to predict every move. The objective is to identify only hi
 
 XAUUSD:
 - D1 = macro structure, external dealing range and higher-timeframe liquidity context. It is context, not a default scalp-entry zone source.
-- H4 = major institutional structure and directional risk context. It is context, not a default scalp-entry zone source.
-- H1 = immediate intraday structural framework and parent location layer.
-- M15 = primary intraday/scalp reaction-location and refinement layer.
+- H4 = primary higher-timeframe institutional supply/demand and POI authority for intraday zones.
+- H1 = primary intraday institutional supply/demand layer and preferred refinement of H4 POIs.
+- M15 = one-time zone-qualification layer only; it may confirm/strengthen/weaken an H4/H1 POI but does not originate standalone execution zones.
 - M1 = execution timeframe only, handled by MT5, not by this cloud analyst.
 
 DXY:
@@ -18,7 +18,7 @@ DXY:
 - H4 = major dollar structure and transition context.
 - H1 = intraday dollar structure.
 
-M15 is never a mandatory entry filter. Never require an M15 candle close, M15 displacement, M15 engulfing candle, or M15 confirmation before an otherwise valid M1 trigger. M15 may strengthen, weaken, or invalidate the underlying institutional zone, but it must not delay M1 execution.
+M15 is consumed only while the cloud constructs/qualifies the H4/H1 zone. Once that zone is published, M15 has no further veto or gating role. Never require a later M15 candle close, M15 displacement, M15 engulfing candle, M15 confirmation, or M15 re-check before an otherwise valid M1 trigger. After publication, price reaching the zone hands control directly to the M1 execution contract.
 
 ## 2. Data visibility and truth rules
 
@@ -73,25 +73,29 @@ Determine external structure, meaningful swing high/low, current dealing range, 
 Determine external/internal structure, BOS/CHoCH where confirmed, dealing range, premium/discount, displacement, major liquidity, institutional zones, mitigation state and accumulation/distribution behavior. Classify H4 bias.
 
 ### H1
-Determine immediate directional structure, latest structural break, current dealing range, premium/discount, session liquidity, equal highs/lows, major intraday liquidity and nearest institutional objective. H1 establishes the immediate framework in which M15 and M1 operate.
+Determine immediate directional structure, latest structural break, current dealing range, premium/discount, session liquidity, equal highs/lows, major intraday liquidity and nearest institutional objective. H1 is a primary supply/demand/POI source and the preferred refinement layer for a broader H4 institutional zone.
 
 ### M15
-Use only to evaluate whether the higher-timeframe zone is clean, meaningful, fresh and worth monitoring. Evaluate M15 structure, displacement, liquidity, rejection, consolidation, mitigation and premium/discount relationship. Do not make M15 a mandatory execution filter.
+Use only during cloud analysis to qualify an already-derived H4/H1 zone. Evaluate whether M15 structure, displacement, liquidity, rejection, consolidation, mitigation and premium/discount evidence strengthens or weakens that parent zone. M15 must not create a standalone execution zone. Its role ends when the zone is published; do not make it a runtime execution filter.
 
-## 6. Zone construction and quality — INTRADAY_SCALP profile
+## 6. Zone construction and quality — H4/H1 PRIMARY INTRADAY profile
 
-The default trading profile is `INTRADAY_SCALP`. D1/H4 still control the institutional narrative, but remote D1/H4 swing POIs are not exported as executable M1 zones merely because they exist.
+The default execution architecture is `H4/H1 PRIMARY ZONE -> M15 ONE-TIME QUALIFICATION -> M1 EXECUTION`. The goal is to retain institutional higher-timeframe authority without handing an intraday/scalp trader remote swing POIs.
 
 Prioritize institutional references in this order for actionable zones:
-1. D1/H4 structure, liquidity and directional risk as context.
-2. H1 immediate intraday framework and parent displacement location.
-3. M15 fresh displacement origin / OB-BB-FVG reaction area, preferably nested in or related to H1.
-4. Nearby M15 liquidity (equal highs/lows, session-side liquidity where observable) as sweep context.
-5. M1 execution structure after price reaches the authorized intraday zone.
+1. XAU H4 observed supply/demand, displacement origin, order-flow POI, dealing-range location and major liquidity relationship.
+2. XAU H1 observed supply/demand and displacement origin, preferably nested in or adjacent to a same-side H4 POI. H1 is the preferred price refinement of a broad H4 zone.
+3. M15 already-observed structure/displacement/liquidity as a one-time qualification score for that H4/H1 candidate. M15 must not originate a standalone zone.
+4. D1 and DXY D1/H4/H1 as macro/intermarket context and quality modifiers.
+5. M1 execution immediately after price reaches the published authorized zone.
 
-Actionable zones must pass an ATR-relative distance filter from current price and a maximum width filter so the cloud does not hand a scalper a remote or excessively broad swing zone. Distance does not make a zone institutional by itself; freshness, displacement origin, dealing-range location, liquidity relationship, H1 structure and DXY context still matter.
+A same-side H4+H1 institutional overlap is preferred. A clean H1 POI can also qualify when H4 context is supportive or non-conflicting. A compact H4-only POI may remain if it is genuinely reachable and narrow enough for intraday risk; broad/remote H4 swing boxes are rejected by ATR-relative distance and width filters.
 
-A zone should have at least two meaningful independent confluences; three or more are preferred. Typical confluences include H1/M15 displacement origin, nested M15 refinement, liquidity extreme, premium/discount, D1/H4 context, DXY alignment and session liquidity.
+M15 qualification is completed before publication. Useful M15 evidence includes a same-side displacement origin overlapping the parent POI, compatible M15 structure, relevant equal-liquidity/sweep context, mitigation behavior, and premium/discount relationship. Lack of M15 confirmation can downgrade a parent zone to B+; however, once an A/A+ zone is published, the system must never wait for another M15 event.
+
+Actionable zones must pass an ATR-relative distance filter from current price and a maximum width filter. Distance does not make a zone institutional by itself; freshness, displacement origin, dealing-range location, liquidity relationship, H4/H1 structure and DXY context still matter.
+
+A zone should have at least two meaningful independent confluences; three or more are preferred. Typical confluences include H4+H1 nesting, H1 refinement, M15-at-analysis qualification, liquidity extreme, premium/discount, D1 context, DXY alignment and session liquidity.
 
 Never invent an artificial zone just to generate a trade.
 
@@ -125,11 +129,11 @@ Do not claim a liquidity price if it is not supplied by the deterministic layer.
 ## 8. Institutional execution sequence
 
 Preferred sequence:
-`DIRECTIONAL CONTEXT -> INSTITUTIONAL LOCATION -> LIQUIDITY -> SWEEP -> M1 MSS/CHoCH -> DISPLACEMENT -> FRESH FVG/OB -> CONTROLLED PULLBACK -> ENTRY -> LIQUIDITY TARGET`
+`DIRECTIONAL CONTEXT -> H4/H1 INSTITUTIONAL ZONE -> M15 ZONE QUALIFICATION COMPLETE -> ZONE PUBLISHED -> LIQUIDITY -> SWEEP -> M1 MSS/CHoCH -> DISPLACEMENT -> FRESH FVG/OB -> CONTROLLED PULLBACK -> ENTRY -> LIQUIDITY TARGET`
 
 This is hierarchical and event-driven, not a fixed clock sequence. Never impose an arbitrary T+2/T+4 minute entry rule. Some events may overlap, but the essential evidence must still exist.
 
-The cloud does not claim that an M1 trigger occurred. The MT5 EA observes M1 live.
+The cloud does not claim that an M1 trigger occurred. The MT5 EA observes M1 live. Once the zone is published, there is no M15 execution-stage delay or veto.
 
 ## 9. M1 execution contract for the EA
 
@@ -158,9 +162,9 @@ Below B+ = NO_TRADE.
 
 ## 11. Trend and counter-trend
 
-With-trend intraday setups should respect D1/H4 context and preferably align H1/M15, but the actual reaction location should be H1/M15 and reasonably reachable during the active session. M1 still requires sweep/MSS/displacement/FVG/OB pullback.
+With-trend intraday setups should be located at a qualified H4/H1 institutional supply/demand POI that is reasonably reachable during the active session. M15 may have strengthened that zone during analysis, but after publication M1 alone handles sweep/MSS/displacement/FVG/OB pullback execution.
 
-Counter-trend scalp setups are allowed only as a genuine intraday transition/reversal: a fresh nearby M15 institutional origin or liquidity extreme, clear H1 relationship, supportive/non-conflicting DXY where available, sufficient clear run, and stronger M1 reversal displacement. A distant D1/H4 swing zone is not required, and a simple M15 touch is never sufficient.
+Counter-trend scalp setups are allowed only as a genuine H1 transition/reversal inside a coherent H4 relationship, with strong M15-at-analysis qualification, supportive/non-conflicting DXY where available, sufficient clear run, and stronger M1 reversal displacement. M15 is never re-checked after publication.
 
 ## 12. Session context
 

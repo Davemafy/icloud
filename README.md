@@ -1,24 +1,23 @@
-# Institutional SMC Cloud v3.7 — Intraday/Scalp Institutional Zones
+# Institutional SMC Cloud v3.8 — H4/H1 Primary Zones, M15 Qualification, M1 Execution
 
 GitHub/Railway-ready cloud service for the demo/paper Institutional SMC project.
 
-## What changed in v3.7
+## What changed in v3.8
 
-- Trading profile is now `INTRADAY_SCALP`.
-- D1/H4 remain mandatory institutional context but are no longer exported as default distant swing-entry zones.
-- H1 is the parent intraday framework; M15 supplies/refines actionable reaction locations.
-- H1 displacement origins are preferentially refined to nested/adjacent M15 origins (`H1>M15`).
-- Nearby standalone M15 displacement origins can become continuation or reversal/transition candidates.
-- Candidate zones must pass ATR-relative distance and width filters, keeping the M1 chart focused on session-reachable locations.
-- M15 equal-liquidity areas remain B+ watch zones by default.
-- Counter-H1 reversal scalps require a fresh M15 transition plus supportive DXY to reach A grade; M1 reversal displacement is raised.
-- DXY D1/H4/H1 remains fully included.
+- H4 and H1 are now the **primary institutional supply/demand / POI authority** for intraday/scalp zones.
+- Same-side H4 + H1 confluence is preferred; H1 is the preferred refinement of a broader H4 POI.
+- Clean H1 POIs may qualify independently when H4 context is supportive or non-conflicting.
+- Compact H4-only POIs may remain only when they pass intraday ATR-distance and width filters; broad or remote swing-style H4 boxes are not exported as immediate scalp zones.
+- M15 no longer creates standalone zones. It is used only to qualify an already-derived H4/H1 POI using observed M15 displacement, structure and liquidity evidence.
+- **M15 usage ends when the zone is published.** The live EA never waits for another M15 close, displacement, engulfing candle or confirmation.
+- Once price reaches a published A/A+ zone, M1 immediately becomes the sole execution authority: sweep -> MSS/displacement -> Fibonacci -> fresh M1 OB/BB/FVG -> confirmation -> entry -> management.
+- D1 remains macro context; DXY D1/H4/H1 remains intermarket context.
+- B+ remains watch-only/off by default.
+- The Sequence EA v2.10 plan protocol stays compatible; no M15 execution-stage field was added.
 
 ## Historical sync retained from v3.6.1
 
-- DXY H4 is now mandatory in protocol-v3 full-history and live updates, with its own ATR(14) and structural bias.
-- DXY implication is conservative: H4 and H1 must agree before the deterministic layer marks DXY as supporting or conflicting.
-The MT5 bridge and cloud now separate **heavy historical context** from **lightweight live updates**.
+The MT5 bridge and cloud separate **heavy historical context** from **lightweight live updates**.
 
 - XAU D1: ~1 trading year (bridge requests 280 bars)
 - XAU H4: ~4 months (600 bars)
@@ -34,34 +33,41 @@ The MT5 bridge and cloud now separate **heavy historical context** from **lightw
 - Between those events, the bridge sends only a small live update. The cloud merges it into the last full history before analysis.
 - The scheduler refuses to use a previous-session full sync when a fresh session full sync is expected.
 - Post-news analysis waits for a full history sync captured after the news cooldown.
-- The deterministic engine uses the long history for context, but the actionable zone map is now H1/M15-focused for intraday/scalp execution.
 - M1 remains the sole execution authority. `PAPER_ONLY=true` remains mandatory in this build.
 
 ## Railway deployment
 
-1. Connect this repository to the existing Railway service.
-2. Attach a Railway volume at `/data`.
-3. Add variables from `.env.example` in Railway Variables and keep `PAPER_ONLY=true`.
-4. Set `DATABASE_PATH=/data/smc_cloud.db`.
-5. Deploy. The Dockerfile starts Uvicorn on Railway's injected `$PORT`.
-6. Healthcheck path: `/health`.
-7. Keep the current Railway HTTPS base URL in both MT5 EAs.
-8. `CLOUD_EA_API_KEY` in Railway must exactly match `CloudApiKey` in both MT5 EAs.
+1. Replace the existing private GitHub repository contents with this package and commit/push.
+2. Railway should auto-deploy the connected repository.
+3. Keep the Railway volume mounted at `/data`.
+4. Keep `DATABASE_PATH=/data/smc_cloud.db` and `PAPER_ONLY=true`.
+5. Set `TRADING_PROFILE=INTRADAY_HTF_ZONE_M1` (recommended label for this build).
+6. Healthcheck path remains `/health`.
+7. Keep the same Railway HTTPS base URL and `CLOUD_EA_API_KEY` in both MT5 EAs.
 
 The Dockerfile copies `docs/SMC_FRAMEWORK_V3_FULL.md`; this file is required by the AI analyst prompt.
 
 ## MT5 bridge
 
-Compile and attach `InstitutionalSMC_DataBridge_v1_21_HistorySync_DXYH4.mq5` once on XAUUSD. Set:
+Continue using `InstitutionalSMC_DataBridge_v1_21_HistorySync_DXYH4.mq5` once on XAUUSD. No bridge change is required for v3.8.
 
-- `CloudBaseUrl` = Railway base HTTPS URL
-- `CloudApiKey` = same as Railway `CLOUD_EA_API_KEY`
-- `DxySymbol` = broker's exact DXY symbol (currently `DXYUSD` in the demo terminal)
-- `LiveUploadSeconds` = 60
-- `SessionSyncLeadMinutes` = 10
-- `PostNewsCooldownMinutes` = same value as the cloud `NEWS_POST_COOLDOWN_MINUTES`
+Expected data profile:
 
-DXY D1/H4/H1 are included in both `FULL_HISTORY` and `LIVE_UPDATE` payloads, with ATR(14) on each timeframe. On startup, expect a `FULL_HISTORY reason=BOOTSTRAP` upload. Normal minutes should show `LIVE_UPDATE reason=LIVE`. Around a session boundary expect `FULL_HISTORY reason=PRE_SESSION:...`; after a qualifying news cooldown expect `FULL_HISTORY reason=POST_NEWS:...`.
+- XAU D1/H4/H1/M15
+- DXY D1/H4/H1
+- ATR(14) per timeframe
+- current bid/ask and broker spread
+- high-impact USD MT5 calendar events
+
+## Sequence EA
+
+Continue using `InstitutionalSMC_SequenceEA_v2_10_Demo.mq5` on XAUUSD M1. No EA change is required for v3.8.
+
+The execution contract after a published zone is:
+
+`ZONE REACHED -> M1 LIQUIDITY SWEEP -> M1 MSS + DISPLACEMENT -> FIB -> FRESH M1 OB/BB/FVG -> M1 CONFIRMATION -> ENTRY -> SL/TP -> BE -> DYNAMIC TRAIL`
+
+There is **no M15 gate after zone publication**.
 
 ## Local test
 
