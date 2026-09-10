@@ -29,6 +29,7 @@ def test_analysis_runs():
         },
         dxy={
             "D1": bars("DXY","D1",t,step=0.05,bearish=True),
+            "H4": bars("DXY","H4",t,step=0.05,bearish=True),
             "H1": bars("DXY","H1",t,step=0.05,bearish=True),
         },
     )

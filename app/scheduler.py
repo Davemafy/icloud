@@ -8,7 +8,7 @@ from .config import SETTINGS
 from .db import DB
 from .events import EVENTS
 from .news import refresh_news, stored_news
-from .service import load_latest_snapshot, run_production_analysis
+from .service import load_analysis_snapshot, load_latest_full_snapshot, load_latest_snapshot, run_production_analysis
 
 
 def _parse_hhmm(value: str) -> tuple[int, int]:
@@ -326,19 +326,40 @@ async def scheduler_loop():
                 if DB.scheduler_ran(run_key):
                     continue
 
-                snap = load_latest_snapshot()
-                if snap is None:
-                    DB.audit("session.waiting", "scheduler", f"{name}/{mode}: no snapshot yet; run_key={run_key}")
+                live = load_latest_snapshot()
+                if live is None:
+                    DB.audit("session.waiting", "scheduler", f"{name}/{mode}: no live snapshot yet; run_key={run_key}")
                     continue
-                age = _snapshot_age_seconds(now, snap)
+                age = _snapshot_age_seconds(now, live)
                 if age > SETTINGS.session_snapshot_max_age_seconds:
                     DB.audit(
                         "session.waiting", "scheduler",
-                        f"{name}/{mode}: snapshot stale age={age:.0f}s > {SETTINGS.session_snapshot_max_age_seconds}s; run_key={run_key}",
+                        f"{name}/{mode}: live snapshot stale age={age:.0f}s > {SETTINGS.session_snapshot_max_age_seconds}s; run_key={run_key}",
+                    )
+                    continue
+                snap = load_analysis_snapshot()
+                if snap is None:
+                    DB.audit(
+                        "session.waiting", "scheduler",
+                        f"{name}/{mode}: waiting for FULL_HISTORY context sync from MT5; run_key={run_key}",
+                    )
+                    continue
+                full = load_latest_full_snapshot()
+                required_full_at = cand["scheduled_analysis_at"].astimezone(timezone.utc) - timedelta(seconds=90)
+                if full is None or full.generated_at.astimezone(timezone.utc) < required_full_at:
+                    got = "none" if full is None else f"{full.generated_at.isoformat()} reason={full.snapshot_reason}"
+                    DB.audit(
+                        "session.waiting", "scheduler",
+                        f"{name}/{mode}: waiting for session-fresh FULL_HISTORY; required>={required_full_at.isoformat()} got={got}; run_key={run_key}",
                     )
                     continue
 
                 try:
+                    # The scheduler target is authoritative for a pre-session plan.
+                    # At 07:50 WAT the wall-clock bridge session is still ASIA, but
+                    # the analysis being prepared is LONDON; label it accordingly.
+                    snap = snap.model_copy(deep=True)
+                    snap.session = name
                     reason = f"pre_session:{name}:auto" if mode == "pre_session" else f"session_recovery:{name}:auto"
                     result = await run_production_analysis(snap, reason=reason)
                     DB.mark_scheduler_run(
@@ -360,11 +381,17 @@ async def scheduler_loop():
             for run_key, title, event_ts in post_news_run_keys(now):
                 if DB.scheduler_ran(run_key):
                     continue
-                snap = load_latest_snapshot()
-                if snap and snap.generated_at.astimezone(timezone.utc) >= event_ts.astimezone(timezone.utc):
-                    age = _snapshot_age_seconds(now, snap)
+                live = load_latest_snapshot()
+                snap = load_analysis_snapshot()
+                if live and snap and live.generated_at.astimezone(timezone.utc) >= event_ts.astimezone(timezone.utc):
+                    age = _snapshot_age_seconds(now, live)
                     if age > SETTINGS.session_snapshot_max_age_seconds:
-                        DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for fresher snapshot age={age:.0f}s")
+                        DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for fresher live snapshot age={age:.0f}s")
+                        continue
+                    full = load_latest_full_snapshot()
+                    required_full_at = event_ts.astimezone(timezone.utc) + timedelta(minutes=SETTINGS.news_post_cooldown_minutes)
+                    if full is None or full.generated_at.astimezone(timezone.utc) < required_full_at:
+                        DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for post-news FULL_HISTORY sync after {required_full_at.isoformat()}")
                         continue
                     try:
                         result = await run_production_analysis(snap, reason=f"post_news:{title}:auto")
@@ -376,8 +403,10 @@ async def scheduler_loop():
                     except Exception as exc:
                         DB.mark_scheduler_run(run_key, "post_news", "failed", str(exc))
                         await EVENTS.publish("scheduler")
+                elif live is None:
+                    DB.audit("post_news.waiting", "scheduler", f"{title}: no live snapshot yet")
                 elif snap is None:
-                    DB.audit("post_news.waiting", "scheduler", f"{title}: no snapshot yet")
+                    DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for FULL_HISTORY context")
                 else:
                     DB.audit("post_news.waiting", "scheduler", f"{title}: waiting for post-release snapshot")
         except asyncio.CancelledError:

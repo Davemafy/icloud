@@ -95,6 +95,24 @@ class Settings:
     # Do not spend an AI call on stale context; wait for the next Data Bridge snapshot.
     session_snapshot_max_age_seconds: int = _int("SESSION_SNAPSHOT_MAX_AGE_SECONDS", 180)
 
+    # Historical-context protocol v3. The bridge sends a full context bootstrap
+    # at startup, ~10 minutes before each session, and after high-impact USD news.
+    # Lightweight live updates are merged into the latest full context before analysis.
+    history_full_max_age_hours: int = _int("HISTORY_FULL_MAX_AGE_HOURS", 12)
+    history_min_xau_d1: int = _int("HISTORY_MIN_XAU_D1", 240)
+    history_min_xau_h4: int = _int("HISTORY_MIN_XAU_H4", 480)
+    history_min_xau_h1: int = _int("HISTORY_MIN_XAU_H1", 400)
+    history_min_xau_m15: int = _int("HISTORY_MIN_XAU_M15", 400)
+    history_min_dxy_d1: int = _int("HISTORY_MIN_DXY_D1", 200)
+    history_min_dxy_h4: int = _int("HISTORY_MIN_DXY_H4", 480)
+    history_min_dxy_h1: int = _int("HISTORY_MIN_DXY_H1", 400)
+    history_merge_cap_d1: int = _int("HISTORY_MERGE_CAP_D1", 320)
+    history_merge_cap_h4: int = _int("HISTORY_MERGE_CAP_H4", 700)
+    history_merge_cap_h1: int = _int("HISTORY_MERGE_CAP_H1", 700)
+    history_merge_cap_m15: int = _int("HISTORY_MERGE_CAP_M15", 560)
+    snapshot_live_retention: int = _int("SNAPSHOT_LIVE_RETENTION", 1500)
+    snapshot_full_retention: int = _int("SNAPSHOT_FULL_RETENTION", 180)
+
     news_provider: str = os.getenv("NEWS_PROVIDER", "mt5_calendar").lower()
     tradingeconomics_api_key: str = os.getenv("TRADINGECONOMICS_API_KEY", "")
     news_poll_minutes: int = _int("NEWS_POLL_MINUTES", 10)

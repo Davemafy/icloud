@@ -123,6 +123,14 @@ class Database:
                 );
                 """
             )
+            # Online migration for snapshot protocol v3. Existing Railway volumes
+            # remain valid; old rows are treated as FULL_HISTORY/LEGACY.
+            cols = {r[1] for r in c.execute("PRAGMA table_info(snapshots)").fetchall()}
+            if "snapshot_kind" not in cols:
+                c.execute("ALTER TABLE snapshots ADD COLUMN snapshot_kind TEXT NOT NULL DEFAULT 'FULL_HISTORY'")
+            if "snapshot_reason" not in cols:
+                c.execute("ALTER TABLE snapshots ADD COLUMN snapshot_reason TEXT NOT NULL DEFAULT 'LEGACY_OR_MANUAL'")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_kind_generated_at ON snapshots(snapshot_kind, generated_at DESC)")
 
     @staticmethod
     def now_iso() -> str:
@@ -136,15 +144,42 @@ class Database:
             )
 
     def save_snapshot(self, snapshot_id: str, generated_at: str, session: str, fingerprint: str, payload: dict):
+        kind = str(payload.get("snapshot_kind") or "FULL_HISTORY").upper()
+        reason = str(payload.get("snapshot_reason") or "LEGACY_OR_MANUAL")
         with self._lock, self._conn() as c:
             c.execute(
-                "INSERT OR REPLACE INTO snapshots(id, generated_at, session, fingerprint, payload, created_at) VALUES(?,?,?,?,?,?)",
-                (snapshot_id, generated_at, session, fingerprint, json.dumps(payload), self.now_iso()),
+                """INSERT OR REPLACE INTO snapshots
+                   (id, generated_at, session, fingerprint, payload, created_at, snapshot_kind, snapshot_reason)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (snapshot_id, generated_at, session, fingerprint, json.dumps(payload), self.now_iso(), kind, reason),
+            )
+            # Railway volume protection: retain enough live snapshots for diagnostics
+            # and enough heavy full syncs for audit, but do not grow forever.
+            c.execute(
+                """DELETE FROM snapshots WHERE id IN (
+                     SELECT id FROM snapshots WHERE UPPER(snapshot_kind)='LIVE_UPDATE'
+                     ORDER BY generated_at DESC LIMIT -1 OFFSET ?
+                   )""",
+                (max(1, SETTINGS.snapshot_live_retention),),
+            )
+            c.execute(
+                """DELETE FROM snapshots WHERE id IN (
+                     SELECT id FROM snapshots WHERE UPPER(snapshot_kind)='FULL_HISTORY'
+                     ORDER BY generated_at DESC LIMIT -1 OFFSET ?
+                   )""",
+                (max(1, SETTINGS.snapshot_full_retention),),
             )
 
     def latest_snapshot(self) -> Optional[dict]:
         with self._lock, self._conn() as c:
             row = c.execute("SELECT * FROM snapshots ORDER BY generated_at DESC LIMIT 1").fetchone()
+            return dict(row) if row else None
+
+    def latest_full_snapshot(self) -> Optional[dict]:
+        with self._lock, self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM snapshots WHERE UPPER(snapshot_kind)='FULL_HISTORY' ORDER BY generated_at DESC LIMIT 1"
+            ).fetchone()
             return dict(row) if row else None
 
     def save_analysis(self, payload: dict):

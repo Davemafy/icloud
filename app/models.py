@@ -77,15 +77,25 @@ class NewsEvent(BaseModel):
 
 
 class MarketSnapshot(BaseModel):
-    schema_version: int = 2
+    # v3 separates heavy historical-context syncs from lightweight live updates.
+    # v2 payloads remain accepted for backwards compatibility.
+    schema_version: int = 3
     generated_at: datetime
     broker_time: Optional[datetime] = None
     session: str
     timezone: str = "Africa/Lagos"
+    snapshot_kind: str = "FULL_HISTORY"
+    snapshot_reason: str = "LEGACY_OR_MANUAL"
     xau: Dict[str, TimeframeBars]
     dxy: Dict[str, TimeframeBars]
+    bid: Optional[float] = None
+    ask: Optional[float] = None
     spread_points: float = Field(ge=0)
+    spread_price: Optional[float] = Field(default=None, ge=0)
     point_size: float = Field(default=0.001, gt=0)
+    atr_period: int = Field(default=14, ge=2, le=100)
+    # Informational counts requested by the MT5 bridge for the full historical profile.
+    history_profile: Dict[str, int] = Field(default_factory=dict)
     news: List[NewsEvent] = Field(default_factory=list)
     source: str = "MT5"
     account_mode: str = "DEMO"
@@ -135,6 +145,7 @@ class AIZoneDecision(BaseModel):
 class AIDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dxy_d1_bias: Bias
+    dxy_h4_bias: Bias
     dxy_h1_bias: Bias
     xau_d1_bias: Bias
     xau_h4_bias: Bias
@@ -167,8 +178,16 @@ class InstitutionalAnalysis(BaseModel):
     session: str
     current_xau_price: float
     current_dxy_price: float
+    bid: Optional[float] = None
+    ask: Optional[float] = None
     spread_points: float
+    spread_price: Optional[float] = None
+    xau_d1_atr: Optional[float] = None
+    xau_h4_atr: Optional[float] = None
+    xau_h1_atr: Optional[float] = None
+    xau_m15_atr: Optional[float] = None
     dxy_d1_bias: Bias
+    dxy_h4_bias: Bias
     dxy_h1_bias: Bias
     xau_d1_bias: Bias
     xau_h4_bias: Bias

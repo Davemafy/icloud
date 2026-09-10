@@ -76,3 +76,43 @@ def last_displacement_origin(bars: List[Candle], direction: Bias, atr_value: flo
                 prev = bars[i-1]
                 return min(prev.open, prev.close), max(prev.open, prev.close)
     return None
+
+
+def displacement_origins(
+    bars: List[Candle],
+    direction: Bias,
+    atr_value: float,
+    lookback: int | None = None,
+    limit: int = 3,
+    body_atr_multiple: float = 0.85,
+):
+    """Return recent displacement origins as (low, high, origin_index, displacement_index).
+
+    This is deliberately deterministic: price levels come only from supplied OHLC.
+    Multiple origins let the AI compare continuation and reversal locations without
+    inventing zones. Overlapping origins are de-duplicated, newest first.
+    """
+    if atr_value <= 0 or len(bars) < 3:
+        return []
+    start = max(2, len(bars) - (lookback or len(bars)))
+    out = []
+    for i in range(len(bars) - 2, start - 1, -1):
+        c = bars[i]
+        body = abs(c.close - c.open)
+        rng = max(c.high - c.low, 1e-9)
+        bullish = c.close > c.open
+        matches = (direction == Bias.BULLISH and bullish) or (direction == Bias.BEARISH and not bullish)
+        if not matches or body < atr_value * body_atr_multiple or body / rng < 0.60:
+            continue
+        prev = bars[i - 1]
+        low, high = min(prev.open, prev.close), max(prev.open, prev.close)
+        # Ignore zero-width doji origins; use the candle's body/range interior as fallback.
+        if high - low <= 1e-12:
+            low, high = prev.low, prev.high
+        duplicate = any(not (high < x[0] or low > x[1]) for x in out)
+        if duplicate:
+            continue
+        out.append((low, high, i - 1, i))
+        if len(out) >= limit:
+            break
+    return out

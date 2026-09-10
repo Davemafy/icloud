@@ -13,6 +13,9 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
 <h2>Live MT5 feed</h2><p class="section-note">Pushed instantly from the latest Data Bridge snapshot; no browser polling or AI call is required.</p>
 <div class="grid" id="live"></div>
 
+<h2>Historical analysis context</h2><p class="section-note">Heavy history is synced at bridge startup, before each session, and after high-impact USD news. Live updates are merged into this context.</p>
+<div class="grid" id="history"></div>
+
 <h2>Last institutional analysis</h2><p class="section-note" id="analysisMeta">No completed analysis yet.</p>
 <div class="grid" id="summary"></div>
 
@@ -41,7 +44,7 @@ function latestClose(group,preferred){if(!group)return null; for(const tf of pre
 function cards(el,data){document.getElementById(el).innerHTML=data.map(x=>`<div class="card"><div class="muted">${esc(x[0])}</div><div class="big ${x[2]||''}">${esc(x[1])}</div>${x[3]?`<div class="small muted">${esc(x[3])}</div>`:''}</div>`).join('');}
 function setPush(text,state){const el=document.getElementById('pushState'); el.innerHTML=`<span class="dot ${state||''}"></span>${esc(text)}`;}
 function render(s){
- const snap=s.snapshot||null; const a=s.analysis||{}; const sch=s.scheduler||{};
+ const snap=s.snapshot||null; const a=s.analysis||{}; const sch=s.scheduler||{}; const hist=s.history_context||{};
  const snapAge=snap?ageSeconds(snap.generated_at):null; const freshLimit=sch.snapshot_max_age_seconds||180; const bridge=snap?(snapAge<=freshLimit?'LIVE':'STALE'):'NO DATA';
  const xau=snap?latestClose(snap.xau,['M15','H1','H4','D1']):null; const dxy=snap?latestClose(snap.dxy,['H1','D1']):null;
  cards('live',[
@@ -49,8 +52,19 @@ function render(s){
    ['XAU live',xau===null?'—':Number(xau).toFixed(2),'',snap?.xau?.M15?'M15 latest close':'latest available close'],
    ['DXY live',dxy===null?'—':Number(dxy).toFixed(3),'',snap?.dxy?.H1?'H1 latest close':'latest available close'],
    ['Spread',snap?`${snap.spread_points} pts`:'—','','Latest MT5 snapshot'],
+   ['Bid / Ask',snap&&snap.bid!=null&&snap.ask!=null?`${Number(snap.bid).toFixed(2)} / ${Number(snap.ask).toFixed(2)}`:'—','','Broker quote'],
+   ['ATR H1 / M15',snap?.xau?.H1?.atr!=null&&snap?.xau?.M15?.atr!=null?`${Number(snap.xau.H1.atr).toFixed(2)} / ${Number(snap.xau.M15.atr).toFixed(2)}`:'—','','ATR period from bridge'],
    ['Snapshot session',snap?.session||'—','','Reported by Data Bridge'],
    ['Snapshot time',snap?fmtTime(snap.generated_at):'—','','Browser local time']
+ ]);
+ const hc=hist.counts||{};
+ cards('history',[
+   ['Context',hist.ready?'READY':'WAITING',hist.ready?'ok':'warn',hist.reason||'Full history + latest live update'],
+   ['Last full sync',hist.last_full_sync_at?fmtTime(hist.last_full_sync_at):'—','',hist.last_full_sync_reason||'No full sync yet'],
+   ['XAU D1 / H4',`${hc['XAU:D1']??0} / ${hc['XAU:H4']??0}`,'','~1 trading year / ~4 months target'],
+   ['XAU H1 / M15',`${hc['XAU:H1']??0} / ${hc['XAU:M15']??0}`,'','~4+ weeks / ~5 trading days target'],
+   ['DXY D1 / H4 / H1',`${hc['DXY:D1']??0} / ${hc['DXY:H4']??0} / ${hc['DXY:H1']??0}`,'','Macro / structural / intraday intermarket context'],
+   ['Snapshot kind',snap?.snapshot_kind||'legacy','',snap?.snapshot_reason||'—']
  ]);
  const aAge=a.generated_at?ageSeconds(a.generated_at):null;
  document.getElementById('analysisMeta').textContent=a.generated_at?`Generated ${fmtTime(a.generated_at)} · ${aAge}s ago · valid until ${fmtTime(a.valid_until)}`:'No completed analysis yet.';
@@ -61,7 +75,7 @@ function render(s){
  document.getElementById('runs').innerHTML=(sch.recent_runs||[]).slice(0,5).map(x=>`<tr><td>${esc(fmtTime(x.ts))}</td><td>${esc(x.kind)}</td><td>${esc(x.status)}</td><td>${esc(x.details)}</td></tr>`).join('')||'<tr><td colspan="4">No scheduled runs yet</td></tr>';
  document.getElementById('zones').innerHTML=(a.zones||[]).map(z=>`<tr><td>${esc(z.zone_id)}</td><td>${esc(z.direction)}</td><td>${esc(z.zone_low)} – ${esc(z.zone_high)}</td><td>${esc(z.grade)}</td><td>${esc(z.touch_count)}</td><td>${esc(z.requires_sweep)}</td></tr>`).join('')||'<tr><td colspan="6">No qualifying zones</td></tr>';
  document.getElementById('news').innerHTML=(s.news||[]).map(n=>`<tr><td>${esc(fmtTime(n.ts))}</td><td>${esc(n.title)}</td><td>${esc(n.impact)}</td><td>${esc(n.released)}</td></tr>`).join('')||'<tr><td colspan="4">No stored news events</td></tr>';
- document.getElementById('issues').textContent=JSON.stringify({no_trade_reason:a.no_trade_reason,issues:a.validator_issues||[],heartbeat:s.heartbeat,scheduler_now:sch.now_local,last_push:s.event_kind||'state',server_ts:s.server_ts||null},null,2);
+ document.getElementById('issues').textContent=JSON.stringify({no_trade_reason:a.no_trade_reason,issues:a.validator_issues||[],heartbeat:s.heartbeat,history_context:hist,scheduler_now:sch.now_local,last_push:s.event_kind||'state',server_ts:s.server_ts||null},null,2);
 }
 async function bootstrap(){
  let key=localStorage.getItem('smc_admin_key'); if(!key){key=prompt('Admin API key'); if(key)localStorage.setItem('smc_admin_key',key);} if(!key){setPush('AUTH REQUIRED','');return;}

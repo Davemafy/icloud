@@ -50,6 +50,7 @@ def merge_and_validate(snapshot: MarketSnapshot, base: InstitutionalAnalysis, dr
         out.ai_model = (ai_meta or {}).get("model")
         out.ai_response_id = (ai_meta or {}).get("response_id")
         out.dxy_d1_bias = draft.dxy_d1_bias
+        out.dxy_h4_bias = draft.dxy_h4_bias
         out.dxy_h1_bias = draft.dxy_h1_bias
         out.xau_d1_bias = draft.xau_d1_bias
         out.xau_h4_bias = draft.xau_h4_bias

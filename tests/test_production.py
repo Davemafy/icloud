@@ -10,7 +10,7 @@ from tests.helpers import make_snapshot
 def draft_for(base, zone_ids=None):
     zone_ids = zone_ids if zone_ids is not None else [z.zone_id for z in base.zones]
     return AIDraft(
-        dxy_d1_bias=base.dxy_d1_bias,dxy_h1_bias=base.dxy_h1_bias,
+        dxy_d1_bias=base.dxy_d1_bias,dxy_h4_bias=base.dxy_h4_bias,dxy_h1_bias=base.dxy_h1_bias,
         xau_d1_bias=base.xau_d1_bias,xau_h4_bias=base.xau_h4_bias,xau_h1_bias=base.xau_h1_bias,xau_m15_context=base.xau_m15_context,
         overall_bias=base.overall_bias,dxy_implication=base.dxy_implication,primary_liquidity=base.primary_liquidity,
         no_trade=False,no_trade_reason=None,
@@ -35,7 +35,7 @@ def test_unknown_ai_zone_is_rejected_and_not_added():
     snap=make_snapshot()
     base=build_candidate_analysis(snap)
     d=AIDraft(
-        dxy_d1_bias=base.dxy_d1_bias,dxy_h1_bias=base.dxy_h1_bias,xau_d1_bias=base.xau_d1_bias,xau_h4_bias=base.xau_h4_bias,xau_h1_bias=base.xau_h1_bias,xau_m15_context=base.xau_m15_context,
+        dxy_d1_bias=base.dxy_d1_bias,dxy_h4_bias=base.dxy_h4_bias,dxy_h1_bias=base.dxy_h1_bias,xau_d1_bias=base.xau_d1_bias,xau_h4_bias=base.xau_h4_bias,xau_h1_bias=base.xau_h1_bias,xau_m15_context=base.xau_m15_context,
         overall_bias=base.overall_bias,dxy_implication=base.dxy_implication,primary_liquidity=base.primary_liquidity,no_trade=False,no_trade_reason=None,
         zone_decisions=[AIZoneDecision(candidate_zone_id="INVENTED_4352",use_zone=True,grade=Grade.A,direction=Direction.BUY_ONLY,required_sweep="SSL",min_displacement_atr=1.0,institutional_interpretation="bad",execution_condition="bad",downgrade_reason=None)],
         expected_sequence="x",retail_trap="x",overall_invalidation="x",trader_brief="x")

@@ -32,6 +32,7 @@ def make_snapshot(now=None, dxy_bearish=True, spread=26):
         },
         dxy={
             "D1": trend_bars("DXY","D1",start,base=100,step=.05,bearish=dxy_bearish),
+            "H4": trend_bars("DXY","H4",start,base=100,step=.04,bearish=dxy_bearish),
             "H1": trend_bars("DXY","H1",start,base=100,step=.03,bearish=dxy_bearish),
         },
         source="TEST", account_mode="DEMO",

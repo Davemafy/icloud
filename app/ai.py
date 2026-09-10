@@ -11,7 +11,7 @@ from .config import SETTINGS
 from .models import AIDraft, InstitutionalAnalysis, MarketSnapshot
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[2] / "docs" / "SMC_FRAMEWORK_V3_FULL.md"
+PROMPT_PATH = Path(__file__).resolve().parents[1] / "docs" / "SMC_FRAMEWORK_V3_FULL.md"
 
 
 def prompt_text() -> str:
@@ -22,16 +22,24 @@ def prompt_hash() -> str:
     return hashlib.sha256(prompt_text().encode()).hexdigest()[:16]
 
 
-def _compact_bars(snapshot: MarketSnapshot, n: int = 80) -> dict[str, Any]:
+def _compact_bars(snapshot: MarketSnapshot) -> dict[str, Any]:
+    """Transmit the complete bounded historical context in a token-efficient shape.
+
+    The bridge/cloud merge caps the bars per timeframe first; this serializer then
+    sends all retained bars to the AI rather than truncating every timeframe to 80.
+    Format per bar: [unix_utc, open, high, low, close, tick_volume].
+    """
     def pack(group):
         result = {}
         for tf, series in group.items():
             result[tf] = {
                 "symbol": series.symbol,
                 "atr": series.atr,
+                "bar_count": len(series.bars),
+                "bar_format": ["unix_utc", "open", "high", "low", "close", "tick_volume"],
                 "bars": [
-                    {"ts": b.ts.isoformat(), "o": b.open, "h": b.high, "l": b.low, "c": b.close, "v": b.volume}
-                    for b in series.bars[-n:]
+                    [int(b.ts.timestamp()), b.open, b.high, b.low, b.close, b.volume]
+                    for b in series.bars
                 ],
             }
         return result
@@ -63,7 +71,8 @@ def _candidate_payload(base: InstitutionalAnalysis) -> list[dict[str, Any]]:
 def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict[str, Any]:
     return {
         "instruction": (
-            "Analyze only the supplied numeric market data and deterministic candidate zones. "
+            "Analyze the complete supplied historical context across XAU D1/H4/H1/M15 and DXY D1/H4/H1, plus deterministic candidate zones. "
+            "Use the long history to distinguish continuation locations from reversal locations and to assess freshness, mitigation, liquidity and premium/discount context. "
             "You may select, reject, downgrade, or describe candidate zones, but you MUST NOT invent or modify numeric price levels. "
             "M1 is execution-only and is not supplied here; never claim that an entry trigger has already occurred. "
             "The EA execution order is STRICT: liquidity sweep -> MSS with genuine displacement -> Fibonacci retracement location -> "
@@ -73,12 +82,21 @@ def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict
         "snapshot_meta": {
             "generated_at": snapshot.generated_at.isoformat(),
             "session": snapshot.session,
+            "snapshot_kind": snapshot.snapshot_kind,
+            "snapshot_reason": snapshot.snapshot_reason,
+            "bid": snapshot.bid,
+            "ask": snapshot.ask,
             "spread_points": snapshot.spread_points,
+            "spread_price": snapshot.spread_price,
+            "point_size": snapshot.point_size,
+            "atr_period": snapshot.atr_period,
+            "history_profile": snapshot.history_profile,
             "timezone": snapshot.timezone,
         },
         "market_data": _compact_bars(snapshot),
         "deterministic_context": {
             "dxy_d1_bias": base.dxy_d1_bias.value,
+            "dxy_h4_bias": base.dxy_h4_bias.value,
             "dxy_h1_bias": base.dxy_h1_bias.value,
             "xau_d1_bias": base.xau_d1_bias.value,
             "xau_h4_bias": base.xau_h4_bias.value,

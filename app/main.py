@@ -17,7 +17,10 @@ from .events import EVENTS
 from .models import Heartbeat, InstitutionalAnalysis, ManualNewsTrigger, MarketSnapshot, PlanAck, ReplayRequest, ReplayResult, TradeFeedback
 from .news import refresh_news
 from .scheduler import mark_manual_analysis_satisfies_session, scheduler_loop, scheduler_status
-from .service import load_latest_analysis, load_latest_snapshot, persist_snapshot, replay, run_production_analysis
+from .service import (
+    history_status, load_analysis_snapshot, load_latest_analysis, load_latest_full_snapshot,
+    load_latest_snapshot, persist_snapshot, replay, run_production_analysis,
+)
 
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
@@ -39,7 +42,7 @@ async def lifespan(app: FastAPI):
         DB.audit("service.stop", "system", "shutdown")
 
 
-app = FastAPI(title="Institutional SMC AI Cloud", version="1.5.0", lifespan=lifespan)
+app = FastAPI(title="Institutional SMC AI Cloud", version="1.6.1", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -47,7 +50,7 @@ def health():
     return {
         "ok": True,
         "service": "institutional-smc-ai-cloud",
-        "version": "1.5.0",
+        "version": "1.6.1",
         "paper_only": SETTINGS.paper_only,
         "ai_enabled": SETTINGS.ai_enabled,
         "ai_configured": any([
@@ -63,6 +66,8 @@ def health():
         "session_catchup_minutes": SETTINGS.session_catchup_minutes,
         "session_active_recovery": SETTINGS.session_active_recovery,
         "session_snapshot_max_age_seconds": SETTINGS.session_snapshot_max_age_seconds,
+        "history_full_max_age_hours": SETTINGS.history_full_max_age_hours,
+        "history_protocol": 3,
     }
 
 
@@ -71,7 +76,10 @@ async def ingest_snapshot(snapshot: MarketSnapshot, actor: str = Depends(require
     if SETTINGS.paper_only and snapshot.account_mode.upper() not in {"DEMO", "PAPER", "TEST"}:
         raise HTTPException(403, "Cloud is configured paper/demo only")
     sid = await persist_snapshot(snapshot)
-    return {"accepted": True, "snapshot_id": sid, "generated_at": snapshot.generated_at}
+    return {
+        "accepted": True, "snapshot_id": sid, "generated_at": snapshot.generated_at,
+        "snapshot_kind": snapshot.snapshot_kind, "snapshot_reason": snapshot.snapshot_reason,
+    }
 
 
 @app.post("/analysis/run", response_model=InstitutionalAnalysis)
@@ -185,6 +193,11 @@ def dashboard_session(request: Request, actor: str = Depends(require_admin)):
 
 def _dashboard_payload(event_kind: str = "state") -> str:
     state = DB.dashboard_state()
+    context = load_analysis_snapshot()
+    full = load_latest_full_snapshot()
+    state["history_context"] = history_status(context)
+    state["history_context"]["last_full_sync_at"] = full.generated_at.isoformat() if full else None
+    state["history_context"]["last_full_sync_reason"] = full.snapshot_reason if full else None
     state["scheduler"] = scheduler_status()
     state["event_kind"] = event_kind
     state["server_ts"] = datetime.now(timezone.utc).isoformat()
@@ -226,6 +239,11 @@ async def dashboard_events(request: Request):
 @app.get("/dashboard/state")
 def dashboard_state(actor: str = Depends(require_admin)):
     state = DB.dashboard_state()
+    context = load_analysis_snapshot()
+    full = load_latest_full_snapshot()
+    state["history_context"] = history_status(context)
+    state["history_context"]["last_full_sync_at"] = full.generated_at.isoformat() if full else None
+    state["history_context"]["last_full_sync_reason"] = full.snapshot_reason if full else None
     state["scheduler"] = scheduler_status()
     return state
 

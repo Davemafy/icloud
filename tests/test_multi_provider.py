@@ -9,6 +9,7 @@ from tests.helpers import make_snapshot
 def make_draft(base):
     return AIDraft(
         dxy_d1_bias=base.dxy_d1_bias,
+        dxy_h4_bias=base.dxy_h4_bias,
         dxy_h1_bias=base.dxy_h1_bias,
         xau_d1_bias=base.xau_d1_bias,
         xau_h4_bias=base.xau_h4_bias,

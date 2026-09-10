@@ -9,9 +9,89 @@ from .config import SETTINGS
 from .db import DB
 from .engine import build_candidate_analysis, snapshot_fingerprint, snapshot_id
 from .events import EVENTS
-from .models import InstitutionalAnalysis, MarketSnapshot, ReplayResult
+from .models import Candle, InstitutionalAnalysis, MarketSnapshot, ReplayResult, TimeframeBars
 from .news import blackout_state
 from .validator import merge_and_validate
+
+
+def _kind(snapshot: MarketSnapshot) -> str:
+    return (snapshot.snapshot_kind or "FULL_HISTORY").upper()
+
+
+def _merge_cap(tf: str) -> int:
+    return {
+        "D1": SETTINGS.history_merge_cap_d1,
+        "H4": SETTINGS.history_merge_cap_h4,
+        "H1": SETTINGS.history_merge_cap_h1,
+        "M15": SETTINGS.history_merge_cap_m15,
+    }.get(tf.upper(), 700)
+
+
+def _merge_series(full: TimeframeBars, live: TimeframeBars | None) -> TimeframeBars:
+    by_ts = {b.ts: b for b in full.bars}
+    if live is not None:
+        for bar in live.bars:
+            by_ts[bar.ts] = bar
+    bars = sorted(by_ts.values(), key=lambda b: b.ts)
+    bars = bars[-_merge_cap(full.timeframe):]
+    return TimeframeBars(
+        symbol=(live.symbol if live is not None else full.symbol),
+        timeframe=full.timeframe,
+        bars=bars,
+        atr=(live.atr if live is not None and live.atr is not None else full.atr),
+    )
+
+
+def _merge_group(full: dict[str, TimeframeBars], live: dict[str, TimeframeBars]) -> dict[str, TimeframeBars]:
+    out: dict[str, TimeframeBars] = {}
+    for tf, series in full.items():
+        out[tf] = _merge_series(series, live.get(tf))
+    # Preserve any extra timeframe supplied live, although the institutional
+    # engine itself remains restricted to the configured D1/H4/H1/M15 + DXY D1/H4/H1 set.
+    for tf, series in live.items():
+        if tf not in out:
+            out[tf] = series
+    return out
+
+
+def history_requirements() -> dict[str, int]:
+    return {
+        "XAU:D1": SETTINGS.history_min_xau_d1,
+        "XAU:H4": SETTINGS.history_min_xau_h4,
+        "XAU:H1": SETTINGS.history_min_xau_h1,
+        "XAU:M15": SETTINGS.history_min_xau_m15,
+        "DXY:D1": SETTINGS.history_min_dxy_d1,
+        "DXY:H4": SETTINGS.history_min_dxy_h4,
+        "DXY:H1": SETTINGS.history_min_dxy_h1,
+    }
+
+
+def history_status(snapshot: MarketSnapshot | None) -> dict:
+    if snapshot is None:
+        return {"ready": False, "reason": "NO_CONTEXT", "counts": {}, "requirements": history_requirements()}
+    counts: dict[str, int] = {}
+    for tf, s in snapshot.xau.items():
+        counts[f"XAU:{tf}"] = len(s.bars)
+    for tf, s in snapshot.dxy.items():
+        counts[f"DXY:{tf}"] = len(s.bars)
+
+    # Old v2/manual test snapshots did not advertise a history profile. They are
+    # kept compatible; protocol-v3 bridge snapshots must satisfy the historical profile.
+    enforce = snapshot.schema_version >= 3 and bool(snapshot.history_profile)
+    missing = {
+        k: {"have": counts.get(k, 0), "need": need}
+        for k, need in history_requirements().items()
+        if counts.get(k, 0) < need
+    }
+    return {
+        "ready": (not enforce) or not missing,
+        "reason": None if ((not enforce) or not missing) else "INSUFFICIENT_HISTORY",
+        "counts": counts,
+        "requirements": history_requirements(),
+        "missing": missing,
+        "snapshot_kind": snapshot.snapshot_kind,
+        "snapshot_reason": snapshot.snapshot_reason,
+    }
 
 
 async def persist_snapshot(snapshot: MarketSnapshot) -> str:
@@ -20,27 +100,93 @@ async def persist_snapshot(snapshot: MarketSnapshot) -> str:
         sid, snapshot.generated_at.isoformat(), snapshot.session, snapshot_fingerprint(snapshot),
         snapshot.model_dump(mode="json"),
     )
-    # MT5 can act as the primary economic-calendar provider. Persist every
-    # calendar event included in the bridge snapshot so the cloud scheduler,
-    # blackout engine and post-news reanalysis all use the same authoritative
-    # event store as external providers.
+    # MT5 is the primary economic-calendar provider. Persist every supplied event
+    # so the cloud blackout and post-news scheduler share exactly the same evidence.
     news_count = 0
     for event in snapshot.news:
         DB.upsert_news(event.model_dump(mode="json"))
         news_count += 1
     DB.audit(
         "snapshot.ingest", snapshot.source,
-        f"snapshot_id={sid} session={snapshot.session} news={news_count}"
+        f"snapshot_id={sid} kind={_kind(snapshot)} reason={snapshot.snapshot_reason} "
+        f"session={snapshot.session} news={news_count} spread={snapshot.spread_points:.1f}"
     )
+    if _kind(snapshot) == "FULL_HISTORY":
+        status = history_status(snapshot)
+        DB.audit(
+            "history.sync", snapshot.source,
+            f"snapshot_id={sid} ready={status['ready']} reason={snapshot.snapshot_reason} counts={status['counts']}"
+        )
     await EVENTS.publish("snapshot")
     return sid
 
 
-def load_latest_snapshot() -> MarketSnapshot | None:
-    row = DB.latest_snapshot()
+def _row_snapshot(row) -> MarketSnapshot | None:
     if not row:
         return None
     return MarketSnapshot.model_validate(json.loads(row["payload"]))
+
+
+def load_latest_snapshot() -> MarketSnapshot | None:
+    return _row_snapshot(DB.latest_snapshot())
+
+
+def load_latest_full_snapshot() -> MarketSnapshot | None:
+    return _row_snapshot(DB.latest_full_snapshot())
+
+
+def load_analysis_snapshot() -> MarketSnapshot | None:
+    """Build the analysis context from the latest heavy history sync + latest live quote/bars.
+
+    The historical snapshot supplies structural depth. The latest snapshot supplies
+    current bid/ask/spread, ATR and the newest closed candles. This prevents the
+    frequent live bridge heartbeat from replacing the long institutional context.
+    """
+    latest = load_latest_snapshot()
+    full = load_latest_full_snapshot()
+    if latest is None:
+        return None
+    if full is None:
+        # Legacy/manual snapshots are still usable. A protocol-v3 LIVE_UPDATE with
+        # no full bootstrap is deliberately not analyzed.
+        return latest if _kind(latest) != "LIVE_UPDATE" else None
+
+    now = latest.generated_at.astimezone(timezone.utc)
+    full_time = full.generated_at.astimezone(timezone.utc)
+    full_age_hours = max(0.0, (now - full_time).total_seconds() / 3600.0)
+    if full_age_hours > SETTINGS.history_full_max_age_hours and _kind(latest) == "LIVE_UPDATE":
+        return None
+
+    if latest.generated_at < full.generated_at:
+        latest = full
+
+    xau = _merge_group(full.xau, latest.xau)
+    dxy = _merge_group(full.dxy, latest.dxy)
+    counts = {f"XAU:{tf}": len(s.bars) for tf, s in xau.items()}
+    counts.update({f"DXY:{tf}": len(s.bars) for tf, s in dxy.items()})
+
+    profile_advertised = bool(full.history_profile) or bool(latest.history_profile)
+    return MarketSnapshot(
+        schema_version=max(full.schema_version, latest.schema_version, 3),
+        generated_at=latest.generated_at,
+        broker_time=latest.broker_time or full.broker_time,
+        session=latest.session,
+        timezone=latest.timezone or full.timezone,
+        snapshot_kind="ANALYSIS_CONTEXT",
+        snapshot_reason=f"{full.snapshot_reason}+{latest.snapshot_reason}",
+        xau=xau,
+        dxy=dxy,
+        bid=latest.bid if latest.bid is not None else full.bid,
+        ask=latest.ask if latest.ask is not None else full.ask,
+        spread_points=latest.spread_points,
+        spread_price=latest.spread_price if latest.spread_price is not None else full.spread_price,
+        point_size=latest.point_size,
+        atr_period=latest.atr_period,
+        history_profile=counts if profile_advertised else {},
+        news=latest.news if latest.news else full.news,
+        source="MT5_BRIDGE_CONTEXT",
+        account_mode=latest.account_mode,
+    )
 
 
 def load_latest_analysis(approved_only: bool = False) -> InstitutionalAnalysis | None:
@@ -51,9 +197,13 @@ def load_latest_analysis(approved_only: bool = False) -> InstitutionalAnalysis |
 
 
 async def run_production_analysis(snapshot: MarketSnapshot | None = None, reason: str = "manual") -> InstitutionalAnalysis:
-    snapshot = snapshot or load_latest_snapshot()
+    snapshot = snapshot or load_analysis_snapshot()
     if snapshot is None:
-        raise ValueError("No market snapshot available")
+        raise ValueError("No complete historical market context available; waiting for FULL_HISTORY sync from MT5")
+
+    hstatus = history_status(snapshot)
+    if not hstatus["ready"]:
+        raise ValueError(f"Historical context incomplete: {hstatus['missing']}")
 
     # Use stored news as the authoritative cloud calendar layer, while retaining MT5-supplied events as evidence.
     blackout, blackout_reason, active_events = blackout_state()
@@ -87,7 +237,12 @@ async def run_production_analysis(snapshot: MarketSnapshot | None = None, reason
             result.approved = True  # approved NO_TRADE plan is safe to deliver to MT5
 
     DB.save_analysis(result.model_dump(mode="json"))
-    DB.audit("analysis.run", "cloud", f"analysis_id={result.analysis_id} reason={reason} approved={result.approved} mode={result.ea_mode.value} ai={result.ai_used} provider={result.ai_provider or 'none'}")
+    DB.audit(
+        "analysis.run", "cloud",
+        f"analysis_id={result.analysis_id} reason={reason} approved={result.approved} "
+        f"mode={result.ea_mode.value} ai={result.ai_used} provider={result.ai_provider or 'none'} "
+        f"history={hstatus['counts']} spread={snapshot.spread_points:.1f}"
+    )
     await EVENTS.publish("analysis")
     return result
 
