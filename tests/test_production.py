@@ -58,17 +58,30 @@ def test_asia_pre_session_scheduler_key():
     keys=session_run_keys(now)
     assert any(name=="ASIA" for _,name in keys)
 
-def test_post_news_scheduler_after_cooldown_uses_event_time():
+def test_pre_news_scheduler_runs_at_t_minus_10():
+    from app.db import DB
+    from app.scheduler import pre_news_run_keys
+    event_ts=datetime(2099,9,9,12,30,0,tzinfo=timezone.utc)
+    DB.upsert_news({
+        "event_id":"test-news-pre-001","ts":event_ts.isoformat(),"currency":"USD","impact":"HIGH",
+        "title":"Test Pre High Impact USD Event","released":False,"actual":None,"forecast":"1","previous":"1","source":"test"
+    })
+    now=event_ts-timedelta(minutes=10)+timedelta(seconds=5)
+    keys=pre_news_run_keys(now)
+    assert any(k.startswith("news_pre:") and "Test Pre High Impact USD Event" in title and ts==event_ts for k,title,ts in keys)
+
+
+def test_post_news_scheduler_runs_at_t_plus_10():
     from app.db import DB
     from app.scheduler import post_news_run_keys
-    event_ts=datetime(2026,9,9,12,30,0,tzinfo=timezone.utc)
+    event_ts=datetime(2099,9,10,12,30,0,tzinfo=timezone.utc)
     DB.upsert_news({
-        "event_id":"test-news-cooldown-001","ts":event_ts.isoformat(),"currency":"USD","impact":"HIGH",
-        "title":"Test High Impact USD Event","released":True,"actual":"1","forecast":"1","previous":"1","source":"test"
+        "event_id":"test-news-post-001","ts":event_ts.isoformat(),"currency":"USD","impact":"HIGH",
+        "title":"Test Post High Impact USD Event","released":True,"actual":"1","forecast":"1","previous":"1","source":"test"
     })
-    now=event_ts+timedelta(minutes=5,seconds=5)
-    keys=post_news_run_keys(now)
-    assert any(k.startswith("news:test-news-cooldown-001:") and title=="Test High Impact USD Event" and ts==event_ts for k,title,ts in keys)
+    assert not any(ts==event_ts for _,_,ts in post_news_run_keys(event_ts+timedelta(minutes=9,seconds=59)))
+    keys=post_news_run_keys(event_ts+timedelta(minutes=10,seconds=5))
+    assert any(k.startswith("news_post:") and "Test Post High Impact USD Event" in title and ts==event_ts for k,title,ts in keys)
 
 
 def test_asia_scheduler_catches_up_at_2357_wat():
