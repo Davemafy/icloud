@@ -16,7 +16,7 @@ body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e
 <h2>Historical analysis context</h2><p class="section-note">Heavy history is synced at bridge startup, before each session, and at T-10 / T+10 around every high-impact USD news cluster. Live updates are merged into this context.</p>
 <div class="grid" id="history"></div>
 
-<h2>Last institutional analysis</h2><p class="section-note" id="analysisMeta">No completed analysis yet.</p>
+<h2>Active institutional plan</h2><p class="section-note" id="analysisMeta">No completed analysis yet.</p>
 <div class="grid" id="summary"></div>
 <h2>Institutional brief</h2><p class="section-note">Strict foundation output: D1, H4, H1, XAU zones/alerts, then M1 entry + invalidation. No DXY trade zones.</p><div class="card"><code class="brief" id="brief">No completed analysis yet.</code></div>
 
@@ -45,7 +45,7 @@ function latestClose(group,preferred){if(!group)return null; for(const tf of pre
 function cards(el,data){document.getElementById(el).innerHTML=data.map(x=>`<div class="card"><div class="muted">${esc(x[0])}</div><div class="big ${x[2]||''}">${esc(x[1])}</div>${x[3]?`<div class="small muted">${esc(x[3])}</div>`:''}</div>`).join('');}
 function setPush(text,state){const el=document.getElementById('pushState'); el.innerHTML=`<span class="dot ${state||''}"></span>${esc(text)}`;}
 function render(s){
- const snap=s.snapshot||null; const a=s.analysis||{}; const sch=s.scheduler||{}; const hist=s.history_context||{};
+ const snap=s.snapshot||null; const a=s.analysis||{}; const sch=s.scheduler||{}; const hist=s.history_context||{}; const life=s.plan_lifecycle||{}; const attempt=s.latest_analysis_attempt||{};
  const snapAge=snap?ageSeconds(snap.generated_at):null; const freshLimit=sch.snapshot_max_age_seconds||180; const bridge=snap?(snapAge<=freshLimit?'LIVE':'STALE'):'NO DATA';
  const xau=snap?latestClose(snap.xau,['M15','H1','H4','D1']):null; const dxy=snap?latestClose(snap.dxy,['H1','D1']):null;
  cards('live',[
@@ -68,16 +68,16 @@ function render(s){
    ['Snapshot kind',snap?.snapshot_kind||'legacy','',snap?.snapshot_reason||'—']
  ]);
  const aAge=a.generated_at?ageSeconds(a.generated_at):null;
- document.getElementById('analysisMeta').textContent=a.generated_at?`Generated ${fmtTime(a.generated_at)} · ${aAge}s ago · valid until ${fmtTime(a.valid_until)}`:'No completed analysis yet.';
+ document.getElementById('analysisMeta').textContent=a.generated_at?`Generated ${fmtTime(a.generated_at)} · ${aAge}s ago · refresh due ${fmtTime(a.valid_until)}${life.status==='CARRY_FORWARD'?' · CARRY-FORWARD until next successful analysis':''}${attempt.analysis_id&&attempt.analysis_id!==a.analysis_id?' · newer analysis attempt did not replace active plan':''}`:'No completed analysis yet.';
  cards('summary',[
-   ['Trading profile',s.trading_profile||'INTRADAY_HTF_ZONE_M1','ok','D1/H4/H1 zone map · M15 qualified once · M1 execution'],['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
+   ['Trading profile',s.trading_profile||'INTRADAY_HTF_ZONE_M1','ok','D1/H4/H1 zone map · M15 qualified once · M1 execution'],['Plan lifecycle',life.status||'—',life.status==='CARRY_FORWARD'?'warn':'ok',life.status==='CARRY_FORWARD'?'Zones persist until successful replacement':'Current institutional plan'],['EA mode',a.ea_mode||'NO DATA',a.ea_mode==='NO_TRADE'?'warn':'ok'],['XAU at analysis',a.current_xau_price??'—'],['DXY at analysis',a.current_dxy_price??'—'],['Overall',a.overall_bias||'—'],['DXY implication',a.dxy_implication||'—'],['Analysis session',a.session||'—'],['AI',a.ai_used?('ON · '+(a.ai_provider||'provider')+' · '+(a.ai_model||'')):'fallback/off',a.ai_used?'ok':'warn'],['Approved',a.approved?'YES':'NO',a.approved?'ok':'bad']
  ]);
  document.getElementById('brief').textContent=a.trader_brief||'No completed analysis yet.';
  document.getElementById('schedule').innerHTML=(sch.sessions||[]).map(x=>{const st=x.status|| (x.completed?'DONE':x.window_active?'DUE_RETRYING':'WAITING'); const label=st==='DONE'?'<span class="ok">DONE</span>':st==='DUE_RETRYING'?'<span class="warn">DUE / RETRYING</span>':st==='RECOVERY_DUE'?'<span class="warn">RECOVERY DUE</span>':'WAITING'; return `<tr><td>${esc(x.session)}</td><td>${esc(fmtTime(x.scheduled_analysis_at))}</td><td>${esc(fmtTime(x.catchup_until))}</td><td>${label}</td></tr>`;}).join('')||'<tr><td colspan="4">No scheduler state</td></tr>';
  document.getElementById('runs').innerHTML=(sch.recent_runs||[]).slice(0,5).map(x=>`<tr><td>${esc(fmtTime(x.ts))}</td><td>${esc(x.kind)}</td><td>${esc(x.status)}</td><td>${esc(x.details)}</td></tr>`).join('')||'<tr><td colspan="4">No scheduled runs yet</td></tr>';
  document.getElementById('zones').innerHTML=(a.zones||[]).map(z=>{const fvg=(z.fvg_low!=null&&z.fvg_high!=null)?`${z.fvg_low}–${z.fvg_high}`:'—'; const inv=z.invalidation_level!=null?`${z.invalidation_tf||''} @ ${z.invalidation_level}`:'—'; return `<tr><td>${esc(z.zone_id)}</td><td>${esc(z.setup_type||'—')}</td><td>${esc(z.source_tf)}</td><td>${esc(z.direction)}</td><td>${esc(z.zone_low)} – ${esc(z.zone_high)}</td><td>${esc(z.grade)}</td><td>${esc(z.touch_count)}</td><td>${esc(z.requires_sweep)}</td><td>${esc(z.source_candle_ts?fmtTime(z.source_candle_ts):'—')}</td><td>${esc(fvg)}</td><td>${esc(inv)}</td></tr>`;}).join('')||'<tr><td colspan="11">No qualifying D1/H4/H1 zones</td></tr>';
  document.getElementById('news').innerHTML=(s.news||[]).map(n=>`<tr><td>${esc(fmtTime(n.ts))}</td><td>${esc(n.title)}</td><td>${esc(n.impact)}</td><td>${esc(n.released)}</td></tr>`).join('')||'<tr><td colspan="4">No stored news events</td></tr>';
- document.getElementById('issues').textContent=JSON.stringify({no_trade_reason:a.no_trade_reason,issues:a.validator_issues||[],heartbeat:s.heartbeat,history_context:hist,scheduler_now:sch.now_local,last_push:s.event_kind||'state',server_ts:s.server_ts||null},null,2);
+ document.getElementById('issues').textContent=JSON.stringify({no_trade_reason:a.no_trade_reason,issues:a.validator_issues||[],plan_lifecycle:life,latest_analysis_attempt:attempt.analysis_id?{analysis_id:attempt.analysis_id,generated_at:attempt.generated_at,ai_used:attempt.ai_used,ea_mode:attempt.ea_mode}:null,heartbeat:s.heartbeat,history_context:hist,scheduler_now:sch.now_local,last_push:s.event_kind||'state',server_ts:s.server_ts||null},null,2);
 }
 async function bootstrap(){
  let key=localStorage.getItem('smc_admin_key'); if(!key){key=prompt('Admin API key'); if(key)localStorage.setItem('smc_admin_key',key);} if(!key){setPush('AUTH REQUIRED','');return;}

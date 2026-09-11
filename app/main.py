@@ -18,8 +18,8 @@ from .models import Heartbeat, InstitutionalAnalysis, ManualNewsTrigger, MarketS
 from .news import refresh_news
 from .scheduler import mark_manual_analysis_satisfies_session, scheduler_loop, scheduler_status
 from .service import (
-    apply_live_zone_guard, history_status, load_analysis_snapshot, load_latest_analysis, load_latest_full_snapshot,
-    load_latest_snapshot, persist_snapshot, replay, run_production_analysis,
+    apply_live_execution_guards, apply_live_zone_guard, history_status, load_active_execution_analysis, load_analysis_snapshot,
+    load_latest_analysis, load_latest_full_snapshot, load_latest_snapshot, persist_snapshot, replay, run_production_analysis,
 )
 
 
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         DB.audit("service.stop", "system", "shutdown")
 
 
-app = FastAPI(title="Institutional SMC AI Cloud", version="4.2.0", lifespan=lifespan)
+app = FastAPI(title="Institutional SMC AI Cloud", version="4.3.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -50,7 +50,7 @@ def health():
     return {
         "ok": True,
         "service": "institutional-smc-ai-cloud",
-        "version": "4.2.0",
+        "version": "4.3.0",
         "paper_only": SETTINGS.paper_only,
         "ai_enabled": SETTINGS.ai_enabled,
         "ai_configured": any([
@@ -75,6 +75,8 @@ def health():
             "consecutive_closes": SETTINGS.m15_zone_guard_consecutive_closes,
         },
         "trading_profile": SETTINGS.trading_profile,
+        "plan_carry_forward_until_replaced": SETTINGS.plan_carry_forward_until_replaced,
+        "plan_refresh_minutes": SETTINGS.plan_valid_minutes,
     }
 
 
@@ -113,16 +115,16 @@ def latest_analysis(actor: str = Depends(require_admin)):
 
 @app.get("/mt5/plan", response_class=PlainTextResponse)
 def mt5_plan(zone_id: str | None = Query(default=None), actor: str = Depends(require_ea)):
-    analysis = load_latest_analysis(approved_only=True)
+    # v4.3: zone maps do not die because a fixed clock elapsed. The latest
+    # successful institutional analysis remains active until a newer successful
+    # analysis replaces it. Live safety guards can still restrict execution.
+    analysis = load_active_execution_analysis()
     if analysis is None:
-        return PlainTextResponse("version=3\nea_mode=NO_TRADE\napproved=0\nzone_count=0\nzone_id=NONE\ndirection=NO_TRADE\ngrade=REJECT\npaper_only=1\n")
-    now = datetime.now(timezone.utc)
-    if now > analysis.valid_until.astimezone(timezone.utc):
-        return PlainTextResponse(
-            f"version=3\nanalysis_id={analysis.analysis_id}\nea_mode=NO_TRADE\napproved=1\nzone_count=0\nzone_id=NONE\ndirection=NO_TRADE\ngrade=REJECT\nreason=STALE_PLAN\npaper_only=1\n"
-        )
-    guarded = apply_live_zone_guard(analysis, load_latest_snapshot())
-    return PlainTextResponse(active_plan_text(guarded, zone_id))
+        return PlainTextResponse("version=3\nea_mode=NO_TRADE\napproved=0\nzone_count=0\nzone_id=NONE\ndirection=NO_TRADE\ngrade=REJECT\nreason=NO_SUCCESSFUL_ACTIVE_PLAN\npaper_only=1\n")
+    guarded = apply_live_execution_guards(analysis, load_latest_snapshot())
+    return PlainTextResponse(
+        active_plan_text(guarded, zone_id, carry_forward=SETTINGS.plan_carry_forward_until_replaced)
+    )
 
 
 @app.post("/mt5/ack")
@@ -201,9 +203,25 @@ def dashboard_session(request: Request, actor: str = Depends(require_admin)):
 
 def _dashboard_payload(event_kind: str = "state") -> str:
     state = DB.dashboard_state()
-    latest_analysis = load_latest_analysis()
-    if latest_analysis is not None:
-        state["analysis"] = apply_live_zone_guard(latest_analysis, load_latest_snapshot()).model_dump(mode="json")
+    latest_attempt = load_latest_analysis()
+    active = load_active_execution_analysis()
+    snap = load_latest_snapshot()
+    if latest_attempt is not None:
+        state["latest_analysis_attempt"] = latest_attempt.model_dump(mode="json")
+    display = active or latest_attempt
+    if display is not None:
+        state["analysis"] = apply_live_execution_guards(display, snap).model_dump(mode="json")
+        now = datetime.now(timezone.utc)
+        refresh_due = now > display.valid_until.astimezone(timezone.utc)
+        state["plan_lifecycle"] = {
+            "status": "CARRY_FORWARD" if (SETTINGS.plan_carry_forward_until_replaced and refresh_due) else "ACTIVE",
+            "carry_forward_until_replaced": SETTINGS.plan_carry_forward_until_replaced,
+            "refresh_due": refresh_due,
+            "refresh_due_at": display.valid_until.isoformat(),
+            "active_analysis_id": display.analysis_id,
+            "latest_attempt_id": latest_attempt.analysis_id if latest_attempt else None,
+            "latest_attempt_ai_used": latest_attempt.ai_used if latest_attempt else None,
+        }
     context = load_analysis_snapshot()
     full = load_latest_full_snapshot()
     state["history_context"] = history_status(context)
@@ -251,9 +269,25 @@ async def dashboard_events(request: Request):
 @app.get("/dashboard/state")
 def dashboard_state(actor: str = Depends(require_admin)):
     state = DB.dashboard_state()
-    latest_analysis = load_latest_analysis()
-    if latest_analysis is not None:
-        state["analysis"] = apply_live_zone_guard(latest_analysis, load_latest_snapshot()).model_dump(mode="json")
+    latest_attempt = load_latest_analysis()
+    active = load_active_execution_analysis()
+    snap = load_latest_snapshot()
+    if latest_attempt is not None:
+        state["latest_analysis_attempt"] = latest_attempt.model_dump(mode="json")
+    display = active or latest_attempt
+    if display is not None:
+        state["analysis"] = apply_live_execution_guards(display, snap).model_dump(mode="json")
+        now = datetime.now(timezone.utc)
+        refresh_due = now > display.valid_until.astimezone(timezone.utc)
+        state["plan_lifecycle"] = {
+            "status": "CARRY_FORWARD" if (SETTINGS.plan_carry_forward_until_replaced and refresh_due) else "ACTIVE",
+            "carry_forward_until_replaced": SETTINGS.plan_carry_forward_until_replaced,
+            "refresh_due": refresh_due,
+            "refresh_due_at": display.valid_until.isoformat(),
+            "active_analysis_id": display.analysis_id,
+            "latest_attempt_id": latest_attempt.analysis_id if latest_attempt else None,
+            "latest_attempt_ai_used": latest_attempt.ai_used if latest_attempt else None,
+        }
     context = load_analysis_snapshot()
     full = load_latest_full_snapshot()
     state["history_context"] = history_status(context)

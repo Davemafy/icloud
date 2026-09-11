@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from .config import SETTINGS
@@ -767,7 +767,7 @@ def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
         analysis_evidence=features,
     )
 
-def active_plan_text(analysis: InstitutionalAnalysis, zone_id: Optional[str] = None) -> str:
+def active_plan_text(analysis: InstitutionalAnalysis, zone_id: Optional[str] = None, carry_forward: bool | None = None) -> str:
     selected = None
     if zone_id:
         selected = next((z for z in analysis.zones if z.zone_id == zone_id), None)
@@ -784,10 +784,22 @@ def active_plan_text(analysis: InstitutionalAnalysis, zone_id: Optional[str] = N
     # Version 3 preserves the single selected execution zone fields used by the
     # M1 EA and exports validated XAU zones for visualization. DXY remains
     # analysis-only and is never serialized as a view/execution zone.
+    refresh_due = datetime.now(timezone.utc) > analysis.valid_until.astimezone(timezone.utc)
+    if carry_forward is None:
+        carry_forward = SETTINGS.plan_carry_forward_until_replaced
+    # Sequence EA v2.12 treats valid_until_epoch=0 as "no local hard expiry".
+    # The real refresh target is still exported separately for audit/dashboard use.
+    ea_expiry_epoch = 0 if carry_forward else int(analysis.valid_until.timestamp())
+    lifecycle = "CARRY_FORWARD" if (carry_forward and refresh_due) else "ACTIVE"
+
     lines = {
         "version": "3", "analysis_id": analysis.analysis_id,
         "generated_at": analysis.generated_at.isoformat(), "valid_until": analysis.valid_until.isoformat(),
-        "valid_until_epoch": str(int(analysis.valid_until.timestamp())), "session": analysis.session,
+        "valid_until_epoch": str(ea_expiry_epoch),
+        "refresh_due_epoch": str(int(analysis.valid_until.timestamp())),
+        "refresh_due": "1" if refresh_due else "0",
+        "carry_forward_until_replaced": "1" if carry_forward else "0",
+        "plan_lifecycle": lifecycle, "session": analysis.session,
         "ea_mode": analysis.ea_mode.value if analysis.approved else Direction.NO_TRADE.value,
         "approved": "1" if analysis.approved else "0", "spread_points": f"{analysis.spread_points:.1f}",
         "bid": "" if analysis.bid is None else f"{analysis.bid:.5f}",

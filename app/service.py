@@ -11,7 +11,7 @@ from .db import DB
 from .engine import build_candidate_analysis, snapshot_fingerprint, snapshot_id
 from .events import EVENTS
 from .models import Candle, Direction, Grade, InstitutionalAnalysis, MarketSnapshot, ReplayResult, TimeframeBars, ValidationIssue
-from .news import blackout_state
+from .news import blackout_state, stored_news
 from .institutional_features import closed_bars
 from .validator import merge_and_validate
 
@@ -196,6 +196,77 @@ def load_latest_analysis(approved_only: bool = False) -> InstitutionalAnalysis |
     if not row:
         return None
     return InstitutionalAnalysis.model_validate(json.loads(row["payload"]))
+
+
+def load_active_execution_analysis() -> InstitutionalAnalysis | None:
+    """Newest plan that may remain active until a successful replacement arrives.
+
+    If REQUIRE_AI_FOR_EXECUTION is enabled, a newer AI-unavailable deterministic
+    fallback remains visible in the audit trail but does not evict the previous
+    AI-validated plan.
+    """
+    row = DB.latest_execution_analysis(require_ai=SETTINGS.require_ai_for_execution)
+    if not row:
+        return None
+    return InstitutionalAnalysis.model_validate(json.loads(row["payload"]))
+
+
+def apply_live_execution_guards(analysis: InstitutionalAnalysis, snapshot: MarketSnapshot | None = None) -> InstitutionalAnalysis:
+    """Apply only restrictive live guards to a carried institutional plan.
+
+    Plan age alone never removes zones. The plan remains visible/eligible until a
+    newer successful institutional analysis replaces it. Execution may still be
+    blocked immediately by M15 zone-health invalidation, stale bridge data, spread,
+    current high-impact-news blackout, or a released major-news event that occurred
+    after the active plan and therefore still needs post-news revalidation.
+    """
+    snap = snapshot or load_latest_snapshot()
+    out = apply_live_zone_guard(analysis, snap)
+    issues = list(out.validator_issues)
+    now = datetime.now(timezone.utc)
+
+    if snap is None:
+        out.ea_mode = Direction.NO_TRADE
+        out.no_trade_reason = "Live MT5 snapshot unavailable; carried zones remain visible but new entries are blocked."
+        issues.append(ValidationIssue(severity="ERROR", code="LIVE_SNAPSHOT_MISSING", message=out.no_trade_reason))
+    else:
+        age = (now - snap.generated_at.astimezone(timezone.utc)).total_seconds()
+        if age > SETTINGS.max_snapshot_age_seconds:
+            out.ea_mode = Direction.NO_TRADE
+            out.no_trade_reason = f"Live MT5 snapshot stale ({age:.0f}s); carried zones remain visible but new entries are blocked."
+            issues.append(ValidationIssue(severity="ERROR", code="LIVE_SNAPSHOT_STALE", message=out.no_trade_reason))
+        if snap.spread_points > SETTINGS.max_spread_points:
+            out.ea_mode = Direction.NO_TRADE
+            out.no_trade_reason = f"Live spread too high: {snap.spread_points:.1f} points"
+            issues.append(ValidationIssue(severity="ERROR", code="LIVE_SPREAD_GUARD", message=out.no_trade_reason))
+
+    blackout, reason, _ = blackout_state(now)
+    out.news_blackout = blackout
+    if blackout:
+        out.ea_mode = Direction.NO_TRADE
+        out.no_trade_reason = f"High-impact USD news blackout/cooldown is active: {reason}"
+        issues.append(ValidationIssue(severity="ERROR", code="LIVE_NEWS_BLACKOUT", message=out.no_trade_reason))
+
+    # Never resume a pre-news plan after the release merely because the fixed
+    # blackout clock ended. If a released high-impact USD event is newer than the
+    # active plan, a successful post-news analysis must replace that plan first.
+    pending = [
+        e for e in stored_news()
+        if e.currency.upper() == "USD" and e.impact.upper() == "HIGH" and e.released
+        and e.ts.astimezone(timezone.utc) > analysis.generated_at.astimezone(timezone.utc)
+        and e.ts.astimezone(timezone.utc) <= now
+    ]
+    if pending:
+        latest = max(pending, key=lambda e: e.ts)
+        out.ea_mode = Direction.NO_TRADE
+        out.no_trade_reason = (
+            f"Post-news institutional revalidation pending after {latest.title} @ {latest.ts.isoformat()}; "
+            "carried zones remain visible but new entries are blocked."
+        )
+        issues.append(ValidationIssue(severity="ERROR", code="POST_NEWS_REVALIDATION_PENDING", message=out.no_trade_reason))
+
+    out.validator_issues = issues
+    return out
 
 
 def apply_live_zone_guard(analysis: InstitutionalAnalysis, snapshot: MarketSnapshot | None = None) -> InstitutionalAnalysis:

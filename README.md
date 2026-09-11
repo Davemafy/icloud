@@ -1,3 +1,19 @@
+# Institutional SMC Cloud v4.3 — Carry-Forward Zone Lifecycle
+
+The institutional zone map no longer expires just because `PLAN_VALID_MINUTES` elapsed. That value is now a **refresh target**, not a hard expiry. The newest successful institutional analysis remains the active plan until a newer successful analysis replaces it.
+
+Important safety behavior is preserved:
+- Closed-M15 acceptance/mitigation can still invalidate or retire a carried zone immediately.
+- Current spread and live-snapshot freshness can block new M1 entries without deleting the zones.
+- Current T-10/T+10 high-impact USD news blackout blocks new entries dynamically.
+- If a major USD release occurs after the active plan, the zones remain visible but execution stays locked until a successful post-news institutional analysis replaces that pre-news plan.
+- When `REQUIRE_AI_FOR_EXECUTION=true`, an AI-unavailable fallback analysis is stored for audit but does **not** evict the previous AI-validated plan. A later successful AI analysis (including an AI NO_TRADE decision) supersedes it.
+- Sequence EA v2.12 remains compatible: cloud plan protocol v3 sends `valid_until_epoch=0` while carry-forward is enabled and exposes the former expiry separately as `refresh_due_epoch`.
+
+Recommended Railway setting: `PLAN_CARRY_FORWARD_UNTIL_REPLACED=true`. Keep `PAPER_ONLY=true` during validation.
+
+---
+
 # Institutional SMC Cloud v4.2 — D1/H4/H1 Two-Sided Institutional Day Map
 
 This build realigns zone creation with the original manual prompt: XAU D1, H4 and H1 jointly create the institutional supply/demand map. D1 is a real parent-zone authority, H4/H1 refine the intraday executable boundary, M15 qualifies the zone once and then only monitors zone health, and M1 remains the sole execution authority.

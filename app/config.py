@@ -73,6 +73,11 @@ class Settings:
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     max_snapshot_age_seconds: int = _int("MAX_SNAPSHOT_AGE_SECONDS", 900)
     plan_valid_minutes: int = _int("PLAN_VALID_MINUTES", 120)
+    # PLAN_VALID_MINUTES is now an advisory refresh target, not a hard zone expiry.
+    # When enabled, the last successful institutional plan remains active until a
+    # newer successful institutional analysis replaces it. Live M15/news/spread/
+    # snapshot guards can still restrict execution immediately.
+    plan_carry_forward_until_replaced: bool = _bool("PLAN_CARRY_FORWARD_UNTIL_REPLACED", True)
     max_spread_points: float = _float("MAX_SPREAD_POINTS", 40.0)
     bplus_executable: bool = _bool("BPLUS_EXECUTABLE", False)
     xau_pip_size: float = _float("XAU_PIP_SIZE", 0.01)

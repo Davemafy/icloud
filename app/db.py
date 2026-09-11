@@ -202,6 +202,23 @@ class Database:
             row = c.execute(query).fetchone()
             return dict(row) if row else None
 
+    def latest_execution_analysis(self, require_ai: bool = False) -> Optional[dict]:
+        """Return the newest successfully validated plan eligible to remain active.
+
+        When AI is mandatory, deterministic fallback/AI-failure analyses are kept
+        for audit/dashboard visibility but do not replace the previous AI-validated
+        execution plan. A later successful AI analysis, including an AI NO_TRADE
+        decision, naturally supersedes the carried plan.
+        """
+        query = "SELECT * FROM analyses WHERE approved=1"
+        params: list[Any] = []
+        if require_ai:
+            query += " AND ai_used=1"
+        query += " ORDER BY generated_at DESC LIMIT 1"
+        with self._lock, self._conn() as c:
+            row = c.execute(query, params).fetchone()
+            return dict(row) if row else None
+
     def add_feedback(self, payload: dict):
         with self._lock, self._conn() as c:
             c.execute(
