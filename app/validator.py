@@ -100,6 +100,10 @@ def merge_and_validate(snapshot: MarketSnapshot, base: InstitutionalAnalysis, dr
     xlo, xhi = _xau_bounds(snapshot)
     validated_zones = []
     for z in out.zones:
+        instrument = (z.instrument or "").upper()
+        if "XAU" not in instrument and "GOLD" not in instrument:
+            issues.append(_issue("ERROR", "NON_XAU_ZONE_REJECTED", f"Zone {z.zone_id} instrument={z.instrument!r} rejected; DXY is analysis-only and execution zones must be XAU/GOLD."))
+            continue
         levels = [z.zone_low, z.zone_high] + [x for x in [z.target1, z.target2, z.target3, z.runner] if x is not None]
         if any(p < xlo or p > xhi for p in levels):
             issues.append(_issue("ERROR", "LEVEL_OUTSIDE_OBSERVED_XAU", f"Zone {z.zone_id} contains a level outside supplied XAU price history."))

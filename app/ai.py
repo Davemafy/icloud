@@ -49,12 +49,15 @@ def _compact_bars(snapshot: MarketSnapshot) -> dict[str, Any]:
 def _candidate_payload(base: InstitutionalAnalysis) -> list[dict[str, Any]]:
     return [
         {
+            "instrument": z.instrument,
             "zone_id": z.zone_id,
             "direction": z.direction.value,
             "zone_low": z.zone_low,
             "zone_high": z.zone_high,
             "grade": z.grade.value,
             "source_tf": z.source_tf,
+            "setup_type": z.setup_type,
+            "authority_stack": z.authority_stack,
             "touch_count": z.touch_count,
             "freshness": z.freshness,
             "requires_sweep": z.requires_sweep,
@@ -72,16 +75,21 @@ def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict
     return {
         "instruction": (
             "Analyze the complete supplied historical context across XAU D1/H4/H1/M15 and DXY D1/H4/H1, plus deterministic candidate zones. "
-            "TRADING ARCHITECTURE IS H4/H1 PRIMARY ZONE -> M15 ONE-TIME ZONE QUALIFICATION -> M1 EXECUTION. "
-            "XAU H4 and H1 are the primary institutional supply/demand and POI authority. Prefer same-side H4>H1 confluence, then clean H1 POIs, while rejecting remote or excessively broad swing-style locations. "
+            "TRADING ARCHITECTURE IS XAU D1/H4/H1 TOP-DOWN ZONE MAP -> M15 ONE-TIME ZONE QUALIFICATION -> M1 EXECUTION. "
+            "XAU D1, H4 and H1 jointly create the institutional supply/demand map. D1 is the macro parent-zone and external dealing-range authority; H4/H1 refine the intraday executable POI. Prefer D1>H4>H1 nesting first, then other observed two-timeframe combinations, then a clean H1 POI. Reject remote or excessively broad swing-style locations. "
+            "Build a TWO-SIDED DAY MAP when the supplied evidence allows it: one best XAU BUY zone and one best XAU SELL zone. On a directional day, the zone in the resolved D1/H4/H1 direction is the CONTINUATION zone and the opposite-side institutional zone is the REVERSAL zone. If the HTF stack is neutral, classify them as transition buy/sell. Never invent a missing side just to complete the pair. "
             "M15 may strengthen, weaken, or help qualify an H4/H1 candidate using already-observed structure, displacement, liquidity, mitigation, and premium/discount evidence. M15 MUST NOT create a standalone execution zone. "
-            "CRITICAL: M15 usage ENDS when the cloud publishes the zone. Once a zone is published, do NOT require a later M15 candle close, M15 displacement, M15 engulf, M15 confirmation, or M15 re-check before M1 execution. "
-            "Use D1 and DXY D1/H4/H1 as macro/intermarket context, and use the long history to distinguish continuation from reversal/transition while assessing freshness, mitigation, liquidity, and dealing-range location. "
+            "CRITICAL: M15 usage ENDS when the cloud publishes the zone for qualification/entry purposes. Once a zone is published, do NOT require a later M15 candle close, M15 displacement, M15 engulf, or M15 confirmation before M1 execution. "
+            "A separate deterministic M15 ZONE-HEALTH guard may only BLOCK new M1 entries if CLOSED M15 price shows accepted body-close penetration through the distal boundary; this is invalidation monitoring, not an execution confirmation. Wick-only penetration is not invalidation. "
+            "Use XAU D1/H4/H1 together to distinguish continuation from reversal/transition while assessing freshness, mitigation, liquidity, and dealing-range location. Use DXY D1/H4/H1 only as intermarket context. DXY IS ANALYSIS-ONLY: never create, recommend, publish, describe, or output a DXY supply/demand zone, DXY entry POI, DXY target, or DXY execution level. All candidate/execution zones in this system are XAUUSD/GOLD zones only. "
             "You may select, reject, downgrade, or describe deterministic candidate zones, but you MUST NOT invent or modify numeric price levels. "
             "M1 is execution-only and is not supplied here; never claim that an entry trigger has already occurred. As soon as price reaches an authorized published zone, M1 alone may validate execution. "
             "The EA execution order after zone publication is STRICT: liquidity sweep -> MSS with genuine displacement -> Fibonacci retracement location -> "
             "fresh OB/Breaker Block/FVG confluence -> M1 confirmation -> entry -> structural SL/cloud liquidity TP -> break-even/dynamic trailing. "
-            "B+ is watchlist/off by default. Return NO TRADE whenever evidence is insufficient."
+            "B+ is watchlist/off by default. Return NO TRADE whenever evidence is insufficient. "
+            "Use supplied high-impact USD news, broker spread and ATR as part of the institutional decision. "
+            "Psychological levels are confluence only, never a zone source. Treat volume as BROKER TICK VOLUME only. "
+            "In trader_brief use this strict short order: 1 Daily summary; 2 H4 summary; 3 H1 summary; 4 most important XAU institutional zones with supplied prices; 5 best BUY and SELL alert levels, explicitly labelling CONTINUATION versus REVERSAL/TRANSITION when supplied/qualified; 6 M1 entry model, SL/TP logic and explicit zone invalidation. Never force a missing side if no observed candidate qualifies."
         ),
         "snapshot_meta": {
             "generated_at": snapshot.generated_at.isoformat(),
@@ -98,6 +106,15 @@ def _user_payload(snapshot: MarketSnapshot, base: InstitutionalAnalysis) -> dict
             "timezone": snapshot.timezone,
         },
         "market_data": _compact_bars(snapshot),
+        "news_context": [
+            {
+                "event_id": n.event_id, "ts": n.ts.isoformat(), "currency": n.currency,
+                "impact": n.impact, "title": n.title, "released": n.released,
+                "actual": n.actual, "forecast": n.forecast, "previous": n.previous, "source": n.source,
+            }
+            for n in snapshot.news
+        ],
+        "institutional_features": base.analysis_evidence,
         "deterministic_context": {
             "dxy_d1_bias": base.dxy_d1_bias.value,
             "dxy_h4_bias": base.dxy_h4_bias.value,

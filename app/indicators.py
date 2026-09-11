@@ -104,15 +104,32 @@ def displacement_origins(
         matches = (direction == Bias.BULLISH and bullish) or (direction == Bias.BEARISH and not bullish)
         if not matches or body < atr_value * body_atr_multiple or body / rng < 0.60:
             continue
-        prev = bars[i - 1]
-        low, high = min(prev.open, prev.close), max(prev.open, prev.close)
-        # Ignore zero-width doji origins; use the candle's body/range interior as fallback.
+        # Institutional source candle: prefer the nearest opposite-colour/base candle
+        # immediately preceding displacement. A generic previous candle is only a
+        # fallback when no opposing candle exists in the short launch base. This
+        # prevents an arbitrary same-side candle from being labelled supply/demand.
+        source_idx = i - 1
+        scan_start = max(start - 1, i - 4)
+        for j in range(i - 1, scan_start - 1, -1):
+            src = bars[j]
+            opposing = (direction == Bias.BULLISH and src.close <= src.open) or (
+                direction == Bias.BEARISH and src.close >= src.open
+            )
+            if opposing:
+                source_idx = j
+                break
+        source = bars[source_idx]
+
+        # Use the source candle body for the executable POI so H1 refinement stays
+        # practical for intraday risk. The full source high/low is preserved later
+        # as evidence/invalidation context.
+        low, high = min(source.open, source.close), max(source.open, source.close)
         if high - low <= 1e-12:
-            low, high = prev.low, prev.high
+            low, high = source.low, source.high
         duplicate = any(not (high < x[0] or low > x[1]) for x in out)
         if duplicate:
             continue
-        out.append((low, high, i - 1, i))
+        out.append((low, high, source_idx, i))
         if len(out) >= limit:
             break
     return out

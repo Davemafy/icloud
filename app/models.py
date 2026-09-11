@@ -101,13 +101,48 @@ class MarketSnapshot(BaseModel):
     account_mode: str = "DEMO"
 
 
+    @model_validator(mode="after")
+    def validate_symbol_integrity(self):
+        # Protocol-v3 MT5 bridge packets must keep XAU and DXY streams distinct.
+        # This prevents an EA attached to a DXY chart from overwriting XAU context.
+        if self.schema_version >= 3 and self.source.upper().startswith("MT5_BRIDGE"):
+            xau_symbols = {s.symbol.upper() for s in self.xau.values() if s.symbol}
+            dxy_symbols = {s.symbol.upper() for s in self.dxy.values() if s.symbol}
+            if not xau_symbols or not dxy_symbols:
+                raise ValueError("MT5 bridge snapshot must contain both XAU and DXY symbol streams")
+            if xau_symbols & dxy_symbols:
+                raise ValueError(f"XAU/DXY symbol collision detected: {sorted(xau_symbols & dxy_symbols)}")
+
+            # Broker quote must belong to XAU, not DXY. Compare it with the latest
+            # XAU M15 close using a deliberately wide tolerance for genuine gaps.
+            m15 = self.xau.get("M15")
+            if self.bid is not None and self.ask is not None and m15 and m15.bars:
+                mid = (self.bid + self.ask) / 2.0
+                ref = m15.bars[-1].close
+                atr = m15.atr or 0.0
+                tolerance = max(abs(ref) * 0.05, atr * 10.0)
+                if abs(mid - ref) > tolerance:
+                    raise ValueError(
+                        f"XAU quote mismatch: broker mid={mid:.8f} latest XAU M15 close={ref:.8f}"
+                    )
+        return self
+
+
 class Zone(BaseModel):
+    # Execution/visual zones are XAU-only. DXY is intermarket analysis context and
+    # must never become an execution-zone instrument.
+    instrument: str = "XAUUSD"
     zone_id: str
     direction: Direction
     zone_low: float
     zone_high: float
     grade: Grade
     source_tf: str
+    # Top-down role of the zone in the day map. CONTINUATION follows the resolved
+    # D1/H4/H1 directional stack; REVERSAL is the opposite-side institutional
+    # location; TRANSITION is used only when the higher-timeframe stack is neutral.
+    setup_type: str = "UNCLASSIFIED"
+    authority_stack: List[str] = Field(default_factory=list)
     touch_count: int = 0
     freshness: str = "UNKNOWN"
     requires_sweep: str
@@ -121,6 +156,20 @@ class Zone(BaseModel):
     confluences: List[str] = Field(default_factory=list)
     notes: List[str] = Field(default_factory=list)
     provenance: List[str] = Field(default_factory=list)
+    # Canonical institutional evidence. These fields are informational for the cloud/dashboard
+    # and do not change the MT5 plan protocol.
+    source_candle_ts: Optional[datetime] = None
+    source_candle_low: Optional[float] = None
+    source_candle_high: Optional[float] = None
+    displacement_ts: Optional[datetime] = None
+    structure_break: Optional[str] = None
+    structure_break_level: Optional[float] = None
+    fvg_low: Optional[float] = None
+    fvg_high: Optional[float] = None
+    tick_volume_ratio: Optional[float] = None
+    psychological_level: Optional[float] = None
+    invalidation_level: Optional[float] = None
+    invalidation_tf: Optional[str] = None
 
     @model_validator(mode="after")
     def order_prices(self):
@@ -212,6 +261,9 @@ class InstitutionalAnalysis(BaseModel):
     validator_issues: List[ValidationIssue] = Field(default_factory=list)
     source_fingerprint: str
     prompt_version: str = "SMC_V3_1_MULTI_PROVIDER_FIB_EXEC"
+    # Deterministic feature map supporting the original manual institutional-analysis contract.
+    # It contains only values derived from supplied XAU/DXY candles and broker/news inputs.
+    analysis_evidence: Dict[str, object] = Field(default_factory=dict)
     approved: bool = False
 
 

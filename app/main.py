@@ -18,7 +18,7 @@ from .models import Heartbeat, InstitutionalAnalysis, ManualNewsTrigger, MarketS
 from .news import refresh_news
 from .scheduler import mark_manual_analysis_satisfies_session, scheduler_loop, scheduler_status
 from .service import (
-    history_status, load_analysis_snapshot, load_latest_analysis, load_latest_full_snapshot,
+    apply_live_zone_guard, history_status, load_analysis_snapshot, load_latest_analysis, load_latest_full_snapshot,
     load_latest_snapshot, persist_snapshot, replay, run_production_analysis,
 )
 
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         DB.audit("service.stop", "system", "shutdown")
 
 
-app = FastAPI(title="Institutional SMC AI Cloud", version="1.7.0", lifespan=lifespan)
+app = FastAPI(title="Institutional SMC AI Cloud", version="4.2.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -50,7 +50,7 @@ def health():
     return {
         "ok": True,
         "service": "institutional-smc-ai-cloud",
-        "version": "1.7.0",
+        "version": "4.2.0",
         "paper_only": SETTINGS.paper_only,
         "ai_enabled": SETTINGS.ai_enabled,
         "ai_configured": any([
@@ -68,6 +68,12 @@ def health():
         "session_snapshot_max_age_seconds": SETTINGS.session_snapshot_max_age_seconds,
         "history_full_max_age_hours": SETTINGS.history_full_max_age_hours,
         "history_protocol": 3,
+        "m15_zone_guard": {
+            "body_beyond_pct": SETTINGS.m15_zone_guard_body_beyond_pct,
+            "min_body_atr": SETTINGS.m15_zone_guard_min_body_atr,
+            "two_close_min_body_atr": SETTINGS.m15_zone_guard_two_close_min_body_atr,
+            "consecutive_closes": SETTINGS.m15_zone_guard_consecutive_closes,
+        },
         "trading_profile": SETTINGS.trading_profile,
     }
 
@@ -115,7 +121,8 @@ def mt5_plan(zone_id: str | None = Query(default=None), actor: str = Depends(req
         return PlainTextResponse(
             f"version=3\nanalysis_id={analysis.analysis_id}\nea_mode=NO_TRADE\napproved=1\nzone_count=0\nzone_id=NONE\ndirection=NO_TRADE\ngrade=REJECT\nreason=STALE_PLAN\npaper_only=1\n"
         )
-    return PlainTextResponse(active_plan_text(analysis, zone_id))
+    guarded = apply_live_zone_guard(analysis, load_latest_snapshot())
+    return PlainTextResponse(active_plan_text(guarded, zone_id))
 
 
 @app.post("/mt5/ack")
@@ -194,6 +201,9 @@ def dashboard_session(request: Request, actor: str = Depends(require_admin)):
 
 def _dashboard_payload(event_kind: str = "state") -> str:
     state = DB.dashboard_state()
+    latest_analysis = load_latest_analysis()
+    if latest_analysis is not None:
+        state["analysis"] = apply_live_zone_guard(latest_analysis, load_latest_snapshot()).model_dump(mode="json")
     context = load_analysis_snapshot()
     full = load_latest_full_snapshot()
     state["history_context"] = history_status(context)
@@ -241,6 +251,9 @@ async def dashboard_events(request: Request):
 @app.get("/dashboard/state")
 def dashboard_state(actor: str = Depends(require_admin)):
     state = DB.dashboard_state()
+    latest_analysis = load_latest_analysis()
+    if latest_analysis is not None:
+        state["analysis"] = apply_live_zone_guard(latest_analysis, load_latest_snapshot()).model_dump(mode="json")
     context = load_analysis_snapshot()
     full = load_latest_full_snapshot()
     state["history_context"] = history_status(context)

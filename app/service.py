@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 from .ai import AIUnavailable, analyze_with_providers
 from .config import SETTINGS
 from .db import DB
 from .engine import build_candidate_analysis, snapshot_fingerprint, snapshot_id
 from .events import EVENTS
-from .models import Candle, InstitutionalAnalysis, MarketSnapshot, ReplayResult, TimeframeBars
+from .models import Candle, Direction, Grade, InstitutionalAnalysis, MarketSnapshot, ReplayResult, TimeframeBars, ValidationIssue
 from .news import blackout_state
+from .institutional_features import closed_bars
 from .validator import merge_and_validate
 
 
@@ -194,6 +196,169 @@ def load_latest_analysis(approved_only: bool = False) -> InstitutionalAnalysis |
     if not row:
         return None
     return InstitutionalAnalysis.model_validate(json.loads(row["payload"]))
+
+
+def apply_live_zone_guard(analysis: InstitutionalAnalysis, snapshot: MarketSnapshot | None = None) -> InstitutionalAnalysis:
+    """Fail closed for NEW entries when CLOSED M15 candles invalidate a published HTF zone.
+
+    D1/H4/H1 remain the institutional zone-creation authority. M15 is consumed once at
+    analysis time to qualify the zone, then M1 is the sole execution trigger. This
+    live guard does *not* re-confirm entries with M15; it only monitors zone health.
+
+    Intraday invalidation requires acceptance through the distal boundary, not a wick:
+      1) one closed M15 candle with the configured share of its REAL BODY beyond the
+         boundary and a meaningful body size versus M15 ATR, OR
+      2) the configured number of consecutive closed M15 candles beyond the boundary,
+         each with a smaller minimum body size versus M15 ATR.
+
+    The guard can only restrict an existing plan. It never creates/replaces a zone,
+    never upgrades a grade, and does not alter management of an already-open demo
+    position (SL/BE/trailing remain local to the M1 EA). H1/H4 structural retirement
+    is handled by the next full institutional/session/news reanalysis.
+    """
+    snap = snapshot or load_latest_snapshot()
+    if snap is None or not analysis.zones:
+        return analysis
+
+    out = deepcopy(analysis)
+    kept = []
+    live_issues = list(out.validator_issues)
+
+    m15_series = snap.xau.get("M15")
+    if m15_series is None:
+        return analysis
+    m15_bars = closed_bars(m15_series, snap.generated_at)
+    if not m15_bars:
+        return analysis
+
+    # Prefer the bridge ATR because it reflects the exact configured ATR period;
+    # fall back to the ATR frozen into the analysis. If neither is available, the
+    # body-size floor falls back to broker point-size protection only.
+    m15_atr = float(m15_series.atr or analysis.xau_m15_atr or 0.0)
+    point_floor = max(float(snap.point_size or 0.0), 1e-9)
+    strong_min_body = max(m15_atr * SETTINGS.m15_zone_guard_min_body_atr, point_floor * 5.0)
+    two_close_min_body = max(m15_atr * SETTINGS.m15_zone_guard_two_close_min_body_atr, point_floor * 3.0)
+    body_beyond_pct = min(1.0, max(0.0, SETTINGS.m15_zone_guard_body_beyond_pct))
+    consecutive_needed = max(2, SETTINGS.m15_zone_guard_consecutive_closes)
+
+    # A candle that opened before analysis but CLOSED after publication must count.
+    # Using close-time avoids missing the 17:45-18:00 M15 candle when a zone was
+    # published at 17:53, for example.
+    post = [
+        b for b in m15_bars
+        if b.ts + timedelta(minutes=15) > analysis.generated_at
+    ]
+
+    def distinct_touches(bars, low: float, high: float) -> int:
+        count = 0
+        in_zone = False
+        for b in bars:
+            touched = b.low <= high and b.high >= low
+            if touched and not in_zone:
+                count += 1
+            in_zone = touched
+        return count
+
+    def body_acceptance(b: Candle, direction: Direction, level: float) -> tuple[bool, float, float, bool]:
+        body_low = min(b.open, b.close)
+        body_high = max(b.open, b.close)
+        body = max(0.0, body_high - body_low)
+        if direction == Direction.SELL_ONLY:
+            close_beyond = b.close > level
+            beyond = max(0.0, body_high - max(level, body_low))
+        else:
+            close_beyond = b.close < level
+            beyond = max(0.0, min(level, body_high) - body_low)
+        ratio = (beyond / body) if body > 1e-12 else 0.0
+        strong = close_beyond and ratio >= body_beyond_pct and body >= strong_min_body
+        return strong, ratio, body, close_beyond
+
+    for z in out.zones:
+        level = z.invalidation_level
+        if level is None:
+            level = z.zone_low if z.direction == Direction.BUY_ONLY else z.zone_high
+
+        invalid = False
+        invalid_at = None
+        invalid_reason = ""
+        consecutive = 0
+
+        for b in post:
+            strong, ratio, body, close_beyond = body_acceptance(b, z.direction, level)
+            if strong:
+                invalid = True
+                invalid_at = b.ts + timedelta(minutes=15)
+                invalid_reason = (
+                    f"one strong M15 acceptance candle: {ratio * 100:.1f}% of real body beyond boundary; "
+                    f"body={body:.5f} >= {strong_min_body:.5f} ({SETTINGS.m15_zone_guard_min_body_atr:.2f}x ATR floor)"
+                )
+                break
+
+            # A wick through the level with a close back inside resets acceptance.
+            # For the two-close route, require actual closes beyond the boundary and
+            # a non-trivial real body on each candle.
+            if close_beyond and body >= two_close_min_body:
+                consecutive += 1
+                if consecutive >= consecutive_needed:
+                    invalid = True
+                    invalid_at = b.ts + timedelta(minutes=15)
+                    invalid_reason = (
+                        f"{consecutive_needed} consecutive M15 closes beyond boundary with "
+                        f"body >= {two_close_min_body:.5f} ({SETTINGS.m15_zone_guard_two_close_min_body_atr:.2f}x ATR floor)"
+                    )
+                    break
+            else:
+                consecutive = 0
+
+        if invalid:
+            live_issues.append(ValidationIssue(
+                severity="ERROR", code="LIVE_M15_ZONE_INVALIDATED",
+                message=(
+                    f"{z.zone_id} intraday-invalidated at {invalid_at.isoformat()} by {invalid_reason}; "
+                    f"distal boundary={level:.5f}. Wick-only penetration does not invalidate."
+                )
+            ))
+            continue
+
+        # Intraday freshness is also guarded with distinct M15 engagements after
+        # publication. This is a zone-health restriction, never an entry trigger.
+        added_touches = distinct_touches(post, z.zone_low, z.zone_high)
+        live_touches = z.touch_count + added_touches
+        if live_touches >= 3:
+            live_issues.append(ValidationIssue(
+                severity="WARN", code="LIVE_ZONE_RETIRED",
+                message=f"{z.zone_id} reached {live_touches} total mitigations/engagements and is retired for new M1 entries."
+            ))
+            continue
+        if live_touches > z.touch_count:
+            z.touch_count = live_touches
+            z.freshness = "VALID" if live_touches == 1 else "WEAK"
+            if live_touches >= 2 and z.grade in {Grade.A, Grade.A_PLUS}:
+                z.grade = Grade.B_PLUS
+                live_issues.append(ValidationIssue(
+                    severity="WARN", code="LIVE_ZONE_DOWNGRADED",
+                    message=f"{z.zone_id} downgraded to B+ after {live_touches} mitigations/engagements since publication."
+                ))
+        kept.append(z)
+
+    out.zones = kept
+    out.validator_issues = live_issues
+
+    # A live guard can only restrict an already-approved plan; it can never turn a
+    # previous NO_TRADE decision into permission to trade.
+    if analysis.ea_mode != Direction.NO_TRADE:
+        executable = [z for z in kept if z.grade in {Grade.A, Grade.A_PLUS} or (SETTINGS.bplus_executable and z.grade == Grade.B_PLUS)]
+        dirs = {z.direction for z in executable}
+        if dirs == {Direction.BUY_ONLY}:
+            out.ea_mode = Direction.BUY_ONLY
+        elif dirs == {Direction.SELL_ONLY}:
+            out.ea_mode = Direction.SELL_ONLY
+        elif Direction.BUY_ONLY in dirs and Direction.SELL_ONLY in dirs:
+            out.ea_mode = Direction.BUY_SELL
+        else:
+            out.ea_mode = Direction.NO_TRADE
+            out.no_trade_reason = "Live M15 zone-health guard: no executable zone remains after acceptance/freshness revalidation."
+    return out
 
 
 async def run_production_analysis(snapshot: MarketSnapshot | None = None, reason: str = "manual") -> InstitutionalAnalysis:

@@ -1,4 +1,48 @@
-# Institutional SMC Cloud v3.8.1
+# Institutional SMC Cloud v4.2 — D1/H4/H1 Two-Sided Institutional Day Map
+
+This build realigns zone creation with the original manual prompt: XAU D1, H4 and H1 jointly create the institutional supply/demand map. D1 is a real parent-zone authority, H4/H1 refine the intraday executable boundary, M15 qualifies the zone once and then only monitors zone health, and M1 remains the sole execution authority.
+
+The deterministic engine now searches both sides of XAU and keeps at most one best BUY zone and one best SELL zone when observed evidence exists. On a directional D1/H4/H1 day, the same-direction zone is labelled **CONTINUATION** and the opposite-side institutional zone is labelled **REVERSAL**. On a mixed/neutral top-down day, the sides are labelled transition buy/sell. A missing side is never fabricated.
+
+Preferred zone stacks are `D1>H4>H1`, then `D1>H4`, `H4>H1`, `D1>H1`, then a clean H1-only POI. D1-only broad boxes are context/parent zones and should be refined before M1 execution. DXY D1/H4/H1 remains analysis-only and now grades each BUY/SELL zone against the DXY direction that specifically supports that zone, which is important for reversal setups.
+
+---
+
+# Institutional SMC Cloud v4.1 — M15 Live Zone-Health Guard
+
+This build keeps the v4.0 foundation alignment but changes live zone invalidation for the intraday/scalp profile. H4/H1 still create and qualify the institutional POI; M15 qualification still ends when the zone is published; M1 remains the sole execution trigger.
+
+The live guard is now M15-based so an intraday zone can be blocked before waiting for an H1/H4 close. This is **zone-health monitoring only**, not an extra M15 entry confirmation.
+
+Default invalidation rule for a published XAU zone:
+- Wick-only penetration through the distal boundary does **not** invalidate the zone.
+- One CLOSED M15 candle invalidates for new M1 entries when at least 60% of its real body is beyond the distal boundary and its real body is at least 0.40 x M15 ATR.
+- As a persistence fallback, 2 consecutive CLOSED M15 candles beyond the boundary also invalidate when each has a meaningful body of at least 0.20 x M15 ATR.
+- H1/H4 are no longer the live entry-permission gate. Longer-term structural retirement is reassessed by the next full session/news institutional analysis.
+- Existing demo positions are not force-closed by this guard; local structural SL, BE and trailing management continue unchanged.
+
+Railway overrides are available with `M15_ZONE_GUARD_BODY_BEYOND_PCT`, `M15_ZONE_GUARD_MIN_BODY_ATR`, `M15_ZONE_GUARD_TWO_CLOSE_MIN_BODY_ATR`, and `M15_ZONE_GUARD_CONSECUTIVE_CLOSES`. Keep `PAPER_ONLY=true` during validation.
+
+# Institutional SMC Cloud v4.0 — Foundation Alignment
+
+This build is a code-level audit/fix against the original manual institutional XAU workflow. It preserves H4/H1 zone authority, one-time M15 qualification and M1-only execution, while closing the main gaps found in v3.8.3.
+
+Key fixes:
+- HTF BOS/CHoCH and zone formation use **closed candles only**; the MT5 forming candle can no longer create a false H4/H1 zone.
+- H4/H1 displacement zones now prefer the nearest **opposite-colour/base source candle** before the launch instead of blindly treating the immediately previous candle as supply/demand.
+- DXY D1 is now a deterministic macro filter on top of DXY H4/H1; a D1 conflict neutralizes the intermarket implication instead of overstating correlation.
+- A live CLOSED-M15 zone-health guard blocks new M1 entries when price shows real body acceptance through the distal boundary or the zone becomes over-mitigated. Wick-only penetration is ignored; H1/H4 retirement is reassessed on the next full analysis.
+- Actual high-impact USD news objects (time/title/released/actual/forecast/previous) are now included in the AI analysis packet.
+- Deterministic feature map now exposes confirmed structure breaks, swing/equal/session/prior-day liquidity, exact FVG ranges, rejection wicks, probable trendline liquidity, broker tick-volume context, compression/expansion hints and XAU psychological levels.
+- A large displacement candle alone cannot receive A/A+; it also needs a confirmed structure break and/or same-side FVG before the deterministic grade can remain executable.
+- Every zone records the exact source candle time, source candle range, displacement time, structure-break level, FVG range when present, mitigation count, tick-volume ratio, nearby psychological level and exact structural invalidation boundary.
+- Targets prefer observed liquidity pools rather than generic range midpoints.
+- DXY D1/H4/H1 remains analysis-only and cannot create execution zones.
+- T-10/T+10 high-impact-news revalidation and deterministic management of existing demo positions remain intact.
+
+The MT5 plan protocol stays version 3, so Sequence EA v2.12 remains compatible. Keep PAPER_ONLY=true during validation.
+
+# Institutional SMC Cloud v3.8.3
 
 **Major-news revalidation:** every high-impact USD news cluster triggers a full-history H4/H1 zone revalidation around T-10 and T+10. New M1 entries are locked between the checkpoints; existing demo positions continue deterministic SL/BE/trailing management. M15 is used only to qualify the published zone and never delays M1 execution afterward.
 
@@ -85,3 +129,20 @@ Run locally:
 ```powershell
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+
+## v3.8.2 symbol-integrity hardening
+
+- Data Bridge v1.23 uses explicit `XauSymbol` and `DxySymbol` inputs instead of treating the chart `_Symbol` as XAU.
+- The bridge refuses to initialize if attached to a chart other than the configured XAU symbol.
+- XAU bid/ask, spread and point size are always read from `XauSymbol`.
+- Cloud rejects protocol-v3 MT5 snapshots when XAU and DXY symbol streams collide or when the broker quote is grossly inconsistent with the latest XAU M15 close.
+- Keep exactly one Data Bridge instance attached to XAUUSD.
+
+
+## v3.8.3 XAU-only zones + M1 zone visibility
+
+- DXY D1/H4/H1 remains intermarket analysis context only. It cannot produce or be serialized as a trading zone.
+- All published/view/execution zones are explicitly XAUUSD/GOLD zones.
+- Use Sequence EA v2.11 ZoneVisibility on XAUUSD M1. It auto-fits the nearest published zone into the chart scale and shows a nearest-zone guide, while still drawing the normal faint blue/red rectangle.
+- NO_TRADE caused by a news blackout does not hide an already-published XAU zone; it is displayed as WATCH while new entries remain locked.

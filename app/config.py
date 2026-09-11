@@ -79,7 +79,7 @@ class Settings:
     min_clear_run_with_trend_pips: float = _float("MIN_CLEAR_RUN_WITH_TREND_PIPS", 50.0)
     min_clear_run_counter_trend_pips: float = _float("MIN_CLEAR_RUN_COUNTER_TREND_PIPS", 100.0)
 
-    # Intraday/scalping profile. H4/H1 are the primary supply/demand/POI authority;
+    # Intraday/scalping profile. D1/H4/H1 jointly form the supply/demand/POI map;
     # M15 is consumed only for one-time zone qualification; M1 is the sole live trigger.
     trading_profile: str = os.getenv("TRADING_PROFILE", "INTRADAY_HTF_ZONE_M1").upper()
     intraday_max_distance_h1_atr: float = _float("INTRADAY_MAX_DISTANCE_H1_ATR", 2.5)
@@ -88,6 +88,15 @@ class Settings:
     intraday_h1_lookback: int = _int("INTRADAY_H1_LOOKBACK", 180)
     intraday_m15_lookback: int = _int("INTRADAY_M15_LOOKBACK", 320)
     intraday_max_candidates: int = _int("INTRADAY_MAX_CANDIDATES", 8)
+
+    # Live zone-health guard for intraday/scalp execution. D1/H4/H1 create the POI map;
+    # after publication M15 is NOT an entry gate, but a closed M15 candle may
+    # invalidate the zone for NEW entries when price shows real acceptance
+    # through the distal boundary. Wick-only penetration is ignored.
+    m15_zone_guard_body_beyond_pct: float = _float("M15_ZONE_GUARD_BODY_BEYOND_PCT", 0.60)
+    m15_zone_guard_min_body_atr: float = _float("M15_ZONE_GUARD_MIN_BODY_ATR", 0.40)
+    m15_zone_guard_two_close_min_body_atr: float = _float("M15_ZONE_GUARD_TWO_CLOSE_MIN_BODY_ATR", 0.20)
+    m15_zone_guard_consecutive_closes: int = _int("M15_ZONE_GUARD_CONSECUTIVE_CLOSES", 2)
 
     nonce_ttl_seconds: int = _int("NONCE_TTL_SECONDS", 300)
     rate_limit_per_minute: int = _int("RATE_LIMIT_PER_MINUTE", 120)
@@ -129,7 +138,7 @@ class Settings:
 
     # Major-news zone revalidation policy. Every high-impact USD release gets
     # one analysis around T-10 minutes and another around T+10 minutes. The
-    # pre-release analysis reassesses/refreshes the H4/H1 zone map before the
+    # pre-release analysis reassesses/refreshes the D1/H4/H1 zone map before the
     # blackout, while the post-release analysis verifies which zones survived
     # the repricing before M1 execution can resume.
     news_pre_analysis_minutes: int = _int("NEWS_PRE_ANALYSIS_MINUTES", 10)

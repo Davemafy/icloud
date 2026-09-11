@@ -197,7 +197,7 @@ def _major_news_clusters() -> list[dict]:
 
     CPI variants, PPI + claims, or other releases can share the exact same
     timestamp. They create one repricing event in the market, so one deep
-    H4/H1 zone revalidation per timestamp is both sufficient and materially
+    D1/H4/H1 zone revalidation per timestamp is both sufficient and materially
     more efficient than spending several identical AI calls back-to-back.
     """
     grouped: dict[str, dict] = {}
