@@ -1,10 +1,20 @@
 {
   "schema": 1,
-  "updater_version": "2.5.0",
-  "bootstrap_version": "1.0.0",
+  "updater_version": "2.6.0",
+  "bootstrap_version": "1.1.0",
   "worker": {
     "name": "TradeZone_UpdateWorker.ps1",
     "path": "mt5/updater/TradeZone_UpdateWorker.ps1",
-    "sha256": "77a38ea4ac3b714f51d5780c1405566b702acbc71265a7a2dd0fb5626b538b04"
+    "sha256": "871fe6a8359cf1b79be892df4247be9966a2b6699363f883d8864f5386a615c9"
+  },
+  "bootstrap": {
+    "name": "TradeZone_UpdateBootstrap.ps1",
+    "path": "mt5/updater/TradeZone_UpdateBootstrap.ps1",
+    "sha256": "8450f24b387c657d20a831c0521c307d1a1eb9c008128c89e0d235ead0934829"
+  },
+  "status": {
+    "name": "TradeZone_Status.ps1",
+    "path": "mt5/updater/TradeZone_Status.ps1",
+    "sha256": "9f9c8f6e58f490914e01a84b93f03d690052c152ecd33e989aeef34149b7156b"
   }
 }
