@@ -1,858 +1,238 @@
 from __future__ import annotations
 
-import hashlib
-import uuid
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import statistics, uuid
+from typing import Optional
 
 from .config import SETTINGS
-from .indicators import atr, displacement_origins, equal_liquidity, recent_range, structural_bias
-from .institutional_features import closed_bars, institutional_feature_map, origin_evidence
-from .models import Bias, Direction, DxyImplication, Grade, InstitutionalAnalysis, MarketSnapshot, ValidationIssue, Zone
+from .models import Analysis, Bar, Direction, Grade, LiquidityLevel, MarketSnapshot, Zone, ZoneState
 
+GRADE_RANK={Grade.A_PLUS:0,Grade.A:1,Grade.B_PLUS:2,Grade.REJECT:9}
+TF_RANK={"D1>H4>H1":0,"D1>H4":1,"H4>H1":2,"D1>H1":3,"H4":4,"H1":5}
 
-REQUIRED_XAU = {"D1", "H4", "H1", "M15"}
-REQUIRED_DXY = {"D1", "H4", "H1"}
+@dataclass
+class Origin:
+    direction: Direction; low: float; high: float; source_ts: int; tf: str
+    displacement_index: int; strength: float; fvg: bool
 
+@dataclass
+class Candidate:
+    direction: Direction; low: float; high: float; source_tf: str; source_ts: int
+    method: str; components: list[Origin]
 
-def _bars(snapshot: MarketSnapshot, market: str, tf: str):
-    src = snapshot.xau if market == "XAU" else snapshot.dxy
-    if tf not in src:
-        raise ValueError(f"Missing {market} {tf} bars")
-    return src[tf].bars
+def _rng(b:Bar)->float:return max(0.0,b.high-b.low)
+def _body(b:Bar)->float:return abs(b.close-b.open)
+def atr(bars:list[Bar],n:int=14)->float:
+    if not bars:return 0.0
+    tr=[]
+    for i,b in enumerate(bars):
+        pc=bars[i-1].close if i else b.close
+        tr.append(max(b.high-b.low,abs(b.high-pc),abs(b.low-pc)))
+    x=tr[-n:]; return sum(x)/max(1,len(x))
+def _median_range(bars:list[Bar],n:int=20)->float:
+    x=[_rng(b) for b in bars[-n:] if _rng(b)>0]; return statistics.median(x) if x else 0.0
 
+def _pivot_high(a:list[Bar],i:int)->bool:
+    return i>=2 and i+2<len(a) and all(a[i].high>a[j].high for j in range(i-2,i+3) if j!=i)
+def _pivot_low(a:list[Bar],i:int)->bool:
+    return i>=2 and i+2<len(a) and all(a[i].low<a[j].low for j in range(i-2,i+3) if j!=i)
+def _pivots(a:list[Bar],n:int=8):
+    hs=[];ls=[]
+    for i in range(2,len(a)-2):
+        if _pivot_high(a,i):hs.append((i,a[i].high))
+        if _pivot_low(a,i):ls.append((i,a[i].low))
+    return hs[-n:],ls[-n:]
 
-def snapshot_fingerprint(snapshot: MarketSnapshot) -> str:
-    pieces = [snapshot.generated_at.isoformat(), snapshot.session, str(snapshot.spread_points), snapshot.source]
-    for market, group in (("X", snapshot.xau), ("D", snapshot.dxy)):
-        for tf in sorted(group):
-            b = group[tf].bars[-1]
-            pieces.append(f"{market}:{tf}:{b.ts.isoformat()}:{b.close:.6f}:{b.high:.6f}:{b.low:.6f}")
-    return hashlib.sha256("|".join(pieces).encode()).hexdigest()
+def structure_bias(a:list[Bar])->Direction:
+    hs,ls=_pivots(a,4)
+    if len(hs)>=2 and len(ls)>=2:
+        if hs[-1][1]>hs[-2][1] and ls[-1][1]>ls[-2][1]:return Direction.BUY
+        if hs[-1][1]<hs[-2][1] and ls[-1][1]<ls[-2][1]:return Direction.SELL
+    return Direction.NEUTRAL
 
+def _fvg(a:list[Bar],i:int,d:Direction)->bool:
+    if i<1 or i+1>=len(a):return False
+    return a[i+1].low>a[i-1].high if d==Direction.BUY else a[i+1].high<a[i-1].low
 
-def snapshot_id(snapshot: MarketSnapshot) -> str:
-    return snapshot_fingerprint(snapshot)[:24]
+def displacement_origins(a:list[Bar],tf:str,max_items:int=18)->list[Origin]:
+    if len(a)<30:return []
+    med=_median_range(a,20); out=[]
+    if med<=0:return out
+    for i in range(max(8,len(a)-180),len(a)-1):
+        b=a[i]; r=_rng(b)
+        if r<1.55*med or _body(b)/max(r,1e-9)<0.55:continue
+        d=Direction.BUY if b.close>b.open else Direction.SELL
+        prev=a[max(0,i-8):i]
+        broke=b.close>max(x.high for x in prev) if d==Direction.BUY else b.close<min(x.low for x in prev)
+        if not broke:continue
+        oi=None
+        for j in range(i-1,max(-1,i-6),-1):
+            opp=(d==Direction.BUY and a[j].close<a[j].open) or (d==Direction.SELL and a[j].close>a[j].open)
+            if opp:oi=j;break
+        if oi is None:oi=i-1
+        o=a[oi]; lo,hi=sorted((o.open,o.close))
+        if lo==hi:lo,hi=o.low,o.high
+        out.append(Origin(d,lo,hi,o.ts,tf,i,round(r/med,3),_fvg(a,i,d)))
+    ded=[]
+    for o in reversed(out):
+        if any(o.direction==x.direction and _overlap(o.low,o.high,x.low,x.high,0) for x in ded):continue
+        ded.append(o)
+        if len(ded)>=max_items:break
+    return list(reversed(ded))
 
+def _overlap(a:float,b:float,c:float,d:float,pad:float=0)->bool:return not (b<c-pad or d<a-pad)
+def _cluster(origins:list[Origin],preferred:Origin):
+    lo=max(x.low for x in origins); hi=min(x.high for x in origins)
+    if lo<=hi:return lo,hi,"STRICT_PREEXISTING_HTF_OVERLAP"
+    return preferred.low,preferred.high,"PARENT_SUPPORTED_HTF_REFINEMENT"
 
-def _dxy_implication(xau_bias: Bias, dxy_d1: Bias, dxy_h4: Bias, dxy_h1: Bias) -> DxyImplication:
-    """Conservative DXY D1/H4/H1 intermarket implication.
+def build_candidates(s:MarketSnapshot)->list[Candidate]:
+    d1=displacement_origins(s.xau_d1,"D1");h4=displacement_origins(s.xau_h4,"H4");h1=displacement_origins(s.xau_h1,"H1")
+    pad=max(.01,.2*(s.atr_h1 or atr(s.xau_h1))); out=[]
+    for d in (Direction.BUY,Direction.SELL):
+        D=[x for x in d1 if x.direction==d];H=[x for x in h4 if x.direction==d];I=[x for x in h1 if x.direction==d]
+        for x in I:
+            ph=[q for q in H if _overlap(q.low,q.high,x.low,x.high,pad)]
+            pd=[q for q in D if _overlap(q.low,q.high,x.low,x.high,2*pad)]
+            if ph and pd:
+                h=min(ph,key=lambda q:abs((q.low+q.high-x.low-x.high)/2));dd=min(pd,key=lambda q:abs((q.low+q.high-x.low-x.high)/2))
+                lo,hi,m=_cluster([dd,h,x],x);out.append(Candidate(d,lo,hi,"D1>H4>H1",x.source_ts,m,[dd,h,x]))
+            elif ph:
+                h=min(ph,key=lambda q:abs((q.low+q.high-x.low-x.high)/2));lo,hi,m=_cluster([h,x],x);out.append(Candidate(d,lo,hi,"H4>H1",x.source_ts,m,[h,x]))
+            elif pd:
+                dd=min(pd,key=lambda q:abs((q.low+q.high-x.low-x.high)/2));lo,hi,m=_cluster([dd,x],x);out.append(Candidate(d,lo,hi,"D1>H1",x.source_ts,m,[dd,x]))
+        for h in H:
+            if any(c.direction==d and _overlap(c.low,c.high,h.low,h.high,pad) for c in out):continue
+            pd=[q for q in D if _overlap(q.low,q.high,h.low,h.high,2*pad)]
+            if pd:
+                dd=min(pd,key=lambda q:abs((q.low+q.high-h.low-h.high)/2));lo,hi,m=_cluster([dd,h],h);out.append(Candidate(d,lo,hi,"D1>H4",h.source_ts,m,[dd,h]))
+            else:out.append(Candidate(d,h.low,h.high,"H4",h.source_ts,"H4_CONFIRMED_ORIGIN",[h]))
+    return out
 
-    H4 and H1 must agree before DXY is allowed to influence XAU execution quality.
-    D1 is the macro filter: if it directly conflicts with the aligned H4/H1 leg,
-    the implication is NEUTRAL rather than forcing correlation.
-    """
-    if xau_bias == Bias.NEUTRAL or dxy_h4 != dxy_h1 or dxy_h1 == Bias.NEUTRAL:
-        return DxyImplication.NEUTRAL
-    if dxy_d1 not in {Bias.NEUTRAL, dxy_h1}:
-        return DxyImplication.NEUTRAL
-    if xau_bias == Bias.BEARISH and dxy_h1 == Bias.BULLISH:
-        return DxyImplication.SUPPORTS
-    if xau_bias == Bias.BULLISH and dxy_h1 == Bias.BEARISH:
-        return DxyImplication.SUPPORTS
-    if xau_bias == Bias.BEARISH and dxy_h1 == Bias.BEARISH:
-        return DxyImplication.CONFLICTS
-    if xau_bias == Bias.BULLISH and dxy_h1 == Bias.BULLISH:
-        return DxyImplication.CONFLICTS
-    return DxyImplication.NEUTRAL
+def liquidity_map(s:MarketSnapshot)->list[LiquidityLevel]:
+    raw=[];now=s.mid
+    for tf,a,n in (("D1",s.xau_d1,5),("H4",s.xau_h4,8),("H1",s.xau_h1,12)):
+        hs,ls=_pivots(a,n)
+        raw += [(f"{tf}_BSL",p,tf) for _,p in hs]+[(f"{tf}_SSL",p,tf) for _,p in ls]
+    if len(s.xau_d1)>=2:raw += [("PDH",s.xau_d1[-2].high,"D1"),("PDL",s.xau_d1[-2].low,"D1")]
+    base=int(now//10)*10
+    raw += [("PSY",float(base+k*10),"PSY") for k in range(-4,6)]
+    out=[];seen=[]
+    for label,p,tf in sorted(raw,key=lambda x:x[1]):
+        if p<=0 or any(abs(p-q)<max(s.point*5,.05) for q in seen):continue
+        seen.append(p);out.append(LiquidityLevel(label=label,price=round(p,5),side="ABOVE" if p>now else "BELOW",source_tf=tf,distance=round(abs(p-now),5)))
+    return out
 
+def _bias(s:MarketSnapshot)->Direction:
+    v=[structure_bias(s.xau_d1),structure_bias(s.xau_h4),structure_bias(s.xau_h1)]
+    if v.count(Direction.BUY)>=2:return Direction.BUY
+    if v.count(Direction.SELL)>=2:return Direction.SELL
+    return Direction.NEUTRAL
 
-def _touch_count(bars, low: float, high: float, lookback: int = 80) -> int:
-    count = 0
-    in_zone = False
-    for b in bars[-lookback:]:
-        touched = b.low <= high and b.high >= low
-        if touched and not in_zone:
-            count += 1
-        in_zone = touched
-    return max(0, count - 1)  # origin/formation is not counted as mitigation touch
+def _dxy(s:MarketSnapshot)->Direction:
+    v=[structure_bias(s.dxy_d1),structure_bias(s.dxy_h4),structure_bias(s.dxy_h1)]
+    if v.count(Direction.BUY)>v.count(Direction.SELL):return Direction.BUY
+    if v.count(Direction.SELL)>v.count(Direction.BUY):return Direction.SELL
+    return Direction.NEUTRAL
 
+def _location_score(d:Direction,mid:float,s:MarketSnapshot,liq:list[LiquidityLevel])->float:
+    score=0.0
+    for a,n,w in ((s.xau_d1,80,2.5),(s.xau_h4,120,2),(s.xau_h1,160,1.5)):
+        t=a[-n:] if len(a)>=n else a
+        if not t:continue
+        hi=max(x.high for x in t);lo=min(x.low for x in t);eq=(hi+lo)/2;width=max(hi-lo,1e-9);pos=max(0,min(1,(mid-lo)/width))
+        score += w*pos if d==Direction.SELL else w*(1-pos)
+        if (d==Direction.SELL and mid>=eq) or (d==Direction.BUY and mid<=eq):score+=.75*w
+    cap=1.5*(s.atr_h1 or atr(s.xau_h1))
+    if d==Direction.SELL:near=[x for x in liq if x.side=="ABOVE" and 0<x.price-mid<=cap]
+    else:near=[x for x in liq if x.side=="BELOW" and 0<mid-x.price<=cap]
+    return round(score+min(2,.35*len(near)),4)
 
-def _freshness(touches: int) -> str:
-    if touches <= 0:
-        return "FRESH"
-    if touches == 1:
-        return "VALID"
-    if touches == 2:
-        return "WEAK"
-    return "RETIRED"
+def _touches(lo:float,hi:float,source_ts:int,m15:list[Bar])->int:
+    n=0;eng=False
+    for b in m15:
+        if b.ts<=source_ts:continue
+        hit=b.high>=lo and b.low<=hi
+        if hit and not eng:n+=1;eng=True
+        elif not hit:eng=False
+    return n
 
+def _targets(d:Direction,ref:float,liq:list[LiquidityLevel])->list[float]:
+    vals=sorted({x.price for x in liq if x.price>ref}) if d==Direction.BUY else sorted({x.price for x in liq if x.price<ref},reverse=True)
+    return vals[:4]
 
-def _touch_count_since(bars, low: float, high: float, start_index: int) -> int:
-    """Count distinct mitigations after the displacement that created the zone."""
-    count = 0
-    in_zone = False
-    for b in bars[max(0, start_index):]:
-        touched = b.low <= high and b.high >= low
-        if touched and not in_zone:
-            count += 1
-        in_zone = touched
-    return count
-
-
-def _direction_bias(direction: Direction) -> Bias:
-    return Bias.BULLISH if direction == Direction.BUY_ONLY else Bias.BEARISH
-
-
-def _top_down_bias(d1: Bias, h4: Bias, h1: Bias) -> Bias:
-    """Resolve the day bias from the same three XAU timeframes used by the manual process.
-
-    D1 is no longer context-only. It participates in the top-down directional map, while
-    H4/H1 keep enough weight to represent the active intraday leg. Mixed stacks stay
-    neutral rather than forcing a trend.
-    """
-    directional = [b for b in (d1, h4, h1) if b != Bias.NEUTRAL]
-    if not directional:
-        return Bias.NEUTRAL
-    if d1 == h4 == h1 and d1 != Bias.NEUTRAL:
-        return d1
-    if h4 == h1 and h4 != Bias.NEUTRAL:
-        # Active H4/H1 leg wins only when D1 is neutral or agrees.
-        return h4 if d1 in {Bias.NEUTRAL, h4} else Bias.NEUTRAL
-    if d1 == h4 and d1 != Bias.NEUTRAL and h1 == Bias.NEUTRAL:
-        return d1
-    if d1 == h1 and d1 != Bias.NEUTRAL and h4 == Bias.NEUTRAL:
-        return d1
-    return Bias.NEUTRAL
-
-
-def _dxy_implication_for_direction(direction: Direction, dxy_d1: Bias, dxy_h4: Bias, dxy_h1: Bias) -> DxyImplication:
-    """DXY quality modifier for an individual XAU BUY/SELL zone.
-
-    This fixes a subtle but important issue: a reversal zone must be judged against the
-    DXY direction that would support *that zone*, not against the day's overall XAU bias.
-    """
-    if dxy_h4 != dxy_h1 or dxy_h1 == Bias.NEUTRAL:
-        return DxyImplication.NEUTRAL
-    if dxy_d1 not in {Bias.NEUTRAL, dxy_h1}:
-        return DxyImplication.NEUTRAL
-    supports = Bias.BEARISH if direction == Direction.BUY_ONLY else Bias.BULLISH
-    if dxy_h1 == supports:
-        return DxyImplication.SUPPORTS
-    return DxyImplication.CONFLICTS
-
-
-def _setup_type(direction: Direction, overall: Bias) -> str:
-    wanted = _direction_bias(direction)
-    if overall == Bias.NEUTRAL:
-        return "TRANSITION_BUY" if direction == Direction.BUY_ONLY else "TRANSITION_SELL"
-    return "CONTINUATION" if wanted == overall else "REVERSAL"
-
-
-def _primary_zone_grade(
-    direction: Direction,
-    d1_bias: Bias,
-    h4_bias: Bias,
-    h1_bias: Bias,
-    overall: Bias,
-    zone_implication: DxyImplication,
-    touches: int,
-    authority_stack: list[str],
-    m15_confirmation_score: int,
-) -> Grade:
-    """Grade a D1/H4/H1-derived XAU zone for intraday/scalp use.
-
-    The three higher timeframes form the institutional location map. D1 supplies
-    macro supply/demand and parent context; H4/H1 refine the executable price
-    boundary. M15 is only a one-time quality check and M1 remains the entry authority.
-    """
-    wanted = _direction_bias(direction)
-    if touches >= 2 or zone_implication == DxyImplication.CONFLICTS:
-        return Grade.B_PLUS
-
-    d1_ok = d1_bias in {wanted, Bias.NEUTRAL}
-    h4_ok = h4_bias in {wanted, Bias.NEUTRAL}
-    h1_ok = h1_bias in {wanted, Bias.NEUTRAL}
-    stack = set(authority_stack)
-    setup = _setup_type(direction, overall)
-
-    # Highest-quality continuation: the same-side institutional location is visible
-    # through the complete D1 -> H4 -> H1 stack and M15 already validated the POI.
-    if {"D1", "H4", "H1"}.issubset(stack) and d1_ok and h4_ok and h1_ok and m15_confirmation_score >= 2:
-        if touches == 0 and m15_confirmation_score >= 3 and zone_implication == DxyImplication.SUPPORTS:
-            return Grade.A_PLUS
-        return Grade.A
-
-    # Two-timeframe institutional nesting remains strong enough for intraday execution.
-    if len(stack.intersection({"D1", "H4", "H1"})) >= 2 and m15_confirmation_score >= 1:
-        aligned_count = sum(x in {wanted, Bias.NEUTRAL} for x in (d1_bias, h4_bias, h1_bias))
-        if aligned_count >= 2:
-            if touches == 0 and m15_confirmation_score >= 3 and zone_implication == DxyImplication.SUPPORTS:
-                return Grade.A_PLUS if setup == "CONTINUATION" else Grade.A
-            return Grade.A
-
-    # Standalone H1 may still be an intraday POI, but it cannot outrank a true
-    # multi-timeframe institutional zone.
-    if stack == {"H1"} and h1_bias == wanted and m15_confirmation_score >= 1:
-        return Grade.A if setup == "CONTINUATION" and touches == 0 else Grade.B_PLUS
-
-    # Counter-trend reversal is allowed only when the opposite-side zone has at least
-    # two HTF authorities, is fresh, and M15/DXY do not contradict the reversal.
-    if setup == "REVERSAL" and len(stack.intersection({"D1", "H4", "H1"})) >= 2:
-        if touches == 0 and m15_confirmation_score >= 2 and zone_implication in {DxyImplication.SUPPORTS, DxyImplication.NEUTRAL}:
-            return Grade.A
-
-    return Grade.B_PLUS
-
-
-def _zone_overlap(low1: float, high1: float, low2: float, high2: float, padding: float = 0.0) -> bool:
-    return not (high1 < low2 - padding or low1 > high2 + padding)
-
-
-def build_candidate_analysis(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
-    """Build the canonical intraday institutional map from closed HTF candles.
-
-    Foundation contract:
-      XAU D1/H4/H1      = joint institutional supply/demand authority.
-      D1                = macro parent zone and external dealing-range authority.
-      H4/H1             = intraday refinement and executable POI boundary.
-      XAU M15           = one-time zone qualification only.
-      XAU M1            = sole execution authority after publication.
-      DXY D1/H4/H1      = analysis-only intermarket context.
-
-    Critical integrity rule: MT5 supplies the forming candle, but BOS/CHoCH, FVG,
-    displacement origins and HTF zones are calculated from CLOSED candles only.
-    """
-    missing_x = REQUIRED_XAU.difference(snapshot.xau.keys())
-    missing_d = REQUIRED_DXY.difference(snapshot.dxy.keys())
-    if missing_x or missing_d:
-        raise ValueError(f"Missing timeframes XAU={sorted(missing_x)} DXY={sorted(missing_d)}")
-
-    now = snapshot.generated_at
-    x_d1 = closed_bars(snapshot.xau["D1"], now)
-    x_h4 = closed_bars(snapshot.xau["H4"], now)
-    x_h1 = closed_bars(snapshot.xau["H1"], now)
-    x_m15 = closed_bars(snapshot.xau["M15"], now)
-    d_d1 = closed_bars(snapshot.dxy["D1"], now)
-    d_h4 = closed_bars(snapshot.dxy["H4"], now)
-    d_h1 = closed_bars(snapshot.dxy["H1"], now)
-    if min(map(len, (x_d1, x_h4, x_h1, x_m15, d_d1, d_h4, d_h1))) < 20:
-        raise ValueError("Insufficient CLOSED candles for institutional analysis")
-
-    b_x_d1 = structural_bias(x_d1)
-    b_x_h4 = structural_bias(x_h4)
-    b_x_h1 = structural_bias(x_h1)
-    b_x_m15 = structural_bias(x_m15)
-    b_d_d1 = structural_bias(d_d1)
-    b_d_h4 = structural_bias(d_h4)
-    b_d_h1 = structural_bias(d_h1)
-
-    if snapshot.bid is not None and snapshot.ask is not None:
-        current = (snapshot.bid + snapshot.ask) / 2.0
+def _zone(c:Candidate,s:MarketSnapshot,liq:list[LiquidityLevel],bias:Direction,n:int)->Zone:
+    mid=(c.low+c.high)/2;loc=_location_score(c.direction,mid,s,liq); h1a=s.atr_h1 or atr(s.xau_h1);m15a=s.atr_m15 or atr(s.xau_m15)
+    cap=max(1e-9,min(1.5*h1a,.75*atr(s.xau_h4),.30*atr(s.xau_d1)))
+    zlo,zhi=c.low,c.high;notes=[]
+    if c.direction==Direction.SELL:
+        near=[x for x in liq if x.price>=zhi and x.price-mid<=cap]
+        if near:
+            q=max(near,key=lambda x:x.price);zhi=max(zhi,q.price+.15*m15a);notes.append(f"distal_liquidity:{q.label}@{q.price:.3f}")
     else:
-        current = snapshot.xau["M15"].bars[-1].close
-    current_dxy = snapshot.dxy["H1"].bars[-1].close
-
-    # Recompute HTF ATR from closed bars for structural calculations. The bridge ATR
-    # remains useful as live broker context, but a forming candle must not alter POI geometry.
-    tf_atr = {
-        "D1": atr(x_d1),
-        "H4": atr(x_h4),
-        "H1": atr(x_h1),
-        "M15": atr(x_m15),
-    }
-    for tf, bars in (("D1", x_d1), ("H4", x_h4), ("H1", x_h1), ("M15", x_m15)):
-        if tf_atr[tf] <= 0:
-            tf_atr[tf] = snapshot.xau[tf].atr or 0.0
-    d1_atr = max(tf_atr["D1"], snapshot.point_size * 10)
-    h4_atr = max(tf_atr["H4"], snapshot.point_size * 10)
-    h1_atr = max(tf_atr["H1"], snapshot.point_size * 10)
-    m15_atr = max(tf_atr["M15"], snapshot.point_size * 10)
-
-    features = institutional_feature_map(snapshot)
-
-    distance_cap = max(
-        m15_atr * 4.0,
-        min(h1_atr * SETTINGS.intraday_max_distance_h1_atr, d1_atr * SETTINGS.intraday_max_distance_d1_atr),
-    )
-    max_zone_width = max(
-        m15_atr * SETTINGS.intraday_max_zone_width_m15_atr,
-        h1_atr * 0.70,
-        snapshot.point_size * 30,
-    )
-
-    d1_hi, d1_lo, d1_eq = recent_range(x_d1, min(260, len(x_d1)))
-    h4_hi, h4_lo, h4_eq = recent_range(x_h4, min(120, len(x_h4)))
-    h1_hi, h1_lo, h1_eq = recent_range(x_h1, min(120, len(x_h1)))
-    m15_hi, m15_lo, m15_eq = recent_range(x_m15, min(96, len(x_m15)))
-
-    # The manual process uses D1, H4 and H1 together. Do not let D1 become merely
-    # decorative context; mixed top-down structure stays neutral rather than forcing a bias.
-    overall = _top_down_bias(b_x_d1, b_x_h4, b_x_h1)
-    implication = _dxy_implication(overall, b_d_d1, b_d_h4, b_d_h1)
-
-    # M15 is consumed exactly once here. It can qualify an HTF location, but it can
-    # never become an execution-time gate after publication.
-    m15_origins: dict[Direction, list] = {}
-    for direction, bias in ((Direction.BUY_ONLY, Bias.BULLISH), (Direction.SELL_ONLY, Bias.BEARISH)):
-        m15_origins[direction] = displacement_origins(
-            x_m15, bias, m15_atr,
-            lookback=min(SETTINGS.intraday_m15_lookback, len(x_m15)),
-            limit=12, body_atr_multiple=0.80,
-        )
-
-    tolerance = max(m15_atr * 0.15, snapshot.point_size * 10)
-    m15_ssl = equal_liquidity(x_m15, "SSL", tolerance=tolerance, lookback=min(320, len(x_m15)))
-    m15_bsl = equal_liquidity(x_m15, "BSL", tolerance=tolerance, lookback=min(320, len(x_m15)))
-
-    def _overlap_fvg(direction: Direction, low: float, high: float):
-        fvgs = features.get("xau", {}).get("M15", {}).get("fvg", [])
-        wanted = "BULLISH" if direction == Direction.BUY_ONLY else "BEARISH"
-        for f in fvgs:
-            if f.get("direction") == wanted and not f.get("filled") and _zone_overlap(low, high, float(f["low"]), float(f["high"]), padding=m15_atr * 0.20):
-                return f
-        return None
-
-    def m15_qualify(direction: Direction, low: float, high: float) -> tuple[int, list[str]]:
-        wanted = _direction_bias(direction)
-        padding = max(m15_atr * 0.35, snapshot.point_size * 20)
-        nested = next((item for item in m15_origins[direction] if _zone_overlap(item[0], item[1], low, high, padding=padding)), None)
-        aligned = b_x_m15 == wanted
-        sweep_level = m15_ssl if direction == Direction.BUY_ONLY else m15_bsl
-        liquidity_near = sweep_level is not None and (low - padding) <= sweep_level <= (high + padding)
-        fvg = _overlap_fvg(direction, low, high)
-
-        score = 0
-        evidence: list[str] = []
-        if nested is not None:
-            score += 2
-            evidence.append(f"M15 qualification: same-side displacement origin overlaps parent POI (origin_index={nested[2]})")
-        if aligned:
-            score += 1
-            evidence.append(f"M15 qualification: closed-candle structure aligns {wanted.value}")
-        if liquidity_near:
-            score += 1
-            evidence.append(f"M15 qualification: relevant {'SSL' if direction == Direction.BUY_ONLY else 'BSL'} liquidity sits at/near parent POI")
-        if fvg is not None:
-            score += 1
-            evidence.append(f"M15 qualification: unfilled same-side FVG {float(fvg['low']):.3f}-{float(fvg['high']):.3f} overlaps parent POI")
-        if score == 0:
-            evidence.append("M15 qualification: no independent confirmation; zone remains B+ watch-only")
-        evidence.append("M15 ROLE ENDS AT PUBLICATION; no later M15 event may delay M1 execution")
-        return min(score, 3), evidence
-
-    # Build a richer observed liquidity pool for targets. These are references only;
-    # the AI cannot invent prices outside this deterministic set.
-    observed_liq: list[tuple[str, float]] = []
-    def add_liq(name: str, value):
-        if value is not None:
-            try:
-                observed_liq.append((name, float(value)))
-            except (TypeError, ValueError):
-                pass
-    add_liq("M15 range high", m15_hi); add_liq("M15 range low", m15_lo)
-    add_liq("H1 range high", h1_hi); add_liq("H1 range low", h1_lo)
-    add_liq("H4 range high", h4_hi); add_liq("H4 range low", h4_lo)
-    add_liq("M15 equal highs", m15_bsl); add_liq("M15 equal lows", m15_ssl)
-    for tf in ("H1", "H4"):
-        eq = features.get("xau", {}).get(tf, {}).get("equal_liquidity", {})
-        add_liq(f"{tf} equal highs", eq.get("BSL_equal_highs")); add_liq(f"{tf} equal lows", eq.get("SSL_equal_lows"))
-    prior = features.get("prior_day") or {}
-    add_liq("Prior-day high", prior.get("high")); add_liq("Prior-day low", prior.get("low"))
-    for sess, vals in (features.get("session_liquidity") or {}).items():
-        add_liq(f"{sess} high", vals.get("high")); add_liq(f"{sess} low", vals.get("low"))
-
-    def targets(direction: Direction, low: float, high: float):
-        if direction == Direction.BUY_ONLY:
-            candidates = sorted({v for _, v in observed_liq if v > high})
-        else:
-            candidates = sorted({v for _, v in observed_liq if v < low}, reverse=True)
-        return (candidates[0] if candidates else None, candidates[1] if len(candidates) > 1 else None)
-
-    zones: List[Zone] = []
-    used_h1: set[tuple[Direction, int]] = set()
-
-    def add_zone(
-        zone_id: str,
-        direction: Direction,
-        low: float,
-        high: float,
-        source_tf: str,
-        source_bars,
-        origin_idx: int,
-        disp_idx: int,
-        touch_start: int,
-        authority_stack: list[str],
-        provenance: list[str],
-        extra_confluences: list[str] | None = None,
-    ) -> None:
-        midpoint = (low + high) / 2.0
-        if abs(midpoint - current) > distance_cap or high - low > max_zone_width:
-            return
-        side_tolerance = m15_atr * 0.50
-        if direction == Direction.BUY_ONLY and low > current + side_tolerance:
-            return
-        if direction == Direction.SELL_ONLY and high < current - side_tolerance:
-            return
-
-        touches = _touch_count_since(source_bars, low, high, touch_start)
-        if touches >= 3:
-            return
-        if any(_zone_overlap(low, high, z.zone_low, z.zone_high, padding=m15_atr * 0.05) and z.direction == direction for z in zones):
-            return
-
-        m15_score, m15_evidence = m15_qualify(direction, low, high)
-        zone_implication = _dxy_implication_for_direction(direction, b_d_d1, b_d_h4, b_d_h1)
-        setup_type = _setup_type(direction, overall)
-        grade = _primary_zone_grade(
-            direction, b_x_d1, b_x_h4, b_x_h1, overall, zone_implication, touches, authority_stack, m15_score
-        )
-
-        wanted = _direction_bias(direction)
-        ev = origin_evidence(source_bars, origin_idx, disp_idx, wanted, h1_atr if source_tf != "H4" else h4_atr)
-        # Institutional source quality: a large candle alone is not enough for A/A+.
-        # Require a confirmed body-close structure break and/or a same-side FVG.
-        if not ev.get("bos") and not ev.get("fvg") and grade in {Grade.A, Grade.A_PLUS}:
-            grade = Grade.B_PLUS
-
-        d1_location = "discount" if midpoint <= d1_eq else "premium"
-        h4_location = "discount" if midpoint <= h4_eq else "premium"
-        h1_location = "discount" if midpoint <= h1_eq else "premium"
-        t1, t2 = targets(direction, low, high)
-        reversal = setup_type != "CONTINUATION"
-        min_disp = 1.20 if reversal else 1.00
-        if zone_implication == DxyImplication.CONFLICTS:
-            min_disp = max(min_disp, 1.30)
-
-        confluences = [
-            f"{source_tf} CLOSED-candle displacement-origin supply/demand POI",
-            f"Institutional authority stack={'>' .join(authority_stack)}",
-            f"D1 {d1_location}; H4 {h4_location}; H1 {h1_location}",
-            f"freshness={_freshness(touches)} touches={touches}",
-            f"intraday reachability distance={abs(midpoint-current):.3f} <= cap={distance_cap:.3f}",
-            f"setup={setup_type}; D1={b_x_d1.value} H4={b_x_h4.value} H1={b_x_h1.value}",
-        ]
-        if ev.get("bos"):
-            confluences.append(f"Source displacement closed through prior structure at {float(ev['break_level']):.3f}")
-        if ev.get("fvg"):
-            confluences.append(f"Source displacement left FVG {float(ev['fvg']['low']):.3f}-{float(ev['fvg']['high']):.3f}")
-        vr = ev.get("volume_ratio")
-        if vr is not None:
-            confluences.append(f"Broker tick-volume displacement ratio={vr:.2f}x vs prior median")
-        confluences.extend(m15_evidence)
-        if extra_confluences:
-            confluences.extend(extra_confluences)
-        if zone_implication == DxyImplication.SUPPORTS:
-            confluences.append("DXY D1/H4/H1 intermarket implication supports this XAU zone direction")
-        elif zone_implication == DxyImplication.CONFLICTS:
-            confluences.append("DXY D1/H4/H1 conflicts with this XAU zone direction; B+ ceiling / stronger M1 proof required")
-
-        # Psychological levels are confluence only, never a zone source.
-        psych_candidates = sorted({v for vals in features.get("psychological_levels_xau", {}).values() for v in vals}, key=lambda v: abs(v - midpoint))
-        psych = psych_candidates[0] if psych_candidates else None
-        if psych is not None and abs(psych - midpoint) <= max(m15_atr * 0.25, snapshot.point_size * 50):
-            confluences.append(f"XAU psychological level {psych:.2f} lies inside/near the HTF POI")
-        else:
-            psych = None
-
-        if direction == Direction.BUY_ONLY:
-            sweep = "SSL"
-            invalidation = (
-                f"Intraday invalid if CLOSED M15 price accepts below {low:.3f}: one strong candle with >="
-                f"{SETTINGS.m15_zone_guard_body_beyond_pct*100:.0f}% of real body beyond the boundary and body >= "
-                f"{SETTINGS.m15_zone_guard_min_body_atr:.2f}x M15 ATR, or {SETTINGS.m15_zone_guard_consecutive_closes} consecutive meaningful M15 closes beyond it. "
-                "Wick-only penetration does not invalidate. H1/H4 structural retirement is reassessed on the next full analysis. "
-                "M1 setup also fails if bullish sweep/MSS/displacement is negated."
-            )
-            invalidation_level = low
-        else:
-            sweep = "BSL"
-            invalidation = (
-                f"Intraday invalid if CLOSED M15 price accepts above {high:.3f}: one strong candle with >="
-                f"{SETTINGS.m15_zone_guard_body_beyond_pct*100:.0f}% of real body beyond the boundary and body >= "
-                f"{SETTINGS.m15_zone_guard_min_body_atr:.2f}x M15 ATR, or {SETTINGS.m15_zone_guard_consecutive_closes} consecutive meaningful M15 closes beyond it. "
-                "Wick-only penetration does not invalidate. H1/H4 structural retirement is reassessed on the next full analysis. "
-                "M1 setup also fails if bearish sweep/MSS/displacement is negated."
-            )
-            invalidation_level = high
-
-        origin = source_bars[origin_idx] if 0 <= origin_idx < len(source_bars) else None
-        disp = source_bars[disp_idx] if 0 <= disp_idx < len(source_bars) else None
-        zones.append(Zone(
-            zone_id=zone_id,
-            direction=direction,
-            zone_low=low,
-            zone_high=high,
-            grade=grade,
-            source_tf=source_tf,
-            setup_type=setup_type,
-            authority_stack=authority_stack,
-            touch_count=touches,
-            freshness=_freshness(touches),
-            requires_sweep=sweep,
-            min_displacement_atr=min_disp,
-            min_rr=2.0,
-            target1=t1,
-            target2=t2,
-            invalidation=invalidation,
-            confluences=confluences,
-            notes=[
-                "D1/H4/H1 jointly form the zone authority; H4/H1 refined the executable POI and M15 was consumed only during qualification.",
-                f"M15 qualification score={m15_score}/3 frozen at publication.",
-                "After publication M1 is the sole execution authority.",
-                "Volume evidence is broker tick volume, not centralized exchange volume.",
-                f"Classification={setup_type}; zone-specific DXY implication={zone_implication.value}.",
-            ],
-            provenance=provenance,
-            source_candle_ts=(origin.ts if origin else None),
-            source_candle_low=(origin.low if origin else None),
-            source_candle_high=(origin.high if origin else None),
-            displacement_ts=(disp.ts if disp else None),
-            structure_break=("BOS/CHOCH_BODY_CLOSE" if ev.get("bos") else None),
-            structure_break_level=ev.get("break_level"),
-            fvg_low=(ev.get("fvg") or {}).get("low"),
-            fvg_high=(ev.get("fvg") or {}).get("high"),
-            tick_volume_ratio=ev.get("volume_ratio"),
-            psychological_level=psych,
-            invalidation_level=invalidation_level,
-            invalidation_tf="M15",
-        ))
-
-    h4_origins: dict[Direction, list] = {}
-    h1_origins: dict[Direction, list] = {}
-    d1_origins: dict[Direction, list] = {}
-    for direction, bias in ((Direction.BUY_ONLY, Bias.BULLISH), (Direction.SELL_ONLY, Bias.BEARISH)):
-        d1_origins[direction] = displacement_origins(
-            x_d1, bias, d1_atr, lookback=min(260, len(x_d1)), limit=6, body_atr_multiple=0.80
-        )
-        h4_origins[direction] = displacement_origins(
-            x_h4, bias, h4_atr,
-            lookback=min(max(240, SETTINGS.intraday_h1_lookback * 2), len(x_h4)),
-            limit=8, body_atr_multiple=0.80,
-        )
-        h1_origins[direction] = displacement_origins(
-            x_h1, bias, h1_atr,
-            lookback=min(SETTINGS.intraday_h1_lookback, len(x_h1)),
-            limit=12, body_atr_multiple=0.80,
-        )
-
-    # Deterministic D1/H4/H1 reference levels reproduce the manual top-down zone map.
-    # D1 is now a true parent-zone authority, but intraday execution boundaries are
-    # refined through H4/H1 whenever possible so the M1 EA is not handed a huge D1 box.
-    def context_origin_rows(tf: str, bars, origins: dict[Direction, list], av: float):
-        rows = []
-        for direction in (Direction.BUY_ONLY, Direction.SELL_ONLY):
-            wanted = _direction_bias(direction)
-            for low, high, oi, di in origins.get(direction, []):
-                ev = origin_evidence(bars, oi, di, wanted, av)
-                rows.append({
-                    "timeframe": tf,
-                    "direction": direction.value,
-                    "low": low,
-                    "high": high,
-                    "source_ts": ev.get("source_ts"),
-                    "structure_break": bool(ev.get("bos")),
-                    "break_level": ev.get("break_level"),
-                    "fvg": ev.get("fvg"),
-                    "tick_volume_ratio": ev.get("volume_ratio"),
-                    "zone_authority": True,
-                    "execution_boundary_preferred": tf in {"H4", "H1"},
-                })
-        return rows
-
-    features["xau_context_levels"] = {
-        "D1": context_origin_rows("D1", x_d1, d1_origins, d1_atr),
-        "H4": context_origin_rows("H4", x_h4, h4_origins, h4_atr),
-        "H1": context_origin_rows("H1", x_h1, h1_origins, h1_atr),
-    }
-
-    def parent_d1(direction: Direction, low: float, high: float):
-        pad = max(h4_atr * 0.35, h1_atr * 0.50)
-        return next((item for item in d1_origins[direction] if _zone_overlap(item[0], item[1], low, high, padding=pad)), None)
-
-    for direction in (Direction.BUY_ONLY, Direction.SELL_ONLY):
-        ordinal = 0
-        pair_padding = max(h1_atr * 0.20, m15_atr * 0.50)
-        for h4_low, h4_high, h4_origin_idx, h4_disp_idx in h4_origins[direction]:
-            h4_mid = (h4_low + h4_high) / 2.0
-            if abs(h4_mid - current) > distance_cap + h1_atr * 0.75:
-                continue
-            d1_parent = parent_d1(direction, h4_low, h4_high)
-            nested_h1 = next((item for item in h1_origins[direction] if _zone_overlap(item[0], item[1], h4_low, h4_high, padding=pair_padding) and abs(((item[0] + item[1]) / 2.0) - current) <= distance_cap), None)
-            ordinal += 1
-            if nested_h1 is not None:
-                h1_low, h1_high, h1_origin_idx, h1_disp_idx = nested_h1
-                used_h1.add((direction, h1_origin_idx))
-                if d1_parent is not None:
-                    d1_low, d1_high, d1_origin_idx, _ = d1_parent
-                    add_zone(
-                        f"Z_D1H4H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                        direction, h1_low, h1_high, "D1>H4>H1", x_h1, h1_origin_idx, h1_disp_idx, h1_disp_idx + 1,
-                        ["D1", "H4", "H1"],
-                        [
-                            f"XAU:D1:parent_supply_demand_origin:{d1_origin_idx}",
-                            f"XAU:H4:parent_displacement_origin:{h4_origin_idx}",
-                            f"XAU:H1:refined_supply_demand_origin:{h1_origin_idx}",
-                            "XAU:M15:zone_qualification_only",
-                        ],
-                        [f"H1 POI refines H4 POI inside/adjacent to D1 parent zone {d1_low:.3f}-{d1_high:.3f}"],
-                    )
-                else:
-                    add_zone(
-                        f"Z_H4H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                        direction, h1_low, h1_high, "H4>H1", x_h1, h1_origin_idx, h1_disp_idx, h1_disp_idx + 1,
-                        ["H4", "H1"],
-                        [
-                            f"XAU:H4:parent_displacement_origin:{h4_origin_idx}",
-                            f"XAU:H1:refined_supply_demand_origin:{h1_origin_idx}",
-                            "XAU:D1:top_down_context",
-                            "XAU:M15:zone_qualification_only",
-                        ],
-                        ["H1 POI is nested in/adjacent to same-side H4 institutional POI"],
-                    )
-            else:
-                stack = ["D1", "H4"] if d1_parent is not None else ["H4"]
-                prefix = "D1H4" if d1_parent is not None else "H4"
-                provenance = [f"XAU:H4:supply_demand_origin:{h4_origin_idx}", "XAU:M15:zone_qualification_only"]
-                extras = ["No matching H1 refinement; retained only if compact/reachable"]
-                if d1_parent is not None:
-                    provenance.insert(0, f"XAU:D1:parent_supply_demand_origin:{d1_parent[2]}")
-                    extras.append("H4 POI is nested in/adjacent to a same-side D1 institutional zone")
-                add_zone(
-                    f"Z_{prefix}_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                    direction, h4_low, h4_high, ">".join(stack), x_h4, h4_origin_idx, h4_disp_idx, h4_disp_idx + 1,
-                    stack, provenance, extras,
-                )
-
-    # H1 zones not consumed by H4 refinement can still qualify. Prefer D1>H1 when
-    # the H1 POI sits inside the Daily institutional source; otherwise H1 remains a
-    # lower-confidence standalone intraday candidate.
-    for direction in (Direction.BUY_ONLY, Direction.SELL_ONLY):
-        ordinal = 0
-        for h1_low, h1_high, h1_origin_idx, h1_disp_idx in h1_origins[direction]:
-            if (direction, h1_origin_idx) in used_h1:
-                continue
-            ordinal += 1
-            d1_parent = parent_d1(direction, h1_low, h1_high)
-            if d1_parent is not None:
-                add_zone(
-                    f"Z_D1H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                    direction, h1_low, h1_high, "D1>H1", x_h1, h1_origin_idx, h1_disp_idx, h1_disp_idx + 1,
-                    ["D1", "H1"],
-                    [f"XAU:D1:parent_supply_demand_origin:{d1_parent[2]}", f"XAU:H1:supply_demand_origin:{h1_origin_idx}", "XAU:M15:zone_qualification_only"],
-                    ["H1 POI refines a same-side D1 institutional zone without a separate H4 displacement origin"],
-                )
-            else:
-                add_zone(
-                    f"Z_H1_{'BUY' if direction == Direction.BUY_ONLY else 'SELL'}_{ordinal}",
-                    direction, h1_low, h1_high, "H1", x_h1, h1_origin_idx, h1_disp_idx, h1_disp_idx + 1,
-                    ["H1"],
-                    [f"XAU:H1:supply_demand_origin:{h1_origin_idx}", "XAU:D1/H4:top_down_context", "XAU:M15:zone_qualification_only"],
-                )
-
-    # The user's manual process wants a simple two-sided day map: one best BUY area
-    # and one best SELL area. In a directional day one is the continuation location
-    # and the other is the reversal location. Never fabricate a missing side.
-    tf_rank = {"D1>H4>H1": 0, "D1>H4": 1, "H4>H1": 2, "D1>H1": 3, "H1": 4, "H4": 5}
-    grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 3}
-
-    def best_for(direction: Direction):
-        side = [z for z in zones if z.direction == direction]
-        if not side:
-            return None
-        side.sort(key=lambda z: (
-            grade_rank.get(z.grade, 9),
-            tf_rank.get(z.source_tf, 9),
-            z.touch_count,
-            abs(((z.zone_low + z.zone_high) / 2.0) - current),
-        ))
-        return side[0]
-
-    chosen = [best_for(Direction.BUY_ONLY), best_for(Direction.SELL_ONLY)]
-    zones = [z for z in chosen if z is not None]
-    zones.sort(key=lambda z: abs(((z.zone_low + z.zone_high) / 2.0) - current))
-
-    features["two_sided_day_map"] = {
-        "resolved_day_bias": overall.value,
-        "buy_zone": next((z.zone_id for z in zones if z.direction == Direction.BUY_ONLY), None),
-        "sell_zone": next((z.zone_id for z in zones if z.direction == Direction.SELL_ONLY), None),
-        "contract": "one best BUY + one best SELL when observed evidence exists; directional day => continuation side + reversal side",
-    }
-
-    reason = None if zones else "No reachable D1/H4/H1 institutional BUY or SELL candidate survived CLOSED-candle structure, freshness, width, distance and M15-at-analysis qualification filters."
-    executable = [z for z in zones if z.grade in {Grade.A, Grade.A_PLUS} or (SETTINGS.bplus_executable and z.grade == Grade.B_PLUS)]
-    dirs = {z.direction for z in executable}
-    if dirs == {Direction.BUY_ONLY}:
-        mode = Direction.BUY_ONLY
-    elif dirs == {Direction.SELL_ONLY}:
-        mode = Direction.SELL_ONLY
-    elif Direction.BUY_ONLY in dirs and Direction.SELL_ONLY in dirs:
-        mode = Direction.BUY_SELL
+        near=[x for x in liq if x.price<=zlo and mid-x.price<=cap]
+        if near:
+            q=min(near,key=lambda x:x.price);zlo=min(zlo,q.price-.15*m15a);notes.append(f"distal_liquidity:{q.label}@{q.price:.3f}")
+    touches=_touches(zlo,zhi,c.source_ts,s.xau_m15); conf=[]
+    if ">" in c.source_tf:conf.append("HTF_OVERLAP")
+    if any(x.fvg for x in c.components):conf.append("HISTORICAL_DISPLACEMENT_FVG")
+    if any(x.strength>=2 for x in c.components):conf.append("INSTITUTIONAL_DISPLACEMENT")
+    if loc>=7:conf.append("PREMIUM_DISCOUNT_EXTREMITY")
+    if notes:conf.append("EXTERNAL_LIQUIDITY_ADJACENCY")
+    ot=_targets(c.direction,mid,liq); flip=c.direction.opposite();ft=_targets(flip,zhi if flip==Direction.BUY else zlo,liq)
+    clear=abs(ot[0]-mid) if ot else 0;counter=bias not in (Direction.NEUTRAL,c.direction); need=SETTINGS.clear_run_countertrend if counter else SETTINGS.clear_run_with_trend
+    if touches>=SETTINGS.zone_retire_touch_count or len(set(conf))<SETTINGS.zone_min_independent_confluences or clear<need:grade=Grade.REJECT
     else:
-        mode = Direction.NO_TRADE
-        if zones and reason is None:
-            reason = "Only B+ D1/H4/H1-derived watch zones are present; B+ execution is disabled."
+        score=(2 if c.source_tf=="D1>H4>H1" else 1 if ">" in c.source_tf else 0)+(2 if loc>=8 else 1 if loc>=6 else 0)+(1 if touches==0 else 0)+(1 if "INSTITUTIONAL_DISPLACEMENT" in conf else 0)
+        grade=Grade.A_PLUS if score>=6 else Grade.A if score>=4 else Grade.B_PLUS
+        if counter and grade==Grade.A_PLUS:grade=Grade.A
+    vals=ot+[0]*(4-len(ot));fvals=ft+[0]*(4-len(ft));inv=zhi if c.direction==Direction.SELL else zlo
+    dxy=_dxy(s);support="NEUTRAL" if dxy==Direction.NEUTRAL else "SUPPORT" if ((c.direction==Direction.SELL and dxy==Direction.BUY) or (c.direction==Direction.BUY and dxy==Direction.SELL)) else "CONFLICT"
+    return Zone(zone_id=f"Z_{c.source_tf.replace('>','')}_{c.direction.value}_{n}",original_direction=c.direction,flip_direction=flip,setup_type="REVERSAL" if counter else "CONTINUATION",source_tf=c.source_tf,grade=grade,state=ZoneState.RETIRED if touches>=SETTINGS.zone_retire_touch_count else ZoneState.ACTIVE,core_low=round(c.low,5),core_high=round(c.high,5),core_method=c.method,location_score=loc,zone_low=round(zlo,5),zone_high=round(zhi,5),touch_count=touches,confluences=sorted(set(conf)),independent_confluence_count=len(set(conf)),source_ts=c.source_ts,invalidation_level=round(inv,5),invalidation_rule="M15 accepted body beyond OUTER envelope: one >=60% body and >=0.40 ATR, or two closes each >=0.20 ATR. Wick-only does not invalidate.",original_target1=vals[0],original_target2=vals[1],original_target3=vals[2],original_runner=vals[3],flip_target1=fvals[0],flip_target2=fvals[1],flip_target3=fvals[2],flip_runner=fvals[3],clear_run=round(clear,5),countertrend=counter,dxy_support=support,notes=["PRE-ANALYSIS core uses CLOSED D1/H4/H1 evidence only; later M1 execution OB/FVG cannot redefine it.",*notes])
 
-    if snapshot.spread_points > SETTINGS.max_spread_points:
-        mode = Direction.NO_TRADE
-        reason = f"Spread too high: {snapshot.spread_points:.1f} points"
+def evaluate_zone_state(z:Zone,m15:list[Bar],atr_m15_value:float=0.0)->ZoneState:
+    if z.state==ZoneState.RETIRED or len(m15)<2:return z.state
+    a=atr_m15_value or atr(m15)
+    if a<=0:return z.state
+    boundary=z.zone_high if z.original_direction==Direction.SELL else z.zone_low
+    def frac(b:Bar):
+        body=max(_body(b),1e-9);top=max(b.open,b.close);bottom=min(b.open,b.close)
+        beyond=max(0,top-max(bottom,boundary)) if z.original_direction==Direction.SELL else max(0,min(top,boundary)-bottom)
+        return beyond/body
+    last=m15[-1]; beyond=last.close>boundary if z.original_direction==Direction.SELL else last.close<boundary
+    single=beyond and frac(last)>=SETTINGS.m15_single_accept_body_fraction and _body(last)>=SETTINGS.m15_single_accept_body_atr*a
+    x,y=m15[-2],m15[-1]
+    two=((x.close>boundary and y.close>boundary) if z.original_direction==Direction.SELL else (x.close<boundary and y.close<boundary)) and _body(x)>=SETTINGS.m15_double_accept_body_atr*a and _body(y)>=SETTINGS.m15_double_accept_body_atr*a
+    return ZoneState.FAILED_FLIP_CANDIDATE if single or two else ZoneState.ACTIVE
 
-    history_counts = {f"XAU:{tf}": len(series.bars) for tf, series in snapshot.xau.items()}
-    history_counts.update({f"DXY:{tf}": len(series.bars) for tf, series in snapshot.dxy.items()})
-    atr_brief = ", ".join(f"{tf}={tf_atr[tf]:.3f}" for tf in ("D1", "H4", "H1", "M15"))
+def build_analysis(s:MarketSnapshot,generated_at:Optional[int]=None)->Analysis:
+    now=generated_at or int(datetime.now(timezone.utc).timestamp());liq=liquidity_map(s);bias=_bias(s)
+    zones=[_zone(c,s,liq,bias,i+1) for i,c in enumerate(build_candidates(s))]
+    zones=[z for z in zones if z.grade!=Grade.REJECT and z.state!=ZoneState.RETIRED]
+    best=[]
+    for d in (Direction.BUY,Direction.SELL):
+        side=[z for z in zones if z.original_direction==d]
+        if side:
+            side.sort(key=lambda z:(GRADE_RANK[z.grade],TF_RANK.get(z.source_tf,9),-z.location_score,z.touch_count,((z.core_low+z.core_high)/2 if d==Direction.BUY else -(z.core_low+z.core_high)/2)))
+            best.append(side[0])
+    for z in best:z.state=evaluate_zone_state(z,s.xau_m15,s.atr_m15)
+    selected="";exe=[z for z in best if z.grade in (Grade.A_PLUS,Grade.A)]
+    if exe:exe.sort(key=lambda z:(GRADE_RANK[z.grade],-z.location_score));selected=exe[0].zone_id
+    above=sorted([x for x in liq if x.side=="ABOVE"],key=lambda x:x.distance);below=sorted([x for x in liq if x.side=="BELOW"],key=lambda x:x.distance)
+    primary=(above[0] if bias==Direction.BUY and above else below[0] if bias==Direction.SELL and below else (sorted(liq,key=lambda x:x.distance)[0] if liq else None))
+    guards=[]
+    if not s.complete():guards.append("NO_COMPLETE_HISTORY_CONTEXT")
+    if s.spread_points>SETTINGS.max_spread_points:guards.append(f"SPREAD_HIGH:{s.spread_points:.1f}")
+    if now-s.sent_at>SETTINGS.max_snapshot_age_seconds:guards.append("SNAPSHOT_STALE")
+    return Analysis(analysis_id=f"A_{now}_{uuid.uuid4().hex[:8]}",generated_at=now,snapshot_at=s.sent_at,overall_bias=bias,primary_liquidity=f"{primary.label}@{primary.price:.5f}" if primary else "",liquidity_map=liq,zones=best,selected_zone_id=selected,trader_brief=f"D1/H4/H1 consensus={bias.value}. DXY={_dxy(s).value} analysis-only. {len(best)} two-branch XAU zone(s).",approved=not any(x in guards for x in ("NO_COMPLETE_HISTORY_CONTEXT","SNAPSHOT_STALE")),execution_policy={"core":"PREEXISTING_CLOSED_D1_H4_H1_ONLY","primary":["HTF_LOCATION","EXTERNAL_SWEEP","M1_MSS_BODY_CLOSE","DISPLACEMENT","NEW_M1_DEALING_RANGE","PREMIUM_DISCOUNT","OTE_618_786","FRESH_PD_ARRAY","RETRACE_ENTRY"],"reentry":["THESIS_VALID","OBJECTIVE_OPEN","CONTINUATION_BOS","NEW_DISPLACEMENT","NEW_M1_DEALING_RANGE","INTERNAL_LIQUIDITY","PREMIUM_DISCOUNT","FRESH_PD_ARRAY"],"flip":["M15_ACCEPTANCE_INVALIDATION","NO_INSTANT_REVERSE","OPPOSITE_SIDE_RETEST","M1_MSS_BOS","DISPLACEMENT","NEW_M1_DEALING_RANGE","PREMIUM_DISCOUNT","OTE","FRESH_PD_ARRAY"],"risk":["ONE_BUDGET_PER_THESIS","NO_AVERAGING_DOWN","NO_SL_WIDENING","STRUCTURE_AWARE_BE","LIQUIDITY_PARTIALS","M5_ATR_RUNNER_TRAIL"]},guards=guards)
 
-    # Identify the nearest observed liquidity objective without forcing a directional prediction.
-    above = sorted((v, n) for n, v in observed_liq if v > current)
-    below = sorted(((v, n) for n, v in observed_liq if v < current), reverse=True)
-    if overall == Bias.BULLISH and above:
-        primary_liq = f"{above[0][1]} @ {above[0][0]:.3f}"
-    elif overall == Bias.BEARISH and below:
-        primary_liq = f"{below[0][1]} @ {below[0][0]:.3f}"
-    else:
-        primary_liq = "BOTH SIDES / UNRESOLVED"
-
-    news_brief = [
-        {"title": n.title, "ts": n.ts.isoformat(), "impact": n.impact, "released": n.released, "actual": n.actual, "forecast": n.forecast, "previous": n.previous}
-        for n in snapshot.news if n.currency.upper() == "USD" and n.impact.upper() == "HIGH"
-    ]
-    features["news_context"] = news_brief
-    features["broker_context"] = {
-        "bid": snapshot.bid, "ask": snapshot.ask,
-        "spread_points": snapshot.spread_points, "spread_price": snapshot.spread_price,
-        "bridge_atr": {tf: snapshot.xau[tf].atr for tf in ("D1", "H4", "H1", "M15")},
-        "closed_bar_atr": tf_atr,
-    }
-
-    return InstitutionalAnalysis(
-        analysis_id=str(uuid.uuid4()),
-        generated_at=now,
-        valid_until=now + timedelta(minutes=SETTINGS.plan_valid_minutes),
-        snapshot_id=snapshot_id(snapshot),
-        session=snapshot.session,
-        current_xau_price=current,
-        current_dxy_price=current_dxy,
-        bid=snapshot.bid,
-        ask=snapshot.ask,
-        spread_points=snapshot.spread_points,
-        spread_price=snapshot.spread_price,
-        xau_d1_atr=tf_atr["D1"],
-        xau_h4_atr=tf_atr["H4"],
-        xau_h1_atr=tf_atr["H1"],
-        xau_m15_atr=tf_atr["M15"],
-        dxy_d1_bias=b_d_d1,
-        dxy_h4_bias=b_d_h4,
-        dxy_h1_bias=b_d_h1,
-        xau_d1_bias=b_x_d1,
-        xau_h4_bias=b_x_h4,
-        xau_h1_bias=b_x_h1,
-        xau_m15_context=b_x_m15,
-        overall_bias=overall,
-        dxy_implication=implication,
-        primary_liquidity=primary_liq,
-        expected_sequence=(
-            "D1/H4/H1 institutional map + DXY context -> continuation/reversal zone -> M15 qualification frozen -> zone published -> "
-            "price reaches zone -> M1 liquidity sweep -> M1 MSS/CHoCH body-close + genuine displacement -> Fibonacci -> "
-            "fresh M1 OB/BB/FVG -> M1 confirmation -> entry -> M1 structural SL / observed-liquidity TP -> BE -> dynamic trail"
-        ),
-        retail_trap=(
-            "Avoid breakout chasing and wick-only structure claims. A published zone is a location, not an entry. "
-            "Only M1 may trigger after the required liquidity sweep and body-close structural shift."
-        ),
-        overall_invalidation=(
-            "For intraday execution, block new M1 entries when CLOSED M15 candles show accepted price beyond the zone distal boundary under the configured body/ATR rule; wick-only penetration is not enough. "
-            "H1/H4 structural retirement is reassessed on the next full session/news analysis, or a T-10/T+10 major-news revalidation may retire/replace the zone."
-        ),
-        trader_brief=(
-            f"{SETTINGS.trading_profile}: D1/H4/H1 jointly form the institutional zone map from CLOSED candles; H4/H1 refine the executable POI, M15 is consumed only while qualifying each zone and ends at publication; M1 executes. "
-            f"History={history_counts}. Closed ATR14: {atr_brief}. Spread={snapshot.spread_points:.1f} pts. "
-            f"High-impact USD events supplied={len(news_brief)}. DXY remains analysis-only."
-        ),
-        zones=zones,
-        ea_mode=mode,
-        no_trade_reason=reason,
-        post_news=any(x.currency.upper() == "USD" and x.impact.upper() == "HIGH" and x.released for x in snapshot.news),
-        source_fingerprint=snapshot_fingerprint(snapshot)[:24],
-        approved=False,
-        prompt_version="SMC_V4_2_D1_H4_H1_TWO_SIDED_MAP",
-        analysis_evidence=features,
-    )
-
-def active_plan_text(analysis: InstitutionalAnalysis, zone_id: Optional[str] = None, carry_forward: bool | None = None) -> str:
-    selected = None
-    if zone_id:
-        selected = next((z for z in analysis.zones if z.zone_id == zone_id), None)
-    if selected is None:
-        executable = [z for z in analysis.zones if z.grade in {Grade.A_PLUS, Grade.A} or (SETTINGS.bplus_executable and z.grade == Grade.B_PLUS)]
-        rank = {Grade.A_PLUS: 3, Grade.A: 2, Grade.B_PLUS: 1, Grade.REJECT: 0}
-        if executable:
-            selected = sorted(executable, key=lambda z: rank[z.grade], reverse=True)[0]
-
-    xau_zones = [z for z in analysis.zones if "XAU" in (z.instrument or "").upper() or "GOLD" in (z.instrument or "").upper()]
-    if selected is not None and selected not in xau_zones:
-        selected = None
-
-    # Version 3 preserves the single selected execution zone fields used by the
-    # M1 EA and exports validated XAU zones for visualization. DXY remains
-    # analysis-only and is never serialized as a view/execution zone.
-    refresh_due = datetime.now(timezone.utc) > analysis.valid_until.astimezone(timezone.utc)
-    if carry_forward is None:
-        carry_forward = SETTINGS.plan_carry_forward_until_replaced
-    # Sequence EA v2.12 treats valid_until_epoch=0 as "no local hard expiry".
-    # The real refresh target is still exported separately for audit/dashboard use.
-    ea_expiry_epoch = 0 if carry_forward else int(analysis.valid_until.timestamp())
-    lifecycle = "CARRY_FORWARD" if (carry_forward and refresh_due) else "ACTIVE"
-
-    lines = {
-        "version": "3", "analysis_id": analysis.analysis_id,
-        "generated_at": analysis.generated_at.isoformat(), "valid_until": analysis.valid_until.isoformat(),
-        "valid_until_epoch": str(ea_expiry_epoch),
-        "refresh_due_epoch": str(int(analysis.valid_until.timestamp())),
-        "refresh_due": "1" if refresh_due else "0",
-        "carry_forward_until_replaced": "1" if carry_forward else "0",
-        "plan_lifecycle": lifecycle, "session": analysis.session,
-        "ea_mode": analysis.ea_mode.value if analysis.approved else Direction.NO_TRADE.value,
-        "approved": "1" if analysis.approved else "0", "spread_points": f"{analysis.spread_points:.1f}",
-        "bid": "" if analysis.bid is None else f"{analysis.bid:.5f}",
-        "ask": "" if analysis.ask is None else f"{analysis.ask:.5f}",
-        "spread_price": "" if analysis.spread_price is None else f"{analysis.spread_price:.5f}",
-        "atr_d1": "" if analysis.xau_d1_atr is None else f"{analysis.xau_d1_atr:.5f}",
-        "atr_h4": "" if analysis.xau_h4_atr is None else f"{analysis.xau_h4_atr:.5f}",
-        "atr_h1": "" if analysis.xau_h1_atr is None else f"{analysis.xau_h1_atr:.5f}",
-        "atr_m15": "" if analysis.xau_m15_atr is None else f"{analysis.xau_m15_atr:.5f}",
-        "dxy_implication": analysis.dxy_implication.value, "post_news": "1" if analysis.post_news else "0",
-        "news_blackout": "1" if analysis.news_blackout else "0", "paper_only": "1" if SETTINGS.paper_only else "0",
-        "trading_profile": SETTINGS.trading_profile,
-        "zone_count": str(len(xau_zones) if analysis.approved else 0),
-    }
-
-    if analysis.approved:
-        for i, z in enumerate(xau_zones, start=1):
-            prefix = f"view_zone_{i}_"
-            lines.update({
-                prefix + "instrument": z.instrument,
-                prefix + "id": z.zone_id,
-                prefix + "direction": z.direction.value,
-                prefix + "grade": z.grade.value,
-                prefix + "source_tf": z.source_tf,
-                prefix + "setup_type": z.setup_type,
-                prefix + "low": f"{z.zone_low:.5f}",
-                prefix + "high": f"{z.zone_high:.5f}",
-                prefix + "touches": str(z.touch_count),
-                prefix + "freshness": z.freshness,
-                prefix + "target1": "" if z.target1 is None else f"{z.target1:.5f}",
-                prefix + "target2": "" if z.target2 is None else f"{z.target2:.5f}",
-                prefix + "target3": "" if z.target3 is None else f"{z.target3:.5f}",
-                prefix + "runner": "" if z.runner is None else f"{z.runner:.5f}",
-            })
-
-    if selected is None or not analysis.approved or analysis.ea_mode == Direction.NO_TRADE:
-        lines.update({"zone_id": "NONE", "direction": "NO_TRADE", "grade": "REJECT"})
-    else:
-        lines.update({
-            "zone_id": selected.zone_id, "direction": selected.direction.value, "grade": selected.grade.value,
-            "zone_low": f"{selected.zone_low:.5f}", "zone_high": f"{selected.zone_high:.5f}",
-            "requires_sweep": selected.requires_sweep,
-            "min_displacement_atr": f"{selected.min_displacement_atr:.2f}", "min_rr": f"{selected.min_rr:.2f}",
-            "target1": "" if selected.target1 is None else f"{selected.target1:.5f}",
-            "target2": "" if selected.target2 is None else f"{selected.target2:.5f}",
-            "target3": "" if selected.target3 is None else f"{selected.target3:.5f}",
-            "runner": "" if selected.runner is None else f"{selected.runner:.5f}",
-        })
-    return "\n".join(f"{k}={v}" for k, v in lines.items()) + "\n"
-
-
-# Backwards-compatible name used by starter tests.
-def analyze(snapshot: MarketSnapshot) -> InstitutionalAnalysis:
-    result = build_candidate_analysis(snapshot)
-    result.approved = True
-    return result
+def active_plan_text(a:Analysis,snapshot:Optional[MarketSnapshot]=None)->str:
+    z=next((z for z in a.zones if z.zone_id==a.selected_zone_id),None);lines={"protocol":str(SETTINGS.protocol_version),"analysis_id":a.analysis_id,"generated_at":str(a.generated_at),"approved":"1" if a.approved else "0","overall_bias":a.overall_bias.value,"primary_liquidity":a.primary_liquidity,"paper_only":"1" if SETTINGS.paper_only else "0"}
+    if not z:
+        lines.update({"ea_mode":"NO_TRADE","zone_id":"","reason":"NO_A_OR_A_PLUS_ZONE"});return "\n".join(f"{k}={v}" for k,v in lines.items())+"\n"
+    state=evaluate_zone_state(z,snapshot.xau_m15,snapshot.atr_m15) if snapshot else z.state
+    executable=a.approved and z.grade in (Grade.A_PLUS,Grade.A)
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled:executable=executable and a.ai_approved
+    lines.update({"ea_mode":"DUAL_BRANCH" if executable else "WATCH_ONLY","zone_id":z.zone_id,"zone_state":state.value,"setup_type":z.setup_type,"source_tf":z.source_tf,"grade":z.grade.value,"original_direction":z.original_direction.value,"flip_direction":z.flip_direction.value,"core_method":z.core_method,"core_low":f"{z.core_low:.5f}","core_high":f"{z.core_high:.5f}","zone_low":f"{z.zone_low:.5f}","zone_high":f"{z.zone_high:.5f}","location_score":f"{z.location_score:.4f}","touch_count":str(z.touch_count),"invalidation_level":f"{z.invalidation_level:.5f}","min_displacement_atr":"0.80","min_rr":"1.50","original_target1":f"{z.original_target1:.5f}","original_target2":f"{z.original_target2:.5f}","original_target3":f"{z.original_target3:.5f}","original_runner":f"{z.original_runner:.5f}","flip_target1":f"{z.flip_target1:.5f}","flip_target2":f"{z.flip_target2:.5f}","flip_target3":f"{z.flip_target3:.5f}","flip_runner":f"{z.flip_runner:.5f}","requires_sweep":"1","flip_requires_retest":"1","flip_invalidation_is_not_entry":"1","execution_contract":"V6_PRIMARY_REENTRY_FLIP_THESIS_RISK","dxy_support":z.dxy_support})
+    return "\n".join(f"{k}={v}" for k,v in lines.items())+"\n"

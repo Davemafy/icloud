@@ -1,30 +1,24 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-# Local development convenience. Railway environment variables take precedence.
-load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+import os
 
 
-def _bool(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
+def _b(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None:
         return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return v.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _float(name: str, default: float) -> float:
+def _f(name: str, default: float) -> float:
     try:
         return float(os.getenv(name, str(default)))
     except ValueError:
         return default
 
 
-def _int(name: str, default: int) -> int:
+def _i(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
     except ValueError:
@@ -33,151 +27,52 @@ def _int(name: str, default: int) -> int:
 
 @dataclass(frozen=True)
 class Settings:
-    app_env: str = os.getenv("APP_ENV", "development")
-    database_path: str = os.getenv("DATABASE_PATH", "/data/smc_cloud.db")
-    cloud_ea_api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
-    admin_api_key: str = os.getenv("ADMIN_API_KEY", "change-me-admin")
-    signing_secret: str = os.getenv("SIGNING_SECRET", "change-me-signing")
+    app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
+    app_version: str = os.getenv("APP_VERSION", "6.0.0")
+    timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
+    api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
+    db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
+    paper_only: bool = _b("PAPER_ONLY", True)
 
-    # Multi-provider AI layer. Providers are attempted in AI_PROVIDER_ORDER and the
-    # first schema-valid response is accepted. Unconfigured providers are skipped.
-    ai_provider_order: str = os.getenv("AI_PROVIDER_ORDER", "gemini,groq,openrouter,tensormux,openai")
-    ai_enabled: bool = _bool("AI_ENABLED", True)
-    require_ai_for_execution: bool = _bool("REQUIRE_AI_FOR_EXECUTION", True)
-    ai_timeout_seconds: int = _int("AI_TIMEOUT_SECONDS", 90)
-    ai_reasoning_effort: str = os.getenv("AI_REASONING_EFFORT", "medium")
+    # Analysis schedule. Comma-separated local times.
+    session_analysis_times: str = os.getenv("SESSION_ANALYSIS_TIMES", "07:50,12:50,15:20")
+    scheduler_poll_seconds: int = _i("SCHEDULER_POLL_SECONDS", 20)
+    plan_refresh_minutes: int = _i("PLAN_REFRESH_MINUTES", 180)
 
+    # AI validation. Deterministic engine remains authoritative.
+    ai_enabled: bool = _b("AI_ENABLED", True)
+    require_ai_for_execution: bool = _b("REQUIRE_AI_FOR_EXECUTION", True)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-    gemini_base_url: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+    ai_timeout_seconds: int = _i("AI_TIMEOUT_SECONDS", 18)
+    ai_compat_url: str = os.getenv("AI_COMPAT_URL", "")
+    ai_compat_key: str = os.getenv("AI_COMPAT_KEY", "")
+    ai_compat_model: str = os.getenv("AI_COMPAT_MODEL", "")
 
-    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
-    groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
-    groq_base_url: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    # Core/zone quality.
+    zone_retire_touch_count: int = _i("ZONE_RETIRE_TOUCH_COUNT", 2)
+    zone_min_independent_confluences: int = _i("ZONE_MIN_INDEPENDENT_CONFLUENCES", 2)
+    zone_liquidity_envelope_max_h1_atr: float = _f("ZONE_LIQUIDITY_ENVELOPE_MAX_H1_ATR", 1.50)
+    zone_liquidity_envelope_max_h4_atr: float = _f("ZONE_LIQUIDITY_ENVELOPE_MAX_H4_ATR", 0.75)
+    zone_liquidity_envelope_max_d1_atr: float = _f("ZONE_LIQUIDITY_ENVELOPE_MAX_D1_ATR", 0.30)
+    zone_liquidity_sweep_buffer_m15_atr: float = _f("ZONE_LIQUIDITY_SWEEP_BUFFER_M15_ATR", 0.15)
+    clear_run_with_trend: float = _f("CLEAR_RUN_WITH_TREND_PRICE", 5.0)
+    clear_run_countertrend: float = _f("CLEAR_RUN_COUNTERTREND_PRICE", 10.0)
 
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "")
-    openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    # Dynamic safety gates.
+    max_snapshot_age_seconds: int = _i("MAX_SNAPSHOT_AGE_SECONDS", 120)
+    max_spread_points: float = _f("MAX_SPREAD_POINTS", 35.0)
+    news_entry_lock_minutes: int = _i("NEWS_ENTRY_LOCK_MINUTES", 15)
+    news_post_revalidate_minutes: int = _i("NEWS_POST_REVALIDATE_MINUTES", 10)
 
-    # TensorMux is treated as an OpenAI-compatible gateway. It is optional and is
-    # only attempted when TENSORMUX_BASE_URL and TENSORMUX_MODEL are configured.
-    tensormux_api_key: str = os.getenv("TENSORMUX_API_KEY", "")
-    tensormux_model: str = os.getenv("TENSORMUX_MODEL", "")
-    tensormux_base_url: str = os.getenv("TENSORMUX_BASE_URL", "")
+    # M15 outer-envelope acceptance -> flip candidate.
+    m15_single_accept_body_fraction: float = _f("M15_SINGLE_ACCEPT_BODY_FRACTION", 0.60)
+    m15_single_accept_body_atr: float = _f("M15_SINGLE_ACCEPT_BODY_ATR", 0.40)
+    m15_double_accept_body_atr: float = _f("M15_DOUBLE_ACCEPT_BODY_ATR", 0.20)
 
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
-    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-
-    paper_only: bool = _bool("PAPER_ONLY", True)
-    timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
-    max_snapshot_age_seconds: int = _int("MAX_SNAPSHOT_AGE_SECONDS", 900)
-    plan_valid_minutes: int = _int("PLAN_VALID_MINUTES", 120)
-    # PLAN_VALID_MINUTES is now an advisory refresh target, not a hard zone expiry.
-    # When enabled, the last successful institutional plan remains active until a
-    # newer successful institutional analysis replaces it. Live M15/news/spread/
-    # snapshot guards can still restrict execution immediately.
-    plan_carry_forward_until_replaced: bool = _bool("PLAN_CARRY_FORWARD_UNTIL_REPLACED", True)
-    max_spread_points: float = _float("MAX_SPREAD_POINTS", 40.0)
-    bplus_executable: bool = _bool("BPLUS_EXECUTABLE", False)
-    xau_pip_size: float = _float("XAU_PIP_SIZE", 0.01)
-    min_clear_run_with_trend_pips: float = _float("MIN_CLEAR_RUN_WITH_TREND_PIPS", 50.0)
-    min_clear_run_counter_trend_pips: float = _float("MIN_CLEAR_RUN_COUNTER_TREND_PIPS", 100.0)
-
-    # Intraday/scalping profile. D1/H4/H1 jointly form the supply/demand/POI map;
-    # M15 is consumed only for one-time zone qualification; M1 is the sole live trigger.
-    trading_profile: str = os.getenv("TRADING_PROFILE", "INTRADAY_HTF_ZONE_M1").upper()
-    intraday_max_distance_h1_atr: float = _float("INTRADAY_MAX_DISTANCE_H1_ATR", 2.5)
-    intraday_max_distance_d1_atr: float = _float("INTRADAY_MAX_DISTANCE_D1_ATR", 0.35)
-    intraday_max_zone_width_m15_atr: float = _float("INTRADAY_MAX_ZONE_WIDTH_M15_ATR", 2.5)
-    intraday_h1_lookback: int = _int("INTRADAY_H1_LOOKBACK", 180)
-    intraday_m15_lookback: int = _int("INTRADAY_M15_LOOKBACK", 320)
-    intraday_max_candidates: int = _int("INTRADAY_MAX_CANDIDATES", 8)
-
-    # Live zone-health guard for intraday/scalp execution. D1/H4/H1 create the POI map;
-    # after publication M15 is NOT an entry gate, but a closed M15 candle may
-    # invalidate the zone for NEW entries when price shows real acceptance
-    # through the distal boundary. Wick-only penetration is ignored.
-    m15_zone_guard_body_beyond_pct: float = _float("M15_ZONE_GUARD_BODY_BEYOND_PCT", 0.60)
-    m15_zone_guard_min_body_atr: float = _float("M15_ZONE_GUARD_MIN_BODY_ATR", 0.40)
-    m15_zone_guard_two_close_min_body_atr: float = _float("M15_ZONE_GUARD_TWO_CLOSE_MIN_BODY_ATR", 0.20)
-    m15_zone_guard_consecutive_closes: int = _int("M15_ZONE_GUARD_CONSECUTIVE_CLOSES", 2)
-
-    nonce_ttl_seconds: int = _int("NONCE_TTL_SECONDS", 300)
-    rate_limit_per_minute: int = _int("RATE_LIMIT_PER_MINUTE", 120)
-
-    session_asia_start: str = os.getenv("SESSION_ASIA_START", "00:00")
-    session_london_start: str = os.getenv("SESSION_LONDON_START", "08:00")
-    session_newyork_start: str = os.getenv("SESSION_NEWYORK_START", "13:00")
-    session_lead_minutes: int = _int("SESSION_LEAD_MINUTES", 10)
-    scheduler_poll_seconds: int = _int("SCHEDULER_POLL_SECONDS", 20)
-    # A scheduled session analysis may catch up after its nominal pre-session time.
-    # Example: Asia 00:00, lead 10, catch-up 20 => eligible from 23:50 through 00:10 WAT.
-    session_catchup_minutes: int = _int("SESSION_CATCHUP_MINUTES", 20)
-    # If a pre-session run was missed, run once during the active session using the latest fresh snapshot.
-    session_active_recovery: bool = _bool("SESSION_ACTIVE_RECOVERY", True)
-    # Do not spend an AI call on stale context; wait for the next Data Bridge snapshot.
-    session_snapshot_max_age_seconds: int = _int("SESSION_SNAPSHOT_MAX_AGE_SECONDS", 180)
-
-    # Historical-context protocol v3. The bridge sends a full context bootstrap
-    # at startup, ~10 minutes before each session, and after high-impact USD news.
-    # Lightweight live updates are merged into the latest full context before analysis.
-    history_full_max_age_hours: int = _int("HISTORY_FULL_MAX_AGE_HOURS", 12)
-    history_min_xau_d1: int = _int("HISTORY_MIN_XAU_D1", 240)
-    history_min_xau_h4: int = _int("HISTORY_MIN_XAU_H4", 480)
-    history_min_xau_h1: int = _int("HISTORY_MIN_XAU_H1", 400)
-    history_min_xau_m15: int = _int("HISTORY_MIN_XAU_M15", 400)
-    history_min_dxy_d1: int = _int("HISTORY_MIN_DXY_D1", 200)
-    history_min_dxy_h4: int = _int("HISTORY_MIN_DXY_H4", 480)
-    history_min_dxy_h1: int = _int("HISTORY_MIN_DXY_H1", 400)
-    history_merge_cap_d1: int = _int("HISTORY_MERGE_CAP_D1", 320)
-    history_merge_cap_h4: int = _int("HISTORY_MERGE_CAP_H4", 700)
-    history_merge_cap_h1: int = _int("HISTORY_MERGE_CAP_H1", 700)
-    history_merge_cap_m15: int = _int("HISTORY_MERGE_CAP_M15", 560)
-    snapshot_live_retention: int = _int("SNAPSHOT_LIVE_RETENTION", 1500)
-    snapshot_full_retention: int = _int("SNAPSHOT_FULL_RETENTION", 180)
-
-    news_provider: str = os.getenv("NEWS_PROVIDER", "mt5_calendar").lower()
-    tradingeconomics_api_key: str = os.getenv("TRADINGECONOMICS_API_KEY", "")
-    news_poll_minutes: int = _int("NEWS_POLL_MINUTES", 10)
-
-    # Major-news zone revalidation policy. Every high-impact USD release gets
-    # one analysis around T-10 minutes and another around T+10 minutes. The
-    # pre-release analysis reassesses/refreshes the D1/H4/H1 zone map before the
-    # blackout, while the post-release analysis verifies which zones survived
-    # the repricing before M1 execution can resume.
-    news_pre_analysis_minutes: int = _int("NEWS_PRE_ANALYSIS_MINUTES", 10)
-    news_post_analysis_minutes: int = _int("NEWS_POST_ANALYSIS_MINUTES", 10)
-    pre_news_catchup_minutes: int = _int("PRE_NEWS_CATCHUP_MINUTES", 9)
-    post_news_catchup_minutes: int = _int("POST_NEWS_CATCHUP_MINUTES", 30)
-
-    # Execution blackout is intentionally aligned with the two revalidation
-    # checkpoints: lock at T-10 and remain locked through T+10.
-    news_pre_blackout_minutes: int = _int("NEWS_PRE_BLACKOUT_MINUTES", 10)
-    news_post_cooldown_minutes: int = _int("NEWS_POST_COOLDOWN_MINUTES", 10)
-
-    dashboard_enabled: bool = _bool("DASHBOARD_ENABLED", True)
+    # Plan protocol / tester.
+    protocol_version: int = _i("PROTOCOL_VERSION", 6)
+    tester_plan_filename: str = os.getenv("TESTER_PLAN_FILENAME", "SMC_v6_tester_plans.csv")
 
 
 SETTINGS = Settings()
-
-
-def validate_runtime_settings() -> None:
-    if SETTINGS.app_env.lower() == "production":
-        bad = []
-        if SETTINGS.cloud_ea_api_key in {"", "change-me"}: bad.append("CLOUD_EA_API_KEY")
-        if SETTINGS.admin_api_key in {"", "change-me-admin"}: bad.append("ADMIN_API_KEY")
-        if SETTINGS.signing_secret in {"", "change-me-signing"}: bad.append("SIGNING_SECRET")
-        if SETTINGS.ai_enabled:
-            configured = any([
-                SETTINGS.gemini_api_key,
-                SETTINGS.groq_api_key,
-                SETTINGS.openrouter_api_key and SETTINGS.openrouter_model,
-                SETTINGS.tensormux_base_url and SETTINGS.tensormux_model,
-                SETTINGS.openai_api_key,
-            ])
-            if not configured:
-                bad.append("At least one AI provider key/model must be configured")
-        if not SETTINGS.paper_only: bad.append("PAPER_ONLY must remain true in this build")
-        if bad:
-            raise RuntimeError("Unsafe/incomplete production configuration: " + ", ".join(bad))
