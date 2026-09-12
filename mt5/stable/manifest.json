@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "channel": "stable",
+  "release": "6.0.1",
+  "repository": "Davemafy/icloud",
+  "ref": "main",
+  "data_bridge_version": "1.30",
+  "sequence_ea_version": "3.21",
+  "files": [
+    {
+      "role": "data_bridge",
+      "name": "InstitutionalSMC_DataBridge_v1_30_XAU_DXY.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_30_XAU_DXY.mq5",
+      "sha256": "be0eff050c8abe4c06bf7871acb26fd9e9ae3df907c1c39ee427c9b5f96d7e46"
+    },
+    {
+      "role": "sequence_ea",
+      "name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
+    }
+  ]
+}
