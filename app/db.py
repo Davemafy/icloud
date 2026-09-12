@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 import threading
-from typing import Optional
+from typing import Optional, Any
 
 from .config import SETTINGS
 from .models import Analysis, MarketSnapshot, Feedback, Heartbeat
@@ -38,7 +38,19 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS feedback(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, event TEXT NOT NULL, analysis_id TEXT, zone_id TEXT, price REAL, details TEXT);
         CREATE TABLE IF NOT EXISTS heartbeat(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ea TEXT, version TEXT, symbol TEXT, payload TEXT);
         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
+        CREATE INDEX IF NOT EXISTS idx_feedback_analysis_zone ON feedback(analysis_id, zone_id);
+        CREATE INDEX IF NOT EXISTS idx_heartbeat_ts ON heartbeat(ts);
         """)
+
+
+def _details_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    except Exception:
+        return str(value)
 
 
 def save_snapshot(s: MarketSnapshot) -> None:
@@ -72,21 +84,15 @@ def save_feedback(f: Feedback) -> None:
     with _lock, connect() as db:
         db.execute(
             "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
-            (f.ts, f.event, f.analysis_id, f.zone_id, f.price, f.details),
+            (f.ts, f.event, f.analysis_id, f.zone_id, f.price, _details_text(f.details)),
         )
 
 
 def recent_feedback(limit: int = 250) -> list[dict]:
-    """Newest MT5 execution/journal events.
-
-    The feedback endpoint is the journal event bus. Keeping journal reads on the
-    cloud means the dashboard never needs direct access to the trading terminal.
-    """
-    limit = max(1, min(int(limit), 2000))
+    limit = max(1, min(int(limit), 10000))
     with _lock, connect() as db:
         rows = db.execute(
-            "SELECT id,ts,event,analysis_id,zone_id,price,details "
-            "FROM feedback ORDER BY id DESC LIMIT ?",
+            "SELECT id,ts,event,analysis_id,zone_id,price,details FROM feedback ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
@@ -98,11 +104,11 @@ def save_heartbeat(h: Heartbeat) -> None:
             "INSERT INTO heartbeat(ts,ea,version,symbol,payload) VALUES(?,?,?,?,?)",
             (h.ts, h.ea, h.version, h.symbol, h.model_dump_json()),
         )
-        db.execute("DELETE FROM heartbeat WHERE id NOT IN (SELECT id FROM heartbeat ORDER BY id DESC LIMIT 20)")
+        db.execute("DELETE FROM heartbeat WHERE id NOT IN (SELECT id FROM heartbeat ORDER BY id DESC LIMIT 100)")
 
 
-def latest_heartbeats(limit: int = 10) -> list[dict]:
-    limit = max(1, min(int(limit), 50))
+def latest_heartbeats(limit: int = 20) -> list[dict]:
+    limit = max(1, min(int(limit), 100))
     with _lock, connect() as db:
         rows = db.execute(
             "SELECT ts,ea,version,symbol,payload FROM heartbeat ORDER BY id DESC LIMIT ?",
