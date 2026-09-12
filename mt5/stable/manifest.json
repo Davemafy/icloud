@@ -6,12 +6,14 @@
   "ref": "main",
   "data_bridge_version": "1.31",
   "sequence_ea_version": "3.21",
-  "updater_min_version": "2.0.0",
+  "updater_min_version": "2.5.0",
+  "update_latency_seconds": 10,
   "channel_features": [
     "expert_sources",
     "support_files",
     "sha256_verification",
-    "mt5_running_stage_only",
+    "continuous_background_watch",
+    "safe_hot_reload_slots",
     "local_status",
     "paper_journal_telemetry",
     "journal_csv_export",
@@ -22,12 +24,16 @@
       "role": "data_bridge",
       "name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_30_XAU_DXY.mq5",
+      "hot_reload_safe": true,
       "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
     },
     {
       "role": "sequence_ea",
       "name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "hot_reload_safe": false,
       "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
     }
   ],
