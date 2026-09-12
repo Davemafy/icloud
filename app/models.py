@@ -92,7 +92,7 @@ class MarketSnapshot(BaseModel):
 class LiquidityLevel(BaseModel):
     label: str
     price: float
-    side: str  # ABOVE / BELOW
+    side: str
     source_tf: str
     distance: float
 
@@ -105,25 +105,19 @@ class Zone(BaseModel):
     source_tf: str
     grade: Grade
     state: ZoneState = ZoneState.ACTIVE
-
-    # Pre-analysis core: must use only information already present on CLOSED D1/H4/H1.
     core_low: float
     core_high: float
     core_method: str
     location_score: float
-
-    # Published reaction envelope. Outer edge is used by M15 acceptance invalidation.
     zone_low: float
     zone_high: float
     touch_count: int = 0
     confluences: List[str] = Field(default_factory=list)
     independent_confluence_count: int = 0
     requires_sweep: bool = True
-
     source_ts: int = 0
     invalidation_level: float
     invalidation_rule: str
-
     original_target1: float = 0.0
     original_target2: float = 0.0
     original_target3: float = 0.0
@@ -132,7 +126,6 @@ class Zone(BaseModel):
     flip_target2: float = 0.0
     flip_target3: float = 0.0
     flip_runner: float = 0.0
-
     clear_run: float = 0.0
     countertrend: bool = False
     dxy_support: str = "NEUTRAL"
@@ -172,4 +165,4 @@ class Feedback(BaseModel):
     analysis_id: str = ""
     zone_id: str = ""
     price: float = 0.0
-    details: str = ""
+    details: Any = Field(default_factory=dict)
