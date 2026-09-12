@@ -6,12 +6,14 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 
-$BootstrapVersion='1.2.0'
+$BootstrapVersion='1.3.0'
 $Repo='Davemafy/icloud'
 $Branch='main'
 $Root=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5'
 $Bin=Join-Path $Root 'bin'
 $Log=Join-Path $Root 'updater.log'
+$ConfigPath=Join-Path $Root 'config.json'
+$DefaultCloudUrl='https://icloud-production-9111.up.railway.app'
 $TaskName='TradeZone MT5 Background Updater'
 $SilentLauncher=Join-Path $Bin 'TradeZone_UpdateSilent.vbs'
 $UpdaterManifestUrl="https://raw.githubusercontent.com/$Repo/$Branch/mt5/updater/manifest.json"
@@ -44,6 +46,44 @@ function Sync-Component($Def,[string]$LocalPath,[string]$Tmp,[string]$Label){
     Copy-Item $temp $LocalPath -Force
     Unblock-File -LiteralPath $LocalPath -ErrorAction SilentlyContinue
     Write-Log "$Label updated and verified."
+  }
+}
+function Ensure-PaperOnlyConfigFromCloud(){
+  if(!(Test-Path $ConfigPath)){
+    Write-Log 'Legacy gate migration skipped: updater config.json is missing.'
+    return
+  }
+
+  try{$cfg=Get-Content $ConfigPath -Raw|ConvertFrom-Json}catch{
+    Write-Log "Legacy gate migration skipped: config.json could not be read: $($_.Exception.Message)"
+    return
+  }
+
+  $existing=$false
+  if($cfg.PSObject.Properties.Name -contains 'paper_only'){
+    if($cfg.paper_only -is [bool]){$existing=[bool]$cfg.paper_only}
+    else{$existing=([string]$cfg.paper_only).Trim().ToLowerInvariant() -in @('1','true','yes','on')}
+  }
+  if($existing){return}
+
+  $cloud=$DefaultCloudUrl
+  if($cfg.PSObject.Properties.Name -contains 'cloud_url'){
+    $candidate=[string]$cfg.cloud_url
+    if(![string]::IsNullOrWhiteSpace($candidate)){$cloud=$candidate.TrimEnd('/')}
+  }
+
+  try{
+    $h=Invoke-RestMethod -Uri ($cloud+'/health') -TimeoutSec 10
+    $paper=($h.paper_only -eq $true -or ([string]$h.paper_only).Trim().ToLowerInvariant() -in @('1','true','yes','on'))
+    if($h.ok -eq $true -and $paper){
+      $cfg|Add-Member -NotePropertyName paper_only -NotePropertyValue $true -Force
+      $cfg|ConvertTo-Json -Depth 10|Set-Content -Path $ConfigPath -Encoding UTF8
+      Write-Log "Legacy first-transition gate repaired: cloud $cloud verified PAPER_ONLY=true and config.paper_only was set to true."
+    }else{
+      Write-Log "Legacy first-transition gate remains blocked: cloud $cloud did not confirm PAPER_ONLY=true."
+    }
+  }catch{
+    Write-Log "Legacy first-transition gate remains blocked: cloud PAPER_ONLY verification failed at $cloud: $($_.Exception.Message)"
   }
 }
 function Ensure-SilentTask(){
@@ -113,6 +153,7 @@ try{
     Sync-Component $m.bootstrap $PSCommandPath $tmp "Bootstrap v$($m.bootstrap_version)"
   }
 
+  Ensure-PaperOnlyConfigFromCloud
   Ensure-SilentTask
 
   $code=Run-Worker $workerLocal $true
