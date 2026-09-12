@@ -6,6 +6,14 @@
   "ref": "main",
   "data_bridge_version": "1.30",
   "sequence_ea_version": "3.21",
+  "updater_min_version": "2.0.0",
+  "channel_features": [
+    "expert_sources",
+    "support_files",
+    "sha256_verification",
+    "mt5_running_stage_only",
+    "local_status"
+  ],
   "files": [
     {
       "role": "data_bridge",
@@ -19,5 +27,6 @@
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
       "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
     }
-  ]
+  ],
+  "support_files": []
 }
