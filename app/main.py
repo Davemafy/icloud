@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,9 +11,17 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import SETTINGS
-from .db import init_db, save_snapshot, latest_snapshot, save_feedback, save_heartbeat, audit
+from .db import (
+    audit,
+    init_db,
+    latest_snapshot,
+    recent_feedback,
+    save_feedback,
+    save_heartbeat,
+    save_snapshot,
+)
 from .engine import active_plan_text
-from .models import MarketSnapshot, Feedback, Heartbeat
+from .models import Feedback, Heartbeat, MarketSnapshot
 from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
@@ -58,6 +67,7 @@ def health():
         "active_analysis": a.analysis_id if a else None,
         "scheduler": scheduler_status(),
         "execution_contract": "V6_PRIMARY_REENTRY_FLIP_THESIS_RISK",
+        "journal_sync": "V1_FEEDBACK_EVENT_BUS",
         "auth_required": True,
     }
 
@@ -77,7 +87,7 @@ def heartbeat(h: Heartbeat):
 @app.post("/mt5/feedback", dependencies=[Depends(require_api_key)])
 def feedback(f: Feedback):
     save_feedback(f)
-    return {"ok": True}
+    return {"ok": True, "journal_event": True}
 
 
 @app.get("/mt5/plan", response_class=PlainTextResponse, dependencies=[Depends(require_api_key)])
@@ -86,7 +96,6 @@ def mt5_plan():
     s = latest_snapshot()
     if a is None:
         return PlainTextResponse("protocol=6\nea_mode=NO_TRADE\nreason=NO_ANALYSIS\n", status_code=200)
-    # Live safety guards override carry-forward without deleting the historical plan.
     text = active_plan_text(a, s)
     if s:
         now = int(datetime.now(timezone.utc).timestamp())
@@ -127,6 +136,167 @@ def analysis():
     return a.model_dump()
 
 
+def _detail_value(raw: str):
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+    if not text:
+        return ""
+    try:
+        return json.loads(text)
+    except Exception:
+        return text
+
+
+def _selected_zone(a):
+    if a is None or not a.zones:
+        return None
+    if a.selected_zone_id:
+        for z in a.zones:
+            if z.zone_id == a.selected_zone_id:
+                return z
+    return a.zones[0]
+
+
+def _event_status(events: list[dict], zone_state: str) -> str:
+    names = [str(x.get("event", "")).upper() for x in events]
+    if any(any(k in n for k in ("CLOSED", "EXIT", "STOP", "TP3", "RUNNER_CLOSED")) for n in names):
+        return "CLOSED"
+    if any(any(k in n for k in ("ENTRY", "OPENED", "FILLED")) for n in names):
+        return "IN TRADE"
+    if any("FLIP" in n and ("CONFIRM" in n or "ACTIVE" in n) for n in names):
+        return "FLIP CONFIRMED"
+    if "FAILED_FLIP_CANDIDATE" in zone_state or any("FLIP_CANDIDATE" in n for n in names):
+        return "FLIP CANDIDATE"
+    if any(any(k in n for k in ("MSS", "BOS", "DISPLACEMENT", "SWEEP")) for n in names):
+        return "M1 CONFIRMING"
+    return "PLANNED"
+
+
+def _journal_snapshot():
+    a = active_analysis()
+    s = latest_snapshot()
+    z = _selected_zone(a)
+    all_events = recent_feedback(300)
+
+    analysis_id = a.analysis_id if a else ""
+    zone_id = z.zone_id if z else ""
+    current_events = [
+        e for e in all_events
+        if (not analysis_id or not e.get("analysis_id") or e.get("analysis_id") == analysis_id)
+        and (not zone_id or not e.get("zone_id") or e.get("zone_id") == zone_id)
+    ][:60]
+    for e in current_events:
+        e["details"] = _detail_value(e.get("details", ""))
+
+    zone = None
+    if z:
+        zone = {
+            "zone_id": z.zone_id,
+            "direction": z.original_direction.value,
+            "flip_direction": z.flip_direction.value,
+            "setup_type": z.setup_type,
+            "source_tf": z.source_tf,
+            "grade": z.grade.value,
+            "state": z.state.value,
+            "core_low": z.core_low,
+            "core_high": z.core_high,
+            "core_method": z.core_method,
+            "zone_low": z.zone_low,
+            "zone_high": z.zone_high,
+            "touch_count": z.touch_count,
+            "confluences": z.confluences,
+            "independent_confluence_count": z.independent_confluence_count,
+            "invalidation_level": z.invalidation_level,
+            "invalidation_rule": z.invalidation_rule,
+            "clear_run": z.clear_run,
+            "dxy_support": z.dxy_support,
+            "original_target1": z.original_target1,
+            "original_target2": z.original_target2,
+            "original_target3": z.original_target3,
+            "original_runner": z.original_runner,
+            "flip_target1": z.flip_target1,
+            "flip_target2": z.flip_target2,
+            "flip_target3": z.flip_target3,
+            "flip_runner": z.flip_runner,
+        }
+
+    checks = {
+        "fresh_zone": bool(z and z.touch_count <= 1),
+        "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
+        "clear_run": bool(z and z.clear_run > 0),
+        "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
+        "grade_executable": bool(z and z.grade.value in {"A+", "A"}),
+        "live_data_safe": bool(
+            s
+            and s.spread_points <= SETTINGS.max_spread_points
+            and int(datetime.now(timezone.utc).timestamp()) - s.sent_at <= SETTINGS.max_snapshot_age_seconds
+        ),
+    }
+    score = sum(1 for v in checks.values() if v)
+
+    return {
+        "paper_only": SETTINGS.paper_only,
+        "analysis_id": analysis_id,
+        "generated_at": a.generated_at if a else None,
+        "overall_bias": a.overall_bias.value if a else "NEUTRAL",
+        "primary_liquidity": a.primary_liquidity if a else "",
+        "trader_brief": a.trader_brief if a else "",
+        "execution_policy": a.execution_policy if a else {},
+        "zone": zone,
+        "snapshot": {
+            "sent_at": s.sent_at,
+            "bid": s.bid,
+            "ask": s.ask,
+            "spread_points": s.spread_points,
+            "complete": s.complete(),
+        } if s else None,
+        "checks": checks,
+        "readiness_score": f"{score}/{len(checks)}",
+        "status": _event_status(current_events, z.state.value if z else ""),
+        "events": current_events,
+    }
+
+
+def _journal_history(limit: int = 40):
+    rows = recent_feedback(max(300, limit * 20))
+    groups: OrderedDict[tuple[str, str], dict] = OrderedDict()
+    for row in rows:
+        key = (row.get("analysis_id") or "NO_ANALYSIS", row.get("zone_id") or "NO_ZONE")
+        if key not in groups:
+            groups[key] = {
+                "analysis_id": key[0],
+                "zone_id": key[1],
+                "last_ts": row.get("ts"),
+                "first_ts": row.get("ts"),
+                "last_event": row.get("event"),
+                "last_price": row.get("price"),
+                "event_count": 0,
+                "events": [],
+            }
+        g = groups[key]
+        g["event_count"] += 1
+        g["first_ts"] = min(g["first_ts"], row.get("ts") or g["first_ts"])
+        if len(g["events"]) < 12:
+            g["events"].append({
+                "ts": row.get("ts"),
+                "event": row.get("event"),
+                "price": row.get("price"),
+                "details": _detail_value(row.get("details", "")),
+            })
+    return list(groups.values())[: max(1, min(limit, 100))]
+
+
+@app.get("/journal/current")
+def journal_current():
+    return _journal_snapshot()
+
+
+@app.get("/journal/trades")
+def journal_trades(limit: int = 40):
+    return {"items": _journal_history(limit), "paper_only": SETTINGS.paper_only}
+
+
 def _dashboard_payload(event: str) -> str:
     try:
         s = latest_snapshot()
@@ -136,18 +306,18 @@ def _dashboard_payload(event: str) -> str:
             "ts": int(datetime.now(timezone.utc).timestamp()),
             "snapshot": s.model_dump() if s else None,
             "analysis": a.model_dump() if a else None,
+            "journal": _journal_snapshot(),
             "scheduler": scheduler_status(),
         }
     except Exception as exc:
-        # Never allow dashboard SSE to die because an optional status component fails.
         payload = {"event": "degraded", "error": f"{type(exc).__name__}:{exc}"}
     return json.dumps(payload, separators=(",", ":"))
 
 
 @app.post("/dashboard/session")
 def dashboard_session():
-    # Backward-compatible no-op for older dashboards that ping this endpoint.
     return {"ok": True, "version": SETTINGS.app_version}
+
 
 @app.get("/dashboard/events")
 async def dashboard_events(request: Request):
