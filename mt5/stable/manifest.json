@@ -6,7 +6,7 @@
   "ref": "main",
   "data_bridge_version": "1.32",
   "sequence_ea_version": "3.22",
-  "updater_min_version": "2.6.0",
+  "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "channel_features": [
     "expert_sources",
@@ -16,6 +16,7 @@
     "github_installed_running_version_truth",
     "persistent_sequence_state",
     "safe_auto_reload",
+    "first_transition_auto_activation",
     "no_force_kill",
     "paper_journal_telemetry",
     "journal_csv_export",
