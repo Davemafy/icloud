@@ -5,6 +5,6 @@
   "worker": {
     "name": "TradeZone_UpdateWorker.ps1",
     "path": "mt5/updater/TradeZone_UpdateWorker.ps1",
-    "sha256": "134f5af6741cba4c5b4dd8975bfd5b61cd1e33bcda01c7f08d5df8afd9401360"
+    "sha256": "ee672aab0b83afc3cf37bdc4c1a65da4fdd9468d30b634563c3d8ef05a642a13"
   }
 }
