@@ -50,12 +50,16 @@ function Newest-LogTime([string]$DataFolder){
   return $best
 }
 function MT5-Running($cfg){
+  # Ordinary process detection
   try{
     if(Get-Process -ErrorAction SilentlyContinue | Where-Object{$_.ProcessName -match '^(terminal|terminal64)$'}){return $true}
   }catch{}
+  # CIM fallback
   try{
     if(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object{$_.Name -match '^(terminal|terminal64)\.exe$'}){return $true}
   }catch{}
+  # RDP/VPS conservative fallback: if this managed terminal wrote logs recently,
+  # treat it as running so we never replace a live EA by mistake.
   if($cfg -and $cfg.target_data_folder){
     $last=Newest-LogTime ([string]$cfg.target_data_folder)
     if($last -gt [datetime]::MinValue){
@@ -180,6 +184,7 @@ try{
     }
   }
 
+  # Archive current installed version before replacement.
   $archive=Join-Path $expertDest ('_archive\'+(Get-Date -Format 'yyyyMMdd_HHmmss'))
   $old=@(Get-ChildItem $expertDest -File -ErrorAction SilentlyContinue |
     Where-Object{$_.Name -like 'InstitutionalSMC_DataBridge_v*.*' -or $_.Name -like 'InstitutionalSMC_SequenceEA_v*.*'})
