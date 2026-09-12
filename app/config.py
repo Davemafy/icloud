@@ -28,7 +28,7 @@ def _i(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
-    app_version: str = os.getenv("APP_VERSION", "6.1.0")
+    app_version: str = os.getenv("APP_VERSION", "6.2.0")
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
