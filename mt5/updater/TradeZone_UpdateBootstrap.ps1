@@ -6,12 +6,14 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 
-$BootstrapVersion='1.1.0'
+$BootstrapVersion='1.2.0'
 $Repo='Davemafy/icloud'
 $Branch='main'
 $Root=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5'
 $Bin=Join-Path $Root 'bin'
 $Log=Join-Path $Root 'updater.log'
+$TaskName='TradeZone MT5 Background Updater'
+$SilentLauncher=Join-Path $Bin 'TradeZone_UpdateSilent.vbs'
 $UpdaterManifestUrl="https://raw.githubusercontent.com/$Repo/$Branch/mt5/updater/manifest.json"
 New-Item -ItemType Directory -Force -Path $Bin|Out-Null
 
@@ -44,6 +46,55 @@ function Sync-Component($Def,[string]$LocalPath,[string]$Tmp,[string]$Label){
     Write-Log "$Label updated and verified."
   }
 }
+function Ensure-SilentTask(){
+  # WScript is a GUI host, so the 5-minute recovery task runs with no PowerShell window flash.
+  $vbs=@'
+Option Explicit
+Dim sh, root, boot, cmd
+Set sh = CreateObject("WScript.Shell")
+root = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%")
+boot = root & "\TradeZoneMT5\bin\TradeZone_UpdateBootstrap.ps1"
+cmd = "powershell.exe -NoProfile -WindowStyle Hidden -File """ & boot & """"
+sh.Run cmd, 0, False
+'@
+  Set-Content -Path $SilentLauncher -Value $vbs -Encoding ASCII
+
+  try{
+    & schtasks.exe /Query /TN $TaskName 2>$null | Out-Null
+    if($LASTEXITCODE -eq 0){
+      $action='wscript.exe //B //Nologo "'+$SilentLauncher+'"'
+      & schtasks.exe /Change /TN $TaskName /TR $action 2>$null | Out-Null
+      if($LASTEXITCODE -eq 0){
+        Write-Log 'Scheduled updater task switched to silent background launcher.'
+      }else{
+        Write-Log 'Could not switch scheduled task to silent launcher; existing task was left unchanged.'
+      }
+    }else{
+      Write-Log 'Scheduled updater task was not found; silent launcher was prepared for the next installer/repair.'
+    }
+  }catch{
+    Write-Log "Silent-task repair warning: $($_.Exception.Message)"
+  }
+}
+function Run-Worker([string]$Worker,[bool]$WaitForExit){
+  Unblock-File -LiteralPath $Worker -ErrorAction SilentlyContinue
+  $args=@('-NoProfile','-File',$Worker)
+  if($Interactive){$args+='-Interactive'}
+  if($Force){$args+='-Force'}
+
+  if($Interactive){
+    $p=Start-Process -FilePath 'powershell.exe' -ArgumentList $args -Wait -PassThru
+    return $p.ExitCode
+  }
+
+  # Background launches are deliberately hidden.
+  $p=Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden -PassThru
+  if($WaitForExit){
+    $p.WaitForExit()
+    return $p.ExitCode
+  }
+  return 0
+}
 
 $tmp=Join-Path $env:TEMP ('TradeZoneBootstrap_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp|Out-Null
@@ -62,22 +113,17 @@ try{
     Sync-Component $m.bootstrap $PSCommandPath $tmp "Bootstrap v$($m.bootstrap_version)"
   }
 
-  Unblock-File -LiteralPath $workerLocal -ErrorAction SilentlyContinue
-  $args=@('-NoProfile','-File',$workerLocal)
-  if($Interactive){$args+='-Interactive'}
-  if($Force){$args+='-Force'}
-  $p=Start-Process -FilePath 'powershell.exe' -ArgumentList $args -Wait -PassThru
-  exit $p.ExitCode
+  Ensure-SilentTask
+
+  $code=Run-Worker $workerLocal $true
+  exit $code
 }catch{
   Write-Log "BOOTSTRAP ERROR: $($_.Exception.Message)"
   $fallback=Join-Path $Bin 'TradeZone_UpdateWorker.ps1'
   if(Test-Path $fallback){
-    Unblock-File -LiteralPath $fallback -ErrorAction SilentlyContinue
-    $args=@('-NoProfile','-File',$fallback)
-    if($Interactive){$args+='-Interactive'}
-    if($Force){$args+='-Force'}
-    $p=Start-Process -FilePath 'powershell.exe' -ArgumentList $args -Wait -PassThru
-    exit $p.ExitCode
+    Write-Log 'Using last verified local worker as fallback.'
+    $code=Run-Worker $fallback $true
+    exit $code
   }
   exit 1
 }finally{
