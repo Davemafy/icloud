@@ -1,41 +1,60 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.1.1",
+  "release": "6.2.0",
   "repository": "Davemafy/icloud",
   "ref": "main",
-  "data_bridge_version": "1.31",
-  "sequence_ea_version": "3.21",
-  "updater_min_version": "2.5.0",
+  "data_bridge_version": "1.32",
+  "sequence_ea_version": "3.22",
+  "updater_min_version": "2.6.0",
   "update_latency_seconds": 10,
   "channel_features": [
     "expert_sources",
     "support_files",
     "sha256_verification",
     "continuous_background_watch",
-    "safe_hot_reload_slots",
-    "local_status",
+    "github_installed_running_version_truth",
+    "persistent_sequence_state",
+    "safe_auto_reload",
+    "no_force_kill",
     "paper_journal_telemetry",
     "journal_csv_export",
-    "system_health_panel"
+    "component_health_panel"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
       "target_name": "InstitutionalSMC_DataBridge_v1_30_XAU_DXY.mq5",
-      "hot_reload_safe": true,
-      "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
+      "requires_reload": true,
+      "sha256": "e1f9c0c68e7e9ea095fd356d33f5358d6d66eafac37c08dccb494871090684d0"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_22_AutoState_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_22_AutoState_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
-      "hot_reload_safe": false,
-      "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
+      "requires_reload": true,
+      "sha256": "f03d6fc28d8b2bab461fdb00ee32ec7a7c1915b53b59e738a155dd7091b0f618"
     }
   ],
-  "support_files": []
+  "support_files": [
+    {
+      "role": "data_bridge_core",
+      "name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
+      "target": "Include\\TradeZoneCore",
+      "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
+      "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
+    },
+    {
+      "role": "sequence_core",
+      "name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "target": "Include\\TradeZoneCore",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
+    }
+  ]
 }
