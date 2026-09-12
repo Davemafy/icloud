@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updater_version": "2.6.0",
+  "updater_version": "2.7.0",
   "bootstrap_version": "1.2.0",
   "worker": {
     "name": "TradeZone_UpdateWorker.ps1",
     "path": "mt5/updater/TradeZone_UpdateWorker.ps1",
-    "sha256": "871fe6a8359cf1b79be892df4247be9966a2b6699363f883d8864f5386a615c9"
+    "sha256": "252f42cbdc627cb4905a2ff63c789bb3f755f7b7b1eba12f6374da8ac3b795ed"
   },
   "bootstrap": {
     "name": "TradeZone_UpdateBootstrap.ps1",
