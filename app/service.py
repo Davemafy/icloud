@@ -7,6 +7,7 @@ from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
 from .engine import build_analysis
 from .execution_models import build_execution_overlay, regime_brief
+from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 
 
@@ -18,7 +19,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     a = build_analysis(s, now)
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
-    a.prompt_version = "SMC_V6_3_REGIME_MULTIMODEL"
+    a.prompt_version = "SMC_V6_4_ML_DATA_FOUNDATION"
     a.trader_brief += " " + regime_brief(overlay)
     try:
         ok, summary, risks, provider = await validate_with_ai(a, s)
@@ -39,7 +40,12 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             a.approved = False
             a.guards.append("AI_PROVIDER_UNAVAILABLE")
     save_analysis(a)
-    audit(now, "analysis.completed", f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} regime={overlay['regime']['name']}")
+    if SETTINGS.ml_data_enabled:
+        try:
+            capture_cloud_candidates(a, s, reason)
+        except Exception as exc:
+            audit(now, "ml.cloud.error", f"reason={reason} analysis_id={a.analysis_id} error={type(exc).__name__}:{exc}")
+    audit(now, "analysis.completed", f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}")
     return a
 
 
