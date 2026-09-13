@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from .ai import validate_with_ai
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
-from .engine import build_analysis
+from .intraday_engine import build_analysis
 from .execution_models import build_execution_overlay, regime_brief
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
@@ -19,7 +19,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     a = build_analysis(s, now)
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
-    a.prompt_version = "SMC_V6_4_ML_DATA_FOUNDATION"
+    a.prompt_version = "SMC_V6_4_INTRADAY_ZONE_HIERARCHY"
     a.trader_brief += " " + regime_brief(overlay)
     try:
         ok, summary, risks, provider = await validate_with_ai(a, s)
