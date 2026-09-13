@@ -28,7 +28,7 @@ def _i(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
-    app_version: str = os.getenv("APP_VERSION", "6.3.0")
+    app_version: str = os.getenv("APP_VERSION", "6.4.0")
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -55,6 +55,15 @@ class Settings:
     ai_compat_url: str = os.getenv("AI_COMPAT_URL", "")
     ai_compat_key: str = os.getenv("AI_COMPAT_KEY", "")
     ai_compat_model: str = os.getenv("AI_COMPAT_MODEL", "")
+
+    # V6.4 ML data foundation. Data collection/shadow labels only: no model can
+    # authorize trades, alter lot size, move stops, or bypass deterministic guards.
+    ml_data_enabled: bool = _b("ML_DATA_ENABLED", True)
+    ml_max_cloud_zones_per_analysis: int = _i("ML_MAX_CLOUD_ZONES_PER_ANALYSIS", 24)
+    ml_max_open_candidates_per_mark: int = _i("ML_MAX_OPEN_CANDIDATES_PER_MARK", 2500)
+    ml_max_label_hours: int = _i("ML_MAX_LABEL_HOURS", 24)
+    ml_dataset_export_limit: int = _i("ML_DATASET_EXPORT_LIMIT", 100000)
+    ml_min_resolved_for_training: int = _i("ML_MIN_RESOLVED_FOR_TRAINING", 1000)
 
     # Core/zone quality.
     zone_retire_touch_count: int = _i("ZONE_RETIRE_TOUCH_COUNT", 2)
