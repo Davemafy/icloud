@@ -16,6 +16,11 @@
 
 #define ML24_VERSION "3.24"
 
+input group "V6.4 ML Observer Cloud"
+input string ObserverCloudBaseUrl="https://icloud-production-9111.up.railway.app";
+input string ObserverCloudApiKey="123";
+
+input group "V6.4 ML Observation"
 input bool EnableMLObservation=true;
 input bool ObserveRejectedCandidates=true;
 input int RejectedSampleEveryBars=1;
@@ -23,6 +28,8 @@ input int ObservationLookbackBars=120;
 input double ObservationZoneDistanceATR=1.50;
 input int ObserverPollSeconds=15;
 input int ObserverHttpTimeoutMs=2500;
+
+input group "V6.3 Execution Models (Observation Only)"
 input bool EnableAlternativePrimary=true;
 input bool EnableMomentumPullbackModel=true;
 input bool EnableVWAPProxyModel=true;
