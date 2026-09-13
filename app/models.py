@@ -166,3 +166,29 @@ class Feedback(BaseModel):
     zone_id: str = ""
     price: float = 0.0
     details: Any = Field(default_factory=dict)
+
+
+class MLCandidateTelemetry(BaseModel):
+    """Frozen candidate-time feature packet from MT5 execution engines.
+
+    This is observation/shadow telemetry only. It never authorizes a trade, changes
+    risk, or replaces the deterministic SMC/ICT execution and safety gates.
+    """
+    candidate_id: str = ""
+    ts: int
+    source: str = "MT5_EXECUTION"
+    source_version: str = ""
+    analysis_id: str = ""
+    zone_id: str = ""
+    model: str
+    direction: Direction
+    eligible: bool = True
+    rejection_reasons: List[str] = Field(default_factory=list)
+    entry_price: float = 0.0
+    stop_price: float = 0.0
+    target1: float = 0.0
+    target2: float = 0.0
+    target3: float = 0.0
+    atr: float = 0.0
+    regime: str = "UNKNOWN"
+    features: Dict[str, Any] = Field(default_factory=dict)
