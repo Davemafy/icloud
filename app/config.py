@@ -34,13 +34,15 @@ class Settings:
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
     paper_only: bool = _b("PAPER_ONLY", True)
 
-    # Analysis schedule. Existing session checkpoints are preserved. The weekly
-    # opening checkpoint replaces the Monday daily-open duplicate at the same time.
+    # Existing intraday checkpoints remain unchanged. Opening checkpoints below
+    # are aligned to Deriv XAUUSD hours (GMT) but expressed in Africa/Lagos WAT.
+    # Deriv XAUUSD: week open Sun 22:10 GMT; Mon-Thu daily reopen 22:05 GMT.
+    # We schedule one minute after each open so the bridge can publish a fresh tick.
     session_analysis_times: str = os.getenv("SESSION_ANALYSIS_TIMES", "07:50,12:50,15:20")
-    trading_day_open_time: str = os.getenv("TRADING_DAY_OPEN_TIME", "00:05")
-    trading_day_weekdays: str = os.getenv("TRADING_DAY_WEEKDAYS", "0,1,2,3,4")
-    week_open_weekday: int = _i("WEEK_OPEN_WEEKDAY", 0)
-    week_open_time: str = os.getenv("WEEK_OPEN_TIME", "00:05")
+    trading_day_open_time: str = os.getenv("TRADING_DAY_OPEN_TIME", "23:06")
+    trading_day_weekdays: str = os.getenv("TRADING_DAY_WEEKDAYS", "0,1,2,3")
+    week_open_weekday: int = _i("WEEK_OPEN_WEEKDAY", 6)
+    week_open_time: str = os.getenv("WEEK_OPEN_TIME", "23:11")
     scheduler_poll_seconds: int = _i("SCHEDULER_POLL_SECONDS", 20)
     plan_refresh_minutes: int = _i("PLAN_REFRESH_MINUTES", 180)
 
