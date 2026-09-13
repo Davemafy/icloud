@@ -8,6 +8,11 @@
   "sequence_ea_version": "3.23",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
+  "demo_defaults": {
+    "cloud_base_url": "https://icloud-production-9111.up.railway.app",
+    "cloud_api_key": "123",
+    "paper_only": true
+  },
   "channel_features": [
     "expert_sources",
     "support_files",
@@ -28,7 +33,8 @@
     "accepted_zone_flip",
     "week_open_analysis",
     "trading_day_open_analysis",
-    "front_facing_versioned_ea_names"
+    "front_facing_versioned_ea_names",
+    "demo_cloud_defaults"
   ],
   "files": [
     {
