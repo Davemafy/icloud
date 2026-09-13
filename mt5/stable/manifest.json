@@ -27,14 +27,15 @@
     "opening_range_retest",
     "accepted_zone_flip",
     "week_open_analysis",
-    "trading_day_open_analysis"
+    "trading_day_open_analysis",
+    "front_facing_versioned_ea_names"
   ],
   "files": [
     {
       "role": "data_bridge",
       "name": "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_30_XAU_DXY.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
       "requires_reload": true,
       "sha256": "e1f9c0c68e7e9ea095fd356d33f5358d6d66eafac37c08dccb494871090684d0"
     },
@@ -42,7 +43,7 @@
       "role": "sequence_ea",
       "name": "InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
       "requires_reload": true,
       "sha256": "f45417ee1b6ecf778826738b476f62c2e2c5119e02f32456bbd797e7491e7aaf"
     }
