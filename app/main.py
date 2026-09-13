@@ -46,10 +46,8 @@ def home():
 
 @app.get("/health")
 def health():
-    s = latest_snapshot()
-    a = active_analysis()
-    sys = system_status()
-    return {"ok": True, "app": SETTINGS.app_name, "version": SETTINGS.app_version, "protocol": SETTINGS.protocol_version, "paper_only": SETTINGS.paper_only, "snapshot_ready": bool(s and s.complete()), "latest_snapshot": s.sent_at if s else None, "active_analysis": a.analysis_id if a else None, "scheduler": scheduler_status(), "execution_contract": "V6_PRIMARY_REENTRY_FLIP_THESIS_RISK", "journal_sync": "V3_COMPONENT_TRUTH_SAFE_RELOAD", "components": sys.get("components", {}), "auth_required": True}
+    s = latest_snapshot(); a = active_analysis(); sys = system_status()
+    return {"ok": True, "app": SETTINGS.app_name, "version": SETTINGS.app_version, "protocol": SETTINGS.protocol_version, "paper_only": SETTINGS.paper_only, "snapshot_ready": bool(s and s.complete()), "latest_snapshot": s.sent_at if s else None, "active_analysis": a.analysis_id if a else None, "scheduler": scheduler_status(), "execution_contract": "V6_3_SMC_LOCATION_REGIME_MULTIMODEL", "journal_sync": "V3_COMPONENT_TRUTH_SAFE_RELOAD", "components": sys.get("components", {}), "auth_required": True}
 
 
 @app.post("/market/snapshot", dependencies=[Depends(require_api_key)])
@@ -70,12 +68,46 @@ def feedback(f: Feedback):
     return {"ok": True, "journal_event": True, "journal_sync": "v3"}
 
 
+def _append_multimodel_plan(text: str, a) -> str:
+    policy = a.execution_policy if a else {}
+    mm = policy.get("multi_model", {}) if isinstance(policy, dict) else {}
+    regime = mm.get("regime", {}) if isinstance(mm, dict) else {}
+    models = mm.get("models", {}) if isinstance(mm, dict) else {}
+    params = mm.get("parameters", {}) if isinstance(mm, dict) else {}
+    rules = mm.get("rules", {}) if isinstance(mm, dict) else {}
+    def flag(name: str) -> str: return "1" if bool(models.get(name, False)) else "0"
+    extra = {
+        "execution_contract_v63": str(mm.get("contract", "V6_3_SMC_LOCATION_REGIME_MULTIMODEL")),
+        "analysis_reason": str(mm.get("analysis_reason", "")),
+        "market_regime": str(regime.get("name", "UNKNOWN")),
+        "market_regime_direction": str(regime.get("direction", "NEUTRAL")),
+        "market_regime_confidence": str(regime.get("confidence", 0.0)),
+        "market_volatility_ratio": str(regime.get("volatility_ratio", 0.0)),
+        "market_efficiency": str(regime.get("efficiency", 0.0)),
+        "vwap_proxy": str(regime.get("vwap_proxy", 0.0)),
+        "model_ict_sniper": flag("ict_sniper"),
+        "model_ict_deep_reentry": flag("ict_deep_reentry"),
+        "model_momentum_pullback": flag("momentum_pullback"),
+        "model_vwap_proxy_reclaim": flag("vwap_proxy_reclaim"),
+        "model_opening_range_retest": flag("opening_range_retest"),
+        "model_accepted_zone_flip": flag("accepted_zone_flip"),
+        "model_order_flow_imbalance": flag("order_flow_imbalance"),
+        "alt_primary_requires_zone_interaction": "1" if rules.get("alternative_primary_requires_recent_zone_interaction", True) else "0",
+        "momentum_retrace_min": str(params.get("momentum_retrace_min", 0.30)),
+        "momentum_retrace_max": str(params.get("momentum_retrace_max", 0.60)),
+        "vwap_band_atr": str(params.get("vwap_band_atr", 0.15)),
+        "opening_range_minutes": str(params.get("opening_range_minutes", 30)),
+        "alt_model_risk_multiplier": str(params.get("alternate_model_risk_multiplier", 0.75)),
+    }
+    return text + "".join(f"{k}={v}\n" for k, v in extra.items())
+
+
 @app.get("/mt5/plan", response_class=PlainTextResponse, dependencies=[Depends(require_api_key)])
 def mt5_plan():
     a = active_analysis(); s = latest_snapshot()
     if a is None:
         return PlainTextResponse("protocol=6\nea_mode=NO_TRADE\nreason=NO_ANALYSIS\n", status_code=200)
-    text = active_plan_text(a, s)
+    text = _append_multimodel_plan(active_plan_text(a, s), a)
     if s:
         now = int(datetime.now(timezone.utc).timestamp()); age = now - s.sent_at; extra = []
         if age > SETTINGS.max_snapshot_age_seconds: extra.append("LIVE_SNAPSHOT_STALE")
