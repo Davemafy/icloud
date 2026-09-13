@@ -5,11 +5,23 @@ string ML24_ReadState(string key){int h=FileOpen("TradeZone\\sequence_state.txt"
 int ML24_StateInt(string key){string v=ML24_ReadState(key);return v==""?-1:(int)StringToInteger(v);}
 void ML24_AddReason(string &csv,string reason){if(reason=="")return;if(csv!="")csv+=",";csv+="\""+ML24_Escape(reason)+"\"";}
 
+bool ML24_Get(string path,string &response)
+{
+   if(ObserverCloudApiKey=="")return false;
+   string url=ObserverCloudBaseUrl+path;
+   string headers="X-API-Key: "+ObserverCloudApiKey+"\r\nAccept: text/plain\r\n";
+   char data[],result[];string rh;
+   ResetLastError();int code=WebRequest("GET",url,headers,ObserverHttpTimeoutMs,data,result,rh);
+   response=CharArrayToString(result,0,-1,CP_UTF8);
+   if(code!=200){ml24_post_errors++;Print("ML24 GET failed HTTP=",code," err=",GetLastError()," path=",path," body=",response);return false;}
+   return true;
+}
+
 bool ML24_Post(string path,string body,string &response)
 {
-   if(CloudApiKey=="")return false;
-   string url=CloudBaseUrl+path;
-   string headers="Content-Type: application/json\r\nX-API-Key: "+CloudApiKey+"\r\n";
+   if(ObserverCloudApiKey=="")return false;
+   string url=ObserverCloudBaseUrl+path;
+   string headers="Content-Type: application/json\r\nX-API-Key: "+ObserverCloudApiKey+"\r\n";
    char data[],result[];string rh;
    StringToCharArray(body,data,0,WHOLE_ARRAY,CP_UTF8);if(ArraySize(data)>0)ArrayResize(data,ArraySize(data)-1);
    ResetLastError();int code=WebRequest("POST",url,headers,ObserverHttpTimeoutMs,data,result,rh);
@@ -23,7 +35,7 @@ bool ML24_RefreshContext(bool force=false)
    datetime now=TimeCurrent();
    if(!force && now-ml24_last_plan_poll<MathMax(5,ObserverPollSeconds) && g_plan.valid)return true;
    ml24_last_plan_poll=now;
-   string text;if(!HttpGet("/mt5/plan",text)){ml24_profile_ready=false;return false;}
+   string text;if(!ML24_Get("/mt5/plan",text)){ml24_profile_ready=false;return false;}
    Plan p;ZeroMemory(p);if(!ParsePlanText(text,p)){ml24_profile_ready=false;g_plan.valid=false;return false;}
    if(p.analysis_id!=g_lastAnalysis){g_lastAnalysis=p.analysis_id;ResetPlanState();ml24_last_bar=0;}
    g_plan=p;
