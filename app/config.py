@@ -28,14 +28,19 @@ def _i(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
-    app_version: str = os.getenv("APP_VERSION", "6.2.0")
+    app_version: str = os.getenv("APP_VERSION", "6.3.0")
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
     paper_only: bool = _b("PAPER_ONLY", True)
 
-    # Analysis schedule. Comma-separated local times.
+    # Analysis schedule. Existing session checkpoints are preserved. The weekly
+    # opening checkpoint replaces the Monday daily-open duplicate at the same time.
     session_analysis_times: str = os.getenv("SESSION_ANALYSIS_TIMES", "07:50,12:50,15:20")
+    trading_day_open_time: str = os.getenv("TRADING_DAY_OPEN_TIME", "00:05")
+    trading_day_weekdays: str = os.getenv("TRADING_DAY_WEEKDAYS", "0,1,2,3,4")
+    week_open_weekday: int = _i("WEEK_OPEN_WEEKDAY", 0)
+    week_open_time: str = os.getenv("WEEK_OPEN_TIME", "00:05")
     scheduler_poll_seconds: int = _i("SCHEDULER_POLL_SECONDS", 20)
     plan_refresh_minutes: int = _i("PLAN_REFRESH_MINUTES", 180)
 
