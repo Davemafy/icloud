@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import SETTINGS
 from .db import recent_feedback, latest_heartbeats, latest_snapshot
+from .ml_foundation import ml_status
 
 _STABLE_URL = "https://raw.githubusercontent.com/Davemafy/icloud/main/mt5/stable/manifest.json"
 _manifest_cache: dict[str, Any] = {"at": 0.0, "value": None}
@@ -155,7 +156,7 @@ def _stable_manifest() -> dict:
     if cached and now - float(_manifest_cache.get("at") or 0.0) < 30:
         return cached
     try:
-        req = urllib.request.Request(_STABLE_URL, headers={"User-Agent": "TradeZoneCloud/6.2"})
+        req = urllib.request.Request(_STABLE_URL, headers={"User-Agent": "TradeZoneCloud/6.4"})
         with urllib.request.urlopen(req, timeout=4) as resp:
             value = json.loads(resp.read().decode("utf-8"))
         if isinstance(value, dict):
@@ -305,6 +306,12 @@ def system_status() -> dict:
             }
         )
 
+    try:
+        ml = ml_status()
+    except Exception as exc:
+        ml = {"enabled": SETTINGS.ml_data_enabled, "mode": "ERROR", "error": f"{type(exc).__name__}:{exc}"}
+        alerts.append({"level": "AMBER", "code": "ML_DATA_FOUNDATION_ERROR", "message": "ML data collector status could not be read."})
+
     return {
         "cloud_version": SETTINGS.app_version,
         "paper_only": SETTINGS.paper_only,
@@ -312,6 +319,7 @@ def system_status() -> dict:
         "spread_points": s.spread_points if s else None,
         "heartbeats": hbs,
         "components": comp,
+        "ml": ml,
         "alerts": alerts,
         "healthy": not any(a["level"] == "RED" for a in alerts),
     }
