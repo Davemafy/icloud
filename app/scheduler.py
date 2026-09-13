@@ -44,14 +44,14 @@ def _trading_weekdays() -> set[int]:
                 out.add(x)
         except Exception:
             continue
-    return out or {0, 1, 2, 3, 4}
+    return out or {0, 1, 2, 3}
 
 
 def scheduler_status() -> dict:
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     now = datetime.now(tz)
-    day_open = _parse_hhmm(SETTINGS.trading_day_open_time, (0, 5))
-    week_open = _parse_hhmm(SETTINGS.week_open_time, (0, 5))
+    day_open = _parse_hhmm(SETTINGS.trading_day_open_time, (23, 6))
+    week_open = _parse_hhmm(SETTINGS.week_open_time, (23, 11))
     return {
         "timezone": SETTINGS.timezone_name,
         "timezone_resolved": str(tz),
@@ -69,8 +69,8 @@ def _due_reasons(now_local: datetime) -> list[str]:
     reasons: list[str] = []
 
     week_day = max(0, min(6, SETTINGS.week_open_weekday))
-    week_h, week_m = _parse_hhmm(SETTINGS.week_open_time, (0, 5))
-    day_h, day_m = _parse_hhmm(SETTINGS.trading_day_open_time, (0, 5))
+    week_h, week_m = _parse_hhmm(SETTINGS.week_open_time, (23, 11))
+    day_h, day_m = _parse_hhmm(SETTINGS.trading_day_open_time, (23, 6))
     trading_days = _trading_weekdays()
 
     is_week_open = (
