@@ -1,26 +1,33 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.2.0",
+  "release": "6.3.0",
   "repository": "Davemafy/icloud",
-  "ref": "main",
+  "ref": "8a8d7fbaf2614480eb594f7872f8b18602a81a43",
   "data_bridge_version": "1.32",
-  "sequence_ea_version": "3.22",
+  "sequence_ea_version": "3.23",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "channel_features": [
     "expert_sources",
     "support_files",
     "sha256_verification",
-    "continuous_background_watch",
+    "manual_update_compatible",
     "github_installed_running_version_truth",
     "persistent_sequence_state",
-    "safe_auto_reload",
-    "first_transition_auto_activation",
-    "no_force_kill",
     "paper_journal_telemetry",
     "journal_csv_export",
-    "component_health_panel"
+    "component_health_panel",
+    "smc_location_authority",
+    "market_regime_classifier",
+    "ict_sniper",
+    "ict_deep_reentry",
+    "momentum_pullback",
+    "vwap_tick_volume_proxy_reclaim",
+    "opening_range_retest",
+    "accepted_zone_flip",
+    "week_open_analysis",
+    "trading_day_open_analysis"
   ],
   "files": [
     {
@@ -33,11 +40,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_22_AutoState_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_22_AutoState_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
       "requires_reload": true,
-      "sha256": "f03d6fc28d8b2bab461fdb00ee32ec7a7c1915b53b59e738a155dd7091b0f618"
+      "sha256": "f4e67f2692ed1ae433d75c70a645f9b40c967ed7626b5d6df9d53e0741bec844"
     }
   ],
   "support_files": [
