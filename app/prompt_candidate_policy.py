@@ -78,7 +78,8 @@ def build_prompt_candidates(snapshot: MarketSnapshot) -> list[Candidate]:
 
 
 def install_prompt_candidate_policy() -> None:
-    """Install the prompt-guided candidate builder for cloud analysis only."""
-    from . import intraday_engine
+    """Install the prompt-guided candidate builder across cloud analysis modules."""
+    from . import institutional_two_zone, intraday_engine
 
     intraday_engine.build_candidates = build_prompt_candidates
+    institutional_two_zone.build_candidates = build_prompt_candidates
