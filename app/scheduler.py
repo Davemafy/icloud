@@ -6,11 +6,11 @@ from typing import Awaitable, Callable
 
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
+from .institutional_two_zone import primary_zone_interacting
 from .timezones import safe_zoneinfo
-from .watch_ready import watch_zone_ready
 
 _last_keys: set[str] = set()
-_watch_interaction_latch: set[str] = set()
+_zone_interaction_latch: set[str] = set()
 _last_snapshot_seen: int = 0
 
 
@@ -65,8 +65,8 @@ def scheduler_status() -> dict:
         "week_open_weekday": max(0, min(6, SETTINGS.week_open_weekday)),
         "week_open_time": f"{week_open[0]:02d}:{week_open[1]:02d}",
         "poll_seconds": SETTINGS.scheduler_poll_seconds,
-        "snapshot_watch_refresh": bool(SETTINGS.paper_only),
-        "watch_latch_count": len(_watch_interaction_latch),
+        "snapshot_primary_zone_refresh": bool(SETTINGS.paper_only),
+        "primary_zone_latch_count": len(_zone_interaction_latch),
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
@@ -120,13 +120,17 @@ def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
     return age <= SETTINGS.max_snapshot_age_seconds
 
 
-def _watch_ids(snap) -> set[str]:
+def _interaction_ids(snap) -> set[str]:
     if not SETTINGS.paper_only:
         return set()
     a = latest_analysis(ai_required=False)
-    if a is None or a.selected_zone_id:
+    if a is None:
         return set()
-    return {z.zone_id for z in a.zones if watch_zone_ready(z, snap)}
+    return {
+        z.zone_id
+        for z in a.zones
+        if primary_zone_interacting(z, snap)
+    }
 
 
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
@@ -165,14 +169,14 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                 and int(snap.sent_at) != _last_snapshot_seen
             ):
                 _last_snapshot_seen = int(snap.sent_at)
-                current_ids = _watch_ids(snap)
-                new_ids = current_ids - _watch_interaction_latch
-                _watch_interaction_latch.clear()
-                _watch_interaction_latch.update(current_ids)
+                current_ids = _interaction_ids(snap)
+                new_ids = current_ids - _zone_interaction_latch
+                _zone_interaction_latch.clear()
+                _zone_interaction_latch.update(current_ids)
                 if new_ids:
-                    names = ",".join(sorted(new_ids)[:3])
-                    audit(now_utc, "scheduler.watch_refresh", f"snapshot={snap.sent_at} zones={names}")
-                    await run_analysis(f"WATCH_CORE_REFRESH:{names}")
+                    names = ",".join(sorted(new_ids)[:2])
+                    audit(now_utc, "scheduler.primary_zone_refresh", f"snapshot={snap.sent_at} zones={names}")
+                    await run_analysis(f"PRIMARY_ZONE_REFRESH:{names}")
                     ran_analysis = True
 
             if len(_last_keys) > 300:
