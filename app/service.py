@@ -10,7 +10,7 @@ from .institutional_two_zone import build_prompt_analysis
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
-from .prompt_intraday_selection import install_prompt_intraday_selection
+from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_runtime_policy import (
     install_prompt_market_side_policy,
@@ -25,6 +25,25 @@ install_prompt_market_side_policy()
 install_prompt_intraday_selection()
 
 
+def _stamp_prompt_selection_contract(a: Analysis) -> None:
+    policy = dict(a.execution_policy or {})
+    zone_map = dict(policy.get("public_zone_map") or {})
+    zone_map["prompt_contract_ref"] = PROMPT_SELECTION_CONTRACT
+    zone_map["selection_priority"] = [
+        "STRUCTURAL_VALIDITY",
+        "A_OR_A_PLUS_EXECUTION_TIER",
+        "CORRECT_SIDE_OF_CURRENT_PRICE",
+        "INTRADAY_REACHABILITY",
+        "FRESHNESS",
+        "GRADE",
+        "HTF_AUTHORITY",
+        "CONFLUENCE_QUALITY",
+    ]
+    zone_map["nearer_valid_a_zone_can_outrank_remote_fresher_a_zone"] = True
+    policy["public_zone_map"] = zone_map
+    a.execution_policy = policy
+
+
 async def run_analysis(reason: str = "MANUAL") -> Analysis:
     s = latest_snapshot()
     if s is None:
@@ -35,6 +54,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     a = build_prompt_analysis(s, now)
     # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
     apply_prompt_confirmation_contract(a, s)
+    _stamp_prompt_selection_contract(a)
     primary_zones = list(a.zones)
 
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
