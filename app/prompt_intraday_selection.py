@@ -3,7 +3,7 @@ from __future__ import annotations
 from .engine import atr
 from .models import Grade, MarketSnapshot, Zone
 
-PROMPT_SELECTION_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V655"
+PROMPT_SELECTION_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V656"
 
 
 def _distance(price: float, low: float, high: float) -> float:
