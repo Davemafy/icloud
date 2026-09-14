@@ -7,7 +7,11 @@ from typing import Awaitable, Callable
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_interacting
+from .prompt_candidate_policy import install_prompt_candidate_policy
 from .timezones import safe_zoneinfo
+
+# Analysis-source policy only. Install before any scheduled/startup analysis runs.
+install_prompt_candidate_policy()
 
 _last_keys: set[str] = set()
 _zone_interaction_latch: set[str] = set()
