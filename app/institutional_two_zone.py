@@ -64,6 +64,30 @@ def _required_liquidity_kind(direction: Direction) -> str:
     return "BSL" if direction == Direction.SELL else "SSL"
 
 
+def _conceptual_confluence_count(confluences) -> int:
+    groups = set()
+    for raw in confluences:
+        c = str(raw or "").upper()
+        if not c:
+            continue
+        if c in {"LIQUIDITY_IN_MARKED_ZONE", "BSL_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE",
+                 "RESTING_LIQUIDITY", "EXTERNAL_LIQUIDITY_ADJACENCY"}:
+            groups.add("LIQUIDITY")
+        elif "DISPLACEMENT" in c and "FVG" not in c:
+            groups.add("DISPLACEMENT")
+        elif "FVG" in c:
+            groups.add("FVG")
+        elif c in {"HTF_OVERLAP", "H4_PARENT_AUTHORITY"}:
+            groups.add("HTF_LOCATION")
+        elif c == "PREMIUM_DISCOUNT_EXTREMITY":
+            groups.add("PREMIUM_DISCOUNT")
+        elif c in {"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE", "SINGLE_REACTION_STILL_VALID"}:
+            continue
+        else:
+            groups.add(c)
+    return len(groups)
+
+
 def _attached_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot):
     """Return the required BSL/SSL only when it belongs to the marked zone area.
 
@@ -173,7 +197,7 @@ def _attach_liquidity_to_marked_zone(zone: Zone, level, s: MarketSnapshot) -> bo
     conf = set(zone.confluences)
     conf.update({"LIQUIDITY_IN_MARKED_ZONE", f"{kind}_IN_MARKED_ZONE"})
     zone.confluences = sorted(conf)
-    zone.independent_confluence_count = len(conf)
+    zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
     zone.notes = [
         n for n in zone.notes
         if not str(n).startswith("attached_liquidity:")
@@ -258,8 +282,6 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         touches = _core_touches(zone, candidate, s)
         zone.touch_count = touches
 
-        # Prompt rule: strong zones are fresh. Two or more core visits are no longer
-        # eligible for the primary institutional map.
         if touches > MAX_PRIMARY_TOUCHES:
             continue
 
@@ -270,14 +292,11 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         if not _attach_liquidity_to_marked_zone(zone, attached, s):
             continue
 
-        # This is an intraday map, not a swing map. A structurally valid level that
-        # is too far away to be a realistic same-day destination stays context-only.
         h1a = max(float(s.atr_h1 or atr(s.xau_h1)), 1e-9)
         distance_h1_atr = _distance(float(s.mid), float(zone.zone_low), float(zone.zone_high)) / h1a
         if distance_h1_atr > MAX_PRIMARY_DISTANCE_H1_ATR:
             continue
 
-        # Legacy broad-envelope touch retirement must not kill a valid compact core.
         if zone.state == ZoneState.RETIRED and touches <= MAX_PRIMARY_TOUCHES:
             zone.state = ZoneState.ACTIVE
         zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
@@ -288,10 +307,11 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         displaced = "INSTITUTIONAL_DISPLACEMENT" in zone.confluences or strength >= 2.0
         if not displaced:
             continue
+        if float(zone.clear_run) <= 0:
+            continue
+        if _conceptual_confluence_count(zone.confluences) < 2:
+            continue
 
-        # Raw H4 parents are downgraded in the generic engine because they are broad.
-        # Here they may recover to A only when displacement + required in-zone
-        # liquidity + freshness all agree.
         if (
             candidate.source_tf in H4_PARENT_SOURCES
             and zone.grade not in {Grade.A_PLUS, Grade.A}
@@ -308,23 +328,14 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         if touches == 1:
             conf.add("SINGLE_REACTION_STILL_VALID")
         zone.confluences = sorted(conf)
-        zone.independent_confluence_count = len(conf)
+        zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
         pool.append(zone)
 
     return pool, cmap
 
 
 def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
-    """Expose one prompt-guided institutional SELL and one BUY zone.
-
-    Required qualification:
-    - exact displacement origin,
-    - active/fresh core with at most one mitigation,
-    - SELL contains attached BSL; BUY contains attached SSL,
-    - compact marked zone,
-    - A/A+ quality,
-    - H4/H4>H1 parent authority before H1 fallback.
-    """
+    """Expose one prompt-guided institutional SELL and one BUY zone."""
     if analysis is None:
         return []
 
@@ -358,8 +369,6 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     for zone in analysis.zones:
         _replace_readiness(zone, "INTERACTING" if zone in interacting else "ARMED")
 
-    # Keep a qualified primary map visible. ARMED is analysis-only; active_plan_text
-    # fails closed until interaction promotes the touched zone to M1_READY.
     if interacting:
         analysis.selected_zone_id = ""
     else:
