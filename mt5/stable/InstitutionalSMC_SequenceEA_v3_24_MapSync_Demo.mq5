@@ -40,7 +40,7 @@ void TZ24_RefreshCloudStatus(bool force=false)
    if(IsTester()||OperatingMode!=LIVE_CLOUD)return;
    datetime now=TimeTradeServer();
    if(now<=0)now=TimeCurrent();
-   int cadence=MathMax(5,PollSeconds);
+   int cadence=(int)MathMax(5,PollSeconds);
    if(!force && now-g_tz24LastStatusPoll<cadence)return;
    g_tz24LastStatusPoll=now;
 
