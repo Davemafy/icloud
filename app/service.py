@@ -7,6 +7,7 @@ from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
 from .intraday_engine import build_analysis
 from .execution_models import build_execution_overlay, regime_brief
+from .h4_liquidity_policy import apply_latest_h4_liquidity_policy
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .watch_ready import promote_watch_to_m1_ready
@@ -24,9 +25,14 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # core and M15 health is intact. The helper is a no-op outside paper mode.
     ready_zone = promote_watch_to_m1_ready(a, s)
 
+    # PAPER_ONLY H4 location rule: the latest still-unmitigated H4 parent on each
+    # side may be execution-qualified when resting distal liquidity is still
+    # present. This does not bypass AI, live-data, spread/news, or M1 confirmation.
+    h4_ready = apply_latest_h4_liquidity_policy(a, s)
+
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
-    a.prompt_version = "SMC_V6_4_4_PAPER_WATCH_M1_READY"
+    a.prompt_version = "SMC_V6_4_6_H4_LIQUIDITY_MAP_SYNC"
     a.trader_brief += " " + regime_brief(overlay)
     try:
         ok, summary, risks, provider = await validate_with_ai(a, s)
@@ -46,7 +52,8 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             now,
             "analysis.ai",
             f"reason={reason} provider={provider} approved={a.ai_approved} "
-            f"selected={selected} paper_m1_ready={bool(ready_zone)} risks={risks}",
+            f"selected={selected} paper_m1_ready={bool(ready_zone)} "
+            f"h4_liquidity_ready={len(h4_ready)} risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -68,6 +75,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
+        f"h4_liquidity_ready={len(h4_ready)} "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
