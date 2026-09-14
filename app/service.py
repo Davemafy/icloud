@@ -21,12 +21,12 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     now = int(datetime.now(timezone.utc).timestamp())
     a = build_analysis(s, now)
 
-    # PAPER_ONLY H4 parent qualification. One clean rejection may remain valid
-    # while resting liquidity remains and M15 has not accepted invalidation.
+    # Legacy H4 discovery still runs first, but the final public map below is
+    # authoritative and now requires the correct BSL/SSL inside the marked zone.
     h4_ready = apply_latest_h4_liquidity_policy(a, s)
 
     # Public map: one best institutional SELL and one best institutional BUY.
-    # The map is ARMED independently of the execution handoff.
+    # SELL must contain BSL; BUY must contain SSL; repeated mitigation is rejected.
     primary_zones = apply_two_zone_institutional_map(a, s)
 
     # PAPER_ONLY handoff: only the primary core price is actually interacting with
@@ -35,7 +35,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
 
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
-    a.prompt_version = "SMC_V6_4_8_PRIMARY_ARMED_MAP"
+    a.prompt_version = "SMC_V6_4_9_PROMPT_GUIDED_LIQUIDITY_ZONE"
     a.trader_brief += " " + regime_brief(overlay)
     try:
         ok, summary, risks, provider = await validate_with_ai(a, s)
@@ -46,8 +46,6 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             and a.selected_zone_id
             and ready_zone.zone_id == a.selected_zone_id
         )
-        # An ARMED zone is a visible institutional plan, not execution permission.
-        # AI execution approval is therefore only meaningful after M1_READY.
         a.ai_approved = bool(ok and execution_selected)
         if execution_selected:
             if summary:
@@ -55,12 +53,10 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         elif selected:
             a.trader_brief += " AI validation: primary plan ARMED; execution validation waits for core interaction/M1_READY."
         else:
-            a.trader_brief += " AI validation: two primary zones are ARMED; execution validation starts on core interaction."
+            a.trader_brief += " AI validation: no prompt-qualified primary zone is currently selected; execution waits."
         if risks:
             a.guards.extend([f"AI:{x}" for x in risks])
 
-        # Fail closed for execution while the selected public plan is merely ARMED.
-        # A fresh interaction analysis restores approval only after M1_READY and AI.
         if selected and not execution_selected:
             a.approved = False
         elif SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and execution_selected and not ok:
@@ -83,7 +79,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             if ready_zone is not None:
                 a.guards.append("AI_PROVIDER_UNAVAILABLE")
         else:
-            a.trader_brief += " AI validation unavailable; primary zones remain analysis-only ARMED locations."
+            a.trader_brief += " AI validation unavailable; prompt-qualified zones remain analysis-only locations."
     save_analysis(a)
     if SETTINGS.ml_data_enabled:
         try:

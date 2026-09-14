@@ -11,8 +11,12 @@ CORE_INTERACTION_BUFFER_M15_ATR = 0.30
 H4_ENVELOPE_HALF_M15_ATR = 0.60
 H4H1_ENVELOPE_HALF_M15_ATR = 0.40
 H1_ENVELOPE_HALF_M15_ATR = 0.25
+LIQUIDITY_ATTACH_MAX_M15_ATR = 0.60
+LIQUIDITY_EDGE_BUFFER_M15_ATR = 0.10
+MAX_MARKED_ZONE_WIDTH_M15_ATR = 3.00
+MAX_PRIMARY_DISTANCE_H1_ATR = 5.00
 H4_PARENT_SOURCES = {"H4", "H4>H1"}
-MAX_PRIMARY_PARENT_REACTIONS = 1
+MAX_PRIMARY_TOUCHES = 1
 
 
 def _readiness(zone: Zone) -> str:
@@ -47,20 +51,76 @@ def _candidate_rows(s: MarketSnapshot):
     return rows
 
 
-def _resting_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot) -> bool:
-    h1a = s.atr_h1 or atr(s.xau_h1)
-    h4a = atr(s.xau_h4)
-    cap = max(1e-9, min(1.50 * h1a, 0.75 * h4a))
-    mid = (float(zone.core_low) + float(zone.core_high)) / 2.0
-    if zone.original_direction == Direction.SELL:
-        return any(
-            level.price >= zone.core_high and level.price - mid <= cap
-            for level in analysis.liquidity_map
-        )
-    return any(
-        level.price <= zone.core_low and mid - level.price <= cap
-        for level in analysis.liquidity_map
-    )
+def _liquidity_kind(level) -> str:
+    label = str(getattr(level, "label", "") or "").upper()
+    if "BSL" in label:
+        return "BSL"
+    if "SSL" in label:
+        return "SSL"
+    return ""
+
+
+def _required_liquidity_kind(direction: Direction) -> str:
+    return "BSL" if direction == Direction.SELL else "SSL"
+
+
+def _conceptual_confluence_count(confluences) -> int:
+    groups = set()
+    for raw in confluences:
+        c = str(raw or "").upper()
+        if not c:
+            continue
+        if c in {"LIQUIDITY_IN_MARKED_ZONE", "BSL_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE",
+                 "RESTING_LIQUIDITY", "EXTERNAL_LIQUIDITY_ADJACENCY"}:
+            groups.add("LIQUIDITY")
+        elif "DISPLACEMENT" in c and "FVG" not in c:
+            groups.add("DISPLACEMENT")
+        elif "FVG" in c:
+            groups.add("FVG")
+        elif c in {"HTF_OVERLAP", "H4_PARENT_AUTHORITY"}:
+            groups.add("HTF_LOCATION")
+        elif c == "PREMIUM_DISCOUNT_EXTREMITY":
+            groups.add("PREMIUM_DISCOUNT")
+        elif c in {"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE", "SINGLE_REACTION_STILL_VALID"}:
+            continue
+        else:
+            groups.add(c)
+    return len(groups)
+
+
+def _attached_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot):
+    """Return the required BSL/SSL only when it belongs to the marked zone area.
+
+    SELL requires BSL in/at the upper half of the source area.
+    BUY requires SSL in/at the lower half of the source area.
+    A distant liquidity pool is a target/reference, not zone qualification.
+    """
+    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
+    attach = LIQUIDITY_ATTACH_MAX_M15_ATR * m15a
+    edge_tol = LIQUIDITY_EDGE_BUFFER_M15_ATR * m15a
+    lo, hi = sorted((float(zone.core_low), float(zone.core_high)))
+    mid = (lo + hi) / 2.0
+    required = _required_liquidity_kind(zone.original_direction)
+
+    levels = []
+    for level in analysis.liquidity_map:
+        if _liquidity_kind(level) != required:
+            continue
+        p = float(level.price)
+        if zone.original_direction == Direction.SELL:
+            if p < mid - edge_tol or p > hi + attach:
+                continue
+            distance = abs(p - hi)
+        else:
+            if p > mid + edge_tol or p < lo - attach:
+                continue
+            distance = abs(p - lo)
+        levels.append((distance, level))
+
+    if not levels:
+        return None
+    levels.sort(key=lambda row: row[0])
+    return levels[0][1]
 
 
 def _parent_ts(zone: Zone, candidate) -> int:
@@ -87,7 +147,7 @@ def _core_touches(zone: Zone, candidate, s: MarketSnapshot) -> int:
 
 
 def _compact_envelope(zone: Zone, s: MarketSnapshot) -> None:
-    """Keep liquidity as a qualification reference, never an envelope stretcher."""
+    """Create a compact source-candle envelope before liquidity attachment."""
     m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
     mid = (float(zone.core_low) + float(zone.core_high)) / 2.0
     if zone.source_tf == "H4":
@@ -104,35 +164,66 @@ def _compact_envelope(zone: Zone, s: MarketSnapshot) -> None:
         5,
     )
     zone.invalidation_rule = (
-        "M15 accepted body beyond compact institutional envelope: one >=60% body "
+        "M15 accepted body beyond prompt-guided institutional envelope: one >=60% body "
         "and >=0.40 ATR, or two closes each >=0.20 ATR. Wick-only does not invalidate."
     )
     zone.notes = [
         note for note in zone.notes
         if not str(note).startswith("m15_min_width_expansion:")
+        and not str(note).startswith("distal_liquidity:")
     ]
-    if "LIQUIDITY_REFERENCE_ONLY_DOES_NOT_STRETCH_ZONE" not in zone.notes:
-        zone.notes.append("LIQUIDITY_REFERENCE_ONLY_DOES_NOT_STRETCH_ZONE")
+
+
+def _attach_liquidity_to_marked_zone(zone: Zone, level, s: MarketSnapshot) -> bool:
+    """Include only the nearby required BSL/SSL in the marked area.
+
+    The zone is rejected if doing so would create a broad, non-intraday envelope.
+    """
+    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
+    buffer_price = LIQUIDITY_EDGE_BUFFER_M15_ATR * m15a
+    p = float(level.price)
+    low = min(float(zone.zone_low), p - buffer_price)
+    high = max(float(zone.zone_high), p + buffer_price)
+    if high - low > MAX_MARKED_ZONE_WIDTH_M15_ATR * m15a:
+        return False
+
+    zone.zone_low = round(low, 5)
+    zone.zone_high = round(high, 5)
+    zone.invalidation_level = round(
+        zone.zone_high if zone.original_direction == Direction.SELL else zone.zone_low,
+        5,
+    )
+    kind = _required_liquidity_kind(zone.original_direction)
+    conf = set(zone.confluences)
+    conf.update({"LIQUIDITY_IN_MARKED_ZONE", f"{kind}_IN_MARKED_ZONE"})
+    zone.confluences = sorted(conf)
+    zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
+    zone.notes = [
+        n for n in zone.notes
+        if not str(n).startswith("attached_liquidity:")
+    ]
+    zone.notes.append(
+        f"attached_liquidity:{kind}:{level.label}@{float(level.price):.5f}"
+    )
+    return True
 
 
 def _institutional_rank(zone: Zone, analysis: Analysis, s: MarketSnapshot, candidate) -> tuple:
     touches = int(zone.touch_count)
-    has_liq = _resting_liquidity(zone, analysis, s)
     parent = zone.source_tf in H4_PARENT_SOURCES
     strength = _max_strength(candidate)
     displaced = "INSTITUTIONAL_DISPLACEMENT" in zone.confluences or strength >= 2.0
+    has_fvg = "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences
 
-    # H4 parent authority is absolute over an H1-only fallback while the parent
-    # remains active. A single clean rejection remains valid; repeated visits do not.
-    if parent and has_liq and touches == 0:
+    if zone.source_tf == "H4>H1" and touches == 0:
         tier = 0
-    elif parent and has_liq and touches == 1:
+    elif zone.source_tf == "H4" and touches == 0:
         tier = 1
-    elif parent and touches <= MAX_PRIMARY_PARENT_REACTIONS:
+    elif parent and touches == 1:
         tier = 2
-    elif zone.source_tf == "H1" and has_liq and touches <= 1:
+    elif zone.source_tf == "H1" and touches == 0:
         tier = 3
-    elif zone.source_tf == "H1" and touches <= 1:
+    elif zone.source_tf == "H1" and touches == 1:
         tier = 4
     else:
         tier = 9
@@ -144,6 +235,7 @@ def _institutional_rank(zone: Zone, analysis: Analysis, s: MarketSnapshot, candi
         tier,
         tf_rank,
         0 if displaced else 1,
+        0 if has_fvg else 1,
         grade_rank,
         -float(zone.location_score),
         -strength,
@@ -157,6 +249,11 @@ def _interaction_now(zone: Zone, s: MarketSnapshot) -> bool:
     if not SETTINGS.paper_only or zone.state != ZoneState.ACTIVE:
         return False
     if zone.grade not in {Grade.A_PLUS, Grade.A}:
+        return False
+    if int(zone.touch_count) > MAX_PRIMARY_TOUCHES:
+        return False
+    conf = set(zone.confluences)
+    if "LIQUIDITY_IN_MARKED_ZONE" not in conf:
         return False
     state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
     if state != ZoneState.ACTIVE:
@@ -184,48 +281,61 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
 
         touches = _core_touches(zone, candidate, s)
         zone.touch_count = touches
+
+        if touches > MAX_PRIMARY_TOUCHES:
+            continue
+
         _compact_envelope(zone, s)
+        attached = _attached_liquidity(zone, analysis, s)
+        if attached is None:
+            continue
+        if not _attach_liquidity_to_marked_zone(zone, attached, s):
+            continue
 
-        parent = candidate.source_tf in H4_PARENT_SOURCES
-        has_liq = _resting_liquidity(zone, analysis, s)
+        h1a = max(float(s.atr_h1 or atr(s.xau_h1)), 1e-9)
+        distance_h1_atr = _distance(float(s.mid), float(zone.zone_low), float(zone.zone_high)) / h1a
+        if distance_h1_atr > MAX_PRIMARY_DISTANCE_H1_ATR:
+            continue
 
-        # A single H4 reaction is not the same as accepted invalidation. Revive a
-        # parent retired only by legacy touch/envelope logic, then let compact-envelope
-        # M15 acceptance decide whether the thesis actually failed.
-        if parent and touches <= MAX_PRIMARY_PARENT_REACTIONS and zone.state == ZoneState.RETIRED:
+        if zone.state == ZoneState.RETIRED and touches <= MAX_PRIMARY_TOUCHES:
             zone.state = ZoneState.ACTIVE
         zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
         if zone.state != ZoneState.ACTIVE:
             continue
 
-        if has_liq:
-            conf = set(zone.confluences)
-            conf.add("RESTING_LIQUIDITY")
-            zone.confluences = sorted(conf)
-            zone.independent_confluence_count = len(conf)
-
-        # Raw H4 parents are intentionally B+ in the generic intraday engine. For
-        # the primary map, an active H4 parent with resting liquidity and <=1 visit
-        # is an A location; M1 still decides whether a paper entry exists.
-        if parent and has_liq and touches <= MAX_PRIMARY_PARENT_REACTIONS:
-            if zone.grade not in {Grade.A_PLUS, Grade.A}:
-                zone.grade = Grade.A
-            conf = set(zone.confluences)
-            conf.add("H4_PARENT_AUTHORITY")
-            if touches == 1:
-                conf.add("SINGLE_REACTION_STILL_VALID")
-            zone.confluences = sorted(conf)
-            zone.independent_confluence_count = len(conf)
-
-        if zone.grade == Grade.REJECT:
+        strength = _max_strength(candidate)
+        displaced = "INSTITUTIONAL_DISPLACEMENT" in zone.confluences or strength >= 2.0
+        if not displaced:
             continue
+        if float(zone.clear_run) <= 0:
+            continue
+        if _conceptual_confluence_count(zone.confluences) < 2:
+            continue
+
+        if (
+            candidate.source_tf in H4_PARENT_SOURCES
+            and zone.grade not in {Grade.A_PLUS, Grade.A}
+        ):
+            zone.grade = Grade.A
+
+        if zone.grade not in {Grade.A_PLUS, Grade.A}:
+            continue
+
+        conf = set(zone.confluences)
+        conf.update({"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE"})
+        if candidate.source_tf in H4_PARENT_SOURCES:
+            conf.add("H4_PARENT_AUTHORITY")
+        if touches == 1:
+            conf.add("SINGLE_REACTION_STILL_VALID")
+        zone.confluences = sorted(conf)
+        zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
         pool.append(zone)
 
     return pool, cmap
 
 
 def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
-    """Expose one best institutional SELL and one best institutional BUY zone."""
+    """Expose one prompt-guided institutional SELL and one BUY zone."""
     if analysis is None:
         return []
 
@@ -259,10 +369,6 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     for zone in analysis.zones:
         _replace_readiness(zone, "INTERACTING" if zone in interacting else "ARMED")
 
-    # Keep one primary plan armed even before price reaches it so the journal and
-    # MT5 plan are never falsely empty. If either zone is actually interacting,
-    # clear the armed selection so the M1_READY handoff can give that touched zone
-    # authority on this same analysis pass.
     if interacting:
         analysis.selected_zone_id = ""
     else:
@@ -285,9 +391,14 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     for z in analysis.zones:
         role = "TREND" if not z.countertrend else "REVERSAL"
         state = _readiness(z)
+        kind = _required_liquidity_kind(z.original_direction)
+        attached_note = next(
+            (n for n in z.notes if str(n).startswith("attached_liquidity:")),
+            "",
+        )
         labels.append(
             f"{role} {z.original_direction.value}={z.zone_low:.2f}-{z.zone_high:.2f} "
-            f"({z.source_tf},{z.grade.value},{state},touches={z.touch_count})"
+            f"({z.source_tf},{z.grade.value},{state},touches={z.touch_count},{kind}=IN_ZONE)"
         )
         public[z.original_direction.value.lower()] = {
             "zone_id": z.zone_id,
@@ -299,13 +410,18 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
             "core_low": z.core_low,
             "core_high": z.core_high,
             "touches": z.touch_count,
+            "required_liquidity": kind,
+            "liquidity_in_zone": True,
+            "attached_liquidity": attached_note,
         }
 
     summary = "; ".join(labels) if labels else "none"
     analysis.trader_brief = (
-        f"D1 context={analysis.overall_bias.value}. Primary institutional map: {summary}. "
-        "H4/H4>H1 parent authority, displacement, premium/discount and resting liquidity "
-        "outrank proximity. One clean H4 rejection may remain valid; repeated mitigation or "
+        f"D1 context={analysis.overall_bias.value}. Prompt-guided primary map: {summary}. "
+        "SELL requires BSL inside the marked zone; BUY requires SSL inside the marked zone. "
+        "H4/H4>H1 parent authority, displacement, premium/discount and FVG quality outrank "
+        "mere proximity, but the zone must still be reachable within the intraday ATR map. "
+        "More than one core mitigation rejects the primary zone. "
         "M15 accepted invalidation removes it. M1 sweep/MSS/displacement/value confirmation "
         "remains mandatory."
     )
@@ -315,10 +431,14 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
         "map_count": len(analysis.zones),
         "max_zones": 2,
         "one_per_side": True,
+        "sell_requires_bsl_in_marked_zone": True,
+        "buy_requires_ssl_in_marked_zone": True,
+        "max_primary_touches": MAX_PRIMARY_TOUCHES,
+        "max_primary_distance_h1_atr": MAX_PRIMARY_DISTANCE_H1_ATR,
         "h4_parent_priority": True,
-        "one_clean_h4_reaction_allowed": True,
-        "resting_liquidity_qualifies_not_expands": True,
-        "core_mitigation_authoritative": True,
+        "resting_liquidity_must_be_attached": True,
+        "distant_liquidity_is_target_not_zone_qualification": True,
+        "compact_zone_required": True,
         "m15_accepted_invalidation_authoritative": True,
         "m1_confirmation_unchanged": True,
         **public,
