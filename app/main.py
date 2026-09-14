@@ -178,11 +178,7 @@ def _detail_value(raw):
 
 
 def _selected_zone(a):
-    """Return only the deterministic ACTIONABLE selection.
-
-    WATCH/CONTEXT zones remain visible in a.zones, but must never be promoted to
-    a journal trade plan merely because they are first in the display list.
-    """
+    """Return the selected public plan or M1-ready execution zone."""
     if a is None or not a.zones or not a.selected_zone_id:
         return None
     for z in a.zones:
@@ -191,7 +187,14 @@ def _selected_zone(a):
     return None
 
 
-def _event_status(events: list[dict], zone_state: str) -> str:
+def _readiness_prefix(z) -> str:
+    if z is None:
+        return ""
+    method = str(z.core_method or "")
+    return method.split("|", 1)[0] if "|" in method else method
+
+
+def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     names = [str(x.get("event", "")).upper() for x in events]
     if "TRADE_CLOSED" in names:
         return "CLOSED"
@@ -199,12 +202,18 @@ def _event_status(events: list[dict], zone_state: str) -> str:
         return "MANAGING"
     if "ENTRY_OPENED" in names:
         return "IN TRADE"
-    if not zone_state:
-        return "WAITING"
     if "FAILED_FLIP_CANDIDATE" in zone_state or any("FLIP_CANDIDATE" in n for n in names):
         return "FLIP CANDIDATE"
     if any(any(k in n for k in ("MSS", "BOS", "DISPLACEMENT", "SWEEP")) for n in names):
         return "M1 CONFIRMING"
+    if readiness == "M1_READY":
+        return "M1 READY"
+    if readiness == "INTERACTING":
+        return "INTERACTING"
+    if readiness == "ARMED":
+        return "ARMED"
+    if not zone_state:
+        return "WAITING"
     return "PLANNED"
 
 
@@ -212,6 +221,7 @@ def _journal_snapshot():
     a = active_analysis()
     s = latest_snapshot()
     z = _selected_zone(a)
+    readiness = _readiness_prefix(z)
     all_events = recent_feedback(500)
     analysis_id = a.analysis_id if a else ""
     zone_id = z.zone_id if z else ""
@@ -223,8 +233,6 @@ def _journal_snapshot():
             and (not e.get("zone_id") or e.get("zone_id") == zone_id)
         ][:80]
     else:
-        # Without an actionable selected zone there is no current execution
-        # timeline. Historical/watch telemetry must not make the journal look live.
         current_events = []
 
     for e in current_events:
@@ -240,6 +248,7 @@ def _journal_snapshot():
             "source_tf": z.source_tf,
             "grade": z.grade.value,
             "state": z.state.value,
+            "readiness": readiness,
             "core_low": z.core_low,
             "core_high": z.core_high,
             "core_method": z.core_method,
@@ -264,10 +273,12 @@ def _journal_snapshot():
 
     checks = {
         "fresh_zone": bool(z and z.touch_count <= 1),
+        "liquidity_in_marked_zone": bool(z and "LIQUIDITY_IN_MARKED_ZONE" in set(z.confluences)),
         "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
         "clear_run": bool(z and z.clear_run > 0),
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
         "grade_executable": bool(z and z.grade.value in {"A+", "A"}),
+        "m1_handoff_ready": bool(z and readiness == "M1_READY"),
         "live_data_safe": bool(
             s
             and s.spread_points <= SETTINGS.max_spread_points
@@ -294,7 +305,7 @@ def _journal_snapshot():
         } if s else None,
         "checks": checks,
         "readiness_score": f"{score}/{len(checks)}",
-        "status": _event_status(current_events, z.state.value if z else ""),
+        "status": _event_status(current_events, z.state.value if z else "", readiness),
         "events": current_events,
     }
 
