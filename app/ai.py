@@ -23,6 +23,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
     return {
         "analysis_id": a.analysis_id,
+        "current_mid": s.mid,
         "overall_bias": a.overall_bias.value,
         "primary_liquidity": a.primary_liquidity,
         "spread_points": s.spread_points,
@@ -50,9 +51,11 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             for z in a.zones
         ],
         "rules": {
+            "prompt_contract_ref": "ZONE_FORMATION_PROMPT_2026_09_14_V653",
             "no_future_leakage": True,
             "max_primary_zones": 2,
             "one_primary_zone_per_side": True,
+            "no_forced_second_zone": True,
             "d1_context_only": True,
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
@@ -66,12 +69,16 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "buy_requires_structural_ssl_inside_envelope": True,
             "sell_sweep_room_is_above_bsl": True,
             "buy_sweep_room_is_below_ssl": True,
+            "buy_zone_must_be_below_or_interacting_with_current_price": True,
+            "sell_zone_must_be_above_or_interacting_with_current_price": True,
+            "wrong_side_zone_is_rejected_not_flipped": True,
+            "intraday_reachability_ranks_valid_zones_only": True,
+            "remote_htf_zone_can_remain_context": True,
             "psy_level_alone_never_qualifies_zone": True,
             "liquidity_sweep_rejection_source_is_valid_htf_source": True,
             "displacement_bos_source_is_valid_htf_source": True,
             "fvg_is_quality_confluence_not_mandatory": True,
             "mitigation_count_affects_strength_and_grade": True,
-            "distance_is_not_a_hard_zone_filter": True,
             "m15_closed_body_acceptance_beyond_outer_envelope_invalidates": True,
             "wick_only_liquidity_raid_does_not_invalidate": True,
             "dxy_d1_h1_is_confirmation_not_zone_authority": True,
@@ -102,23 +109,34 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    50 pips of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
    structural SSL is physically inside the final envelope, with at least 50 pips remaining BELOW that
    SSL for an expected raid. If core + liquidity + sweep room cannot fit inside 400 pips, reject it.
-5. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
+5. Alert-side placement is mandatory. A BUY alert zone cannot sit completely above current price; it must
+   be below current price, or current price may already be inside/interacting with it. A SELL alert zone
+   cannot sit completely below current price; it must be above current price, or current price may already
+   be inside/interacting with it. A wrong-side zone is rejected from today's alert map and is NOT flipped.
+6. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-6. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation downgrades quality
+7. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation downgrades quality
    rather than moving the zone or manufacturing a different zone.
-7. Do not reject a structurally valid zone only because it is far from current price. Distance affects
-   urgency, not whether the institutional location exists.
-8. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
+8. After structural validity and freshness, intraday reachability ranks today's alert candidates. A much
+   nearer A/A+ valid zone should outrank a remote equally-executable candidate. Distance NEVER manufactures
+   a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context instead of the
+   primary intraday alert.
+9. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
    liquidity raid does not invalidate it.
-9. Publish at most one strongest SELL and one strongest BUY. It is acceptable to publish one side or none
-   if no source can satisfy the required BSL/SSL plus sweep-room geometry.
-10. M1 cannot redefine the HTF zone. Execution still requires the existing sweep -> MSS/BOS ->
+10. Publish at most one strongest SELL and one strongest BUY, but DO NOT force both sides. If no valid BUY
+    exists below/interacting with price, publish BUY=NONE. If no valid SELL exists above/interacting with
+    price, publish SELL=NONE.
+11. M1 cannot redefine the HTF zone. Execution still requires the existing sweep -> MSS/BOS ->
     displacement -> new dealing range -> value/OTE/PD-array sequence.
 
+This contract comes from the user's 2026-09-14 institutional XAU prompt: identify the MOST IMPORTANT
+levels where price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15
+structure, liquidity, source candles, displacement, FVG, mitigation, ATR/spread/news and DXY confirmation.
+
 Reject validation only when a published zone breaks these rules or supplied safety guards. Do not reapply
-old fixed ATR-distance, tiny exact-candle envelope, or mandatory multi-confluence filters that are not in
-this prompt-driven contract.
+old fixed ATR-distance, tiny exact-candle envelope, mandatory two-sided output, or mandatory multi-confluence
+filters that are not in this prompt-driven contract.
 
 Return JSON only: {"approved": true|false, "summary": "...", "risks": ["..."]}.
 """
