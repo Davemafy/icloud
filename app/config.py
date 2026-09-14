@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.4.10"
+    app_version: str = "6.5.0"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -67,7 +67,8 @@ class Settings:
     ml_dataset_export_limit: int = _i("ML_DATASET_EXPORT_LIMIT", 100000)
     ml_min_resolved_for_training: int = _i("ML_MIN_RESOLVED_FOR_TRAINING", 1000)
 
-    # Core/zone quality.
+    # Legacy/research-zone settings retained only for non-production compatibility.
+    # The live v6.5 prompt zoning engine does not use these as hard zone gates.
     zone_retire_touch_count: int = _i("ZONE_RETIRE_TOUCH_COUNT", 2)
     zone_min_independent_confluences: int = _i("ZONE_MIN_INDEPENDENT_CONFLUENCES", 2)
     zone_liquidity_envelope_max_h1_atr: float = _f("ZONE_LIQUIDITY_ENVELOPE_MAX_H1_ATR", 1.50)
