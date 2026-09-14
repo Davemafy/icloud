@@ -78,8 +78,10 @@ def build_prompt_candidates(snapshot: MarketSnapshot) -> list[Candidate]:
 
 
 def install_prompt_candidate_policy() -> None:
-    """Install the prompt-guided candidate builder across cloud analysis modules."""
+    """Install prompt-guided analysis and runtime-truth policies."""
     from . import institutional_two_zone, intraday_engine
+    from .runtime_version_truth import install_runtime_version_truth_policy
 
     intraday_engine.build_candidates = build_prompt_candidates
     institutional_two_zone.build_candidates = build_prompt_candidates
+    install_runtime_version_truth_policy()
