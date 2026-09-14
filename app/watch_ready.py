@@ -8,7 +8,7 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 # M1_READY is still only a PAPER-ONLY handoff into the existing M1 sequence.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.30
 MAX_CORE_WIDTH_M15_ATR = 3.00
-MAX_READY_TOUCHES = 2
+MAX_READY_TOUCHES = 1
 READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
 READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
 
@@ -30,7 +30,7 @@ def _m15_atr(snapshot: MarketSnapshot) -> float:
 
 
 def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
-    """True when a qualified primary zone is ready for paper M1 monitoring."""
+    """True when a prompt-qualified primary zone is ready for paper M1 monitoring."""
     if not SETTINGS.paper_only:
         return False
     if _readiness(zone) not in READY_INPUT_STATES:
@@ -44,6 +44,12 @@ def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
     if int(zone.independent_confluence_count) < 2:
         return False
     if float(zone.clear_run) <= 0:
+        return False
+    if "LIQUIDITY_IN_MARKED_ZONE" not in set(zone.confluences):
+        return False
+
+    required = "BSL_IN_MARKED_ZONE" if zone.original_direction.value == "SELL" else "SSL_IN_MARKED_ZONE"
+    if required not in set(zone.confluences):
         return False
 
     state = evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15)
@@ -69,8 +75,6 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
         current = next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
         if current is not None and _readiness(current) == "M1_READY":
             return current
-        # An ARMED default plan is intentionally not called M1_READY until price
-        # reaches its core. Keep the selection for plan visibility, but return None.
         if current is None or not watch_zone_ready(current, snapshot):
             return None
         candidates = [current]
@@ -99,8 +103,9 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
     ]
 
     analysis.trader_brief += (
-        f" PAPER M1_READY={selected.zone_id}: live price is interacting with the "
-        f"{selected.source_tf} primary core and M15 health is intact; the existing "
-        "M1 sweep/MSS/displacement/value sequence remains required before any simulated entry."
+        f" PAPER M1_READY={selected.zone_id}: price is interacting with the "
+        f"{selected.source_tf} primary core, required structural liquidity is inside the marked "
+        "zone, and M15 health is intact; the existing M1 sweep/MSS/displacement/value sequence "
+        "remains required before any simulated entry."
     )
     return selected
