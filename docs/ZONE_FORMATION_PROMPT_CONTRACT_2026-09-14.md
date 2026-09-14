@@ -1,9 +1,9 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V653`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V654`
 
-This contract is derived from the user's institutional XAU prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
+This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
 ## Purpose
 
@@ -62,15 +62,18 @@ This is mandatory for the intraday alert map:
 - Never force both sides.
 - If no valid BUY exists below/interacting with price, BUY = NONE.
 - If no valid SELL exists above/interacting with price, SELL = NONE.
-- Structural validity comes first.
-- Freshness comes next.
-- Among already-valid executable candidates, intraday reachability is a ranking factor so a much nearer valid A/A+ location can outrank a remote equally-executable HTF location.
+- Structural validity is mandatory before ranking.
+- A/A+ execution quality is preferred over B+ WATCH quality.
+- Among already-valid A/A+ candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
+- A nearer valid A/A+ zone must be allowed to outrank a remote valid A/A+ zone even when the remote zone has 0 touches and the nearer one has 1 touch.
+- Freshness remains important after intraday reachability is established; repeated mitigation still downgrades quality.
+- H4/H4>H1 authority remains a quality tiebreaker, not permission to ignore a much nearer valid institutional location.
 - Distance never creates a zone and never excuses missing BSL/SSL.
 - A remote valid HTF source may remain context rather than the primary intraday alert.
 
 ## Mitigation and invalidation
 
-- Fresh 0–1 touch zones rank highest.
+- Fresh 0–1 touch zones rank highest within comparable intraday relevance.
 - Repeated mitigation downgrades quality; it must not move or manufacture the zone.
 - Closed M15 body acceptance beyond the outer envelope invalidates the original zone.
 - A wick-only liquidity raid does not invalidate.
