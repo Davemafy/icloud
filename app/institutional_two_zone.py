@@ -14,6 +14,7 @@ H1_ENVELOPE_HALF_M15_ATR = 0.25
 LIQUIDITY_ATTACH_MAX_M15_ATR = 0.60
 LIQUIDITY_EDGE_BUFFER_M15_ATR = 0.10
 MAX_MARKED_ZONE_WIDTH_M15_ATR = 3.00
+MAX_PRIMARY_DISTANCE_H1_ATR = 5.00
 H4_PARENT_SOURCES = {"H4", "H4>H1"}
 MAX_PRIMARY_TOUCHES = 1
 
@@ -150,7 +151,10 @@ def _compact_envelope(zone: Zone, s: MarketSnapshot) -> None:
 
 
 def _attach_liquidity_to_marked_zone(zone: Zone, level, s: MarketSnapshot) -> bool:
-    """Include only the nearby required BSL/SSL in the marked area."""
+    """Include only the nearby required BSL/SSL in the marked area.
+
+    The zone is rejected if doing so would create a broad, non-intraday envelope.
+    """
     m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
     buffer_price = LIQUIDITY_EDGE_BUFFER_M15_ATR * m15a
     p = float(level.price)
@@ -224,7 +228,8 @@ def _interaction_now(zone: Zone, s: MarketSnapshot) -> bool:
         return False
     if int(zone.touch_count) > MAX_PRIMARY_TOUCHES:
         return False
-    if "LIQUIDITY_IN_MARKED_ZONE" not in set(zone.confluences):
+    conf = set(zone.confluences)
+    if "LIQUIDITY_IN_MARKED_ZONE" not in conf:
         return False
     state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
     if state != ZoneState.ACTIVE:
@@ -252,6 +257,9 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
 
         touches = _core_touches(zone, candidate, s)
         zone.touch_count = touches
+
+        # Prompt rule: strong zones are fresh. Two or more core visits are no longer
+        # eligible for the primary institutional map.
         if touches > MAX_PRIMARY_TOUCHES:
             continue
 
@@ -262,6 +270,14 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         if not _attach_liquidity_to_marked_zone(zone, attached, s):
             continue
 
+        # This is an intraday map, not a swing map. A structurally valid level that
+        # is too far away to be a realistic same-day destination stays context-only.
+        h1a = max(float(s.atr_h1 or atr(s.xau_h1)), 1e-9)
+        distance_h1_atr = _distance(float(s.mid), float(zone.zone_low), float(zone.zone_high)) / h1a
+        if distance_h1_atr > MAX_PRIMARY_DISTANCE_H1_ATR:
+            continue
+
+        # Legacy broad-envelope touch retirement must not kill a valid compact core.
         if zone.state == ZoneState.RETIRED and touches <= MAX_PRIMARY_TOUCHES:
             zone.state = ZoneState.ACTIVE
         zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
@@ -273,6 +289,9 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
         if not displaced:
             continue
 
+        # Raw H4 parents are downgraded in the generic engine because they are broad.
+        # Here they may recover to A only when displacement + required in-zone
+        # liquidity + freshness all agree.
         if (
             candidate.source_tf in H4_PARENT_SOURCES
             and zone.grade not in {Grade.A_PLUS, Grade.A}
@@ -283,7 +302,7 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
             continue
 
         conf = set(zone.confluences)
-        conf.add("PROMPT_GUIDED_PRIMARY_ZONE")
+        conf.update({"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE"})
         if candidate.source_tf in H4_PARENT_SOURCES:
             conf.add("H4_PARENT_AUTHORITY")
         if touches == 1:
@@ -296,7 +315,16 @@ def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
 
 
 def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
-    """Expose one prompt-guided institutional SELL and one BUY zone."""
+    """Expose one prompt-guided institutional SELL and one BUY zone.
+
+    Required qualification:
+    - exact displacement origin,
+    - active/fresh core with at most one mitigation,
+    - SELL contains attached BSL; BUY contains attached SSL,
+    - compact marked zone,
+    - A/A+ quality,
+    - H4/H4>H1 parent authority before H1 fallback.
+    """
     if analysis is None:
         return []
 
@@ -330,6 +358,8 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     for zone in analysis.zones:
         _replace_readiness(zone, "INTERACTING" if zone in interacting else "ARMED")
 
+    # Keep a qualified primary map visible. ARMED is analysis-only; active_plan_text
+    # fails closed until interaction promotes the touched zone to M1_READY.
     if interacting:
         analysis.selected_zone_id = ""
     else:
@@ -381,7 +411,8 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
         f"D1 context={analysis.overall_bias.value}. Prompt-guided primary map: {summary}. "
         "SELL requires BSL inside the marked zone; BUY requires SSL inside the marked zone. "
         "H4/H4>H1 parent authority, displacement, premium/discount and FVG quality outrank "
-        "mere proximity. More than one core mitigation rejects the primary zone. "
+        "mere proximity, but the zone must still be reachable within the intraday ATR map. "
+        "More than one core mitigation rejects the primary zone. "
         "M15 accepted invalidation removes it. M1 sweep/MSS/displacement/value confirmation "
         "remains mandatory."
     )
@@ -394,6 +425,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
         "sell_requires_bsl_in_marked_zone": True,
         "buy_requires_ssl_in_marked_zone": True,
         "max_primary_touches": MAX_PRIMARY_TOUCHES,
+        "max_primary_distance_h1_atr": MAX_PRIMARY_DISTANCE_H1_ATR,
         "h4_parent_priority": True,
         "resting_liquidity_must_be_attached": True,
         "distant_liquidity_is_target_not_zone_qualification": True,
