@@ -37,7 +37,8 @@ def prompt_dxy_direction(snapshot: MarketSnapshot) -> Direction:
 def apply_prompt_confirmation_contract(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
     """Align non-zone confirmation/health metadata with the prompt contract.
 
-    This function cannot create, move, rank, or delete XAU zones.
+    This function cannot create, move, rank, or delete XAU zones. It also applies
+    the presentation-only pip contract after zone construction.
     """
     dxy = prompt_dxy_direction(snapshot)
     for zone in analysis.zones:
@@ -75,4 +76,11 @@ def apply_prompt_confirmation_contract(analysis: Analysis, snapshot: MarketSnaps
     inputs["dxy_confirmation_timeframes"] = ["D1", "H1"]
     policy["market_inputs"] = inputs
     analysis.execution_policy = policy
+
+    # Presentation only: 1 XAU pip = 10 broker points. Geometry is unchanged.
+    # This also removes duplicate public-map zone_id fields so DataBridge v1.34
+    # counts only the canonical entries in analysis.zones.
+    from .zone_runtime_policy import apply_pip_display_contract
+
+    apply_pip_display_contract(analysis, snapshot)
     return analysis
