@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from .config import SETTINGS
 from .engine import atr, evaluate_zone_state
 from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 
-# WATCH zones are market-map locations. M1_READY is a handoff state only:
+# WATCH zones are market-map locations. M1_READY is a PAPER-ONLY handoff state:
 # MT5 must still complete its existing M1 sweep/MSS/displacement/value sequence.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.30
 MAX_CORE_WIDTH_M15_ATR = 3.00
@@ -27,12 +28,9 @@ def _m15_atr(snapshot: MarketSnapshot) -> float:
 
 
 def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
-    """Return True only when a qualified WATCH zone is ready for M1 monitoring.
-
-    This function deliberately uses the tactical *core*, not the broader envelope.
-    External-liquidity envelope expansion must not make a distant zone appear to be
-    interacting with live price.
-    """
+    """True only when a qualified WATCH zone is ready for paper M1 monitoring."""
+    if not SETTINGS.paper_only:
+        return False
     if _readiness(zone) != "WATCH":
         return False
     if zone.source_tf not in {"H1", "H4>H1"}:
@@ -55,18 +53,21 @@ def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
     if core_width / m15a > MAX_CORE_WIDTH_M15_ATR:
         return False
 
+    # Use the tactical core, not a liquidity-expanded envelope, for proximity.
     buffer_price = max(float(snapshot.point) * 5.0, CORE_INTERACTION_BUFFER_M15_ATR * m15a)
     core_distance = _distance_to_range(float(snapshot.mid), float(zone.core_low), float(zone.core_high))
     return core_distance <= buffer_price
 
 
 def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
-    """Select the best interacting WATCH zone when no ACTIONABLE zone exists.
+    """Select the best interacting WATCH zone for PAPER-ONLY M1 monitoring.
 
-    selected_zone_id is the existing cloud->MT5 handoff. Selecting an M1_READY zone
-    does not itself enter a trade; it only lets the existing MT5 M1 sequence monitor
-    that zone. Dynamic spread/news/snapshot guards remain downstream and unchanged.
+    If PAPER_ONLY is ever disabled this function is a no-op. M1_READY does not
+    represent an entry; the existing MT5 M1 confirmation and all live guards remain
+    required downstream.
     """
+    if not SETTINGS.paper_only:
+        return None
     if analysis.selected_zone_id:
         return next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
 
@@ -90,8 +91,8 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
         selected.notes = ["readiness:M1_READY", *selected.notes]
 
     analysis.trader_brief += (
-        f" M1_READY handoff={selected.zone_id}: live price is interacting with the "
-        "H1 tactical core and M15 health is intact; MT5 must still complete the "
-        "existing M1 confirmation sequence before any paper entry."
+        f" PAPER M1_READY={selected.zone_id}: live price is interacting with the "
+        "H1 tactical core and M15 health is intact; the existing M1 confirmation "
+        "sequence is still required before any simulated entry."
     )
     return selected
