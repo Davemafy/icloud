@@ -107,17 +107,41 @@ def _due_reasons(now_local: datetime) -> list[str]:
     return reasons
 
 
+def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
+    if snap is None or not snap.complete():
+        return False
+    age = max(0, int(now_utc) - int(snap.sent_at))
+    return age <= SETTINGS.max_snapshot_age_seconds
+
+
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
     tz = safe_zoneinfo(SETTINGS.timezone_name)
+    startup_analysis_pending = True
     while True:
         try:
             now = datetime.now(tz)
+            ran_scheduled_analysis = False
             for reason in _due_reasons(now):
                 key = f"{now.date()}:{reason}"
                 if key in _last_keys:
                     continue
                 _last_keys.add(key)
                 await run_analysis(reason)
+                ran_scheduled_analysis = True
+
+            # A cloud deploy/restart must not leave AITS waiting until the next
+            # fixed session checkpoint. Once MT5 has supplied the first fresh,
+            # complete snapshot, create exactly one new analysis for this process.
+            if startup_analysis_pending:
+                if ran_scheduled_analysis:
+                    startup_analysis_pending = False
+                else:
+                    snap = latest_snapshot()
+                    now_utc = int(now.astimezone(timezone.utc).timestamp())
+                    if _fresh_complete_snapshot(snap, now_utc):
+                        await run_analysis("SERVICE_STARTUP_FRESH_SNAPSHOT")
+                        startup_analysis_pending = False
+
             if len(_last_keys) > 300:
                 cutoff = (now.date() - timedelta(days=7)).isoformat()
                 for k in list(_last_keys):
