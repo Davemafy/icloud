@@ -6,9 +6,10 @@ from .engine import atr
 from .models import Analysis, Feedback, MarketSnapshot, Zone
 
 # DEMO/PAPER execution safety contract. The wide HTF envelope is location/sweep
-# context only. M1 execution authority begins at the tactical core (or a very
-# small volatility buffer around it), and targets must always remain on the
-# profitable side of the actual candidate entry.
+# context only. Primary M1 authority begins at the tactical core (or a very small
+# volatility buffer around it). Re-entry keeps its separate protected-position
+# contract after a valid primary. Every active target must remain on the profitable
+# side of the actual candidate entry.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 CORE_INTERACTION_MIN_POINTS = 5.0
 TARGET_MIN_POINTS = 5.0
@@ -108,10 +109,12 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
 
 
 def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
-    """Fail closed until core handoff and export only directionally valid objectives.
+    """Fail closed before primary core handoff and sanitize all exported objectives.
 
-    This wraps the existing Sequence 3.23 text protocol, so the running DEMO EA
-    gets the protection immediately without a local MT5 binary update.
+    The running DEMO Sequence 3.23 already obeys ea_mode and plan targets, so this
+    protection is effective from the cloud without requiring a local MT5 binary
+    replacement. Re-entry remains governed by the EA's existing protected-position
+    rules once a valid M1_READY primary thesis exists.
     """
     if analysis is None or snapshot is None:
         return text
@@ -124,14 +127,17 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     readiness = _readiness(zone)
     core_now = core_is_interacting(zone, snapshot)
     cloud_ready = readiness == "M1_READY"
-    handoff_ready = bool(core_now and cloud_ready and base_mode == "DUAL_BRANCH")
+    handoff_ready = bool(cloud_ready and base_mode == "DUAL_BRANCH")
 
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
-    kv["core_interaction_basis"] = "TACTICAL_CORE_ONLY"
+    kv["core_interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
     kv["core_interaction_now"] = "1" if core_now else "0"
     kv["core_handoff_ready"] = "1" if handoff_ready else "0"
 
+    # Static objective sanitation: an original target must be beyond the profitable
+    # edge of the entire tactical core, so it cannot become a wrong-side TP for a
+    # legitimate primary entry anywhere inside that core.
     point_gap = max(float(snapshot.point) * CORE_INTERACTION_MIN_POINTS, 1e-9)
     original_values = [
         float(zone.original_target1),
@@ -146,10 +152,26 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         original_reference,
         point_gap,
     )
-    _pack_targets(kv, "original", original_valid)
-    kv["original_targets_removed_wrong_side"] = str(original_removed)
-    kv["original_target_direction_valid"] = "1" if original_valid else "0"
 
+    # Live objective sanitation: even after primary handoff, re-entry can occur at a
+    # different price. Require all targets exported on this poll to remain beyond
+    # the current executable side by at least spread-aware clearance.
+    live_reference = float(snapshot.ask if zone.original_direction.value == "BUY" else snapshot.bid)
+    live_valid, live_removed = _filter_targets(
+        zone.original_direction.value,
+        original_valid,
+        live_reference,
+        target_min_gap(snapshot),
+    )
+    exported_original = live_valid if handoff_ready else original_valid
+    _pack_targets(kv, "original", exported_original)
+    kv["original_targets_removed_wrong_side"] = str(original_removed)
+    kv["live_targets_removed_wrong_side"] = str(live_removed)
+    kv["original_target_direction_valid"] = "1" if original_valid else "0"
+    kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
+
+    # Flip objectives are anchored beyond the failed outer envelope because a flip
+    # may only exist after accepted invalidation and opposite-side retest.
     flip_values = [
         float(zone.flip_target1),
         float(zone.flip_target2),
@@ -168,44 +190,27 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["flip_target_direction_valid"] = "1" if flip_valid else "0"
 
     guard_reasons: list[str] = []
-    if not core_now:
-        guard_reasons.append("CORE_NOT_REACHED")
     if not cloud_ready:
         guard_reasons.append("CLOUD_M1_HANDOFF_NOT_READY")
     if not original_valid:
         guard_reasons.append("NO_DIRECTIONALLY_VALID_ORIGINAL_TARGET")
+    if handoff_ready and not live_valid:
+        guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
 
-    if not handoff_ready or not original_valid:
+    if not handoff_ready or not original_valid or (handoff_ready and not live_valid):
         kv["ea_mode"] = "WATCH_ONLY"
     kv["execution_guard_reason"] = ",".join(guard_reasons)
     return _serialize_plan(order, kv)
 
 
 def live_target_guard_reasons(text: str, snapshot: MarketSnapshot | None) -> list[str]:
-    """Validate exported targets against the current executable price proxy."""
+    """Optional external check for callers that want a separate live-block reason."""
     if snapshot is None:
         return []
     _, kv = _parse_plan(text)
     if str(kv.get("ea_mode", "")).upper() != "DUAL_BRANCH":
         return []
-
-    direction = str(kv.get("original_direction", "")).upper()
-    if direction not in {"BUY", "SELL"}:
-        return ["LIVE_TARGET_DIRECTION_UNKNOWN"]
-    entry = float(snapshot.ask if direction == "BUY" else snapshot.bid)
-    gap = target_min_gap(snapshot)
-    values: list[float] = []
-    for key in ("original_target1", "original_target2", "original_target3"):
-        try:
-            value = float(kv.get(key, "0") or 0)
-        except ValueError:
-            value = 0.0
-        if value > 0:
-            values.append(value)
-    if not values:
-        return ["LIVE_NO_VALID_TARGET"]
-    valid, removed = _filter_targets(direction, values, entry, gap)
-    if removed or not valid:
+    if str(kv.get("live_target_direction_valid", "1")) != "1":
         return ["LIVE_TARGET_DIRECTION_INVALID"]
     return []
 
@@ -236,15 +241,17 @@ def normalize_candidate_feedback(
         candidate_direction in {"BUY", "SELL"} and candidate_direction != zone.original_direction.value
     )
 
-    if not is_flip:
+    # Primary candidates require tactical-core context. Re-entry deliberately does
+    # not: it already has its own existing-position/protected-thesis gate.
+    if not is_flip and role == "PRIMARY":
         px = float(details.get("entry_price") or out.price or snapshot.mid)
         core_now = core_is_interacting(zone, snapshot, px)
         cloud_ready = _readiness(zone) == "M1_READY"
         features["zone_context"] = 1 if core_now else 0
         features["recent_zone_interaction"] = 1 if (core_now or cloud_ready) else 0
-        features["interaction_basis"] = "TACTICAL_CORE_ONLY"
+        features["interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
         features["core_interaction_buffer"] = round(core_interaction_buffer(snapshot), 5)
-        if not core_now:
+        if not core_now and not cloud_ready:
             reasons = list(details.get("rejection_reasons") or [])
             if "CORE_NOT_REACHED" not in reasons:
                 reasons.append("CORE_NOT_REACHED")
