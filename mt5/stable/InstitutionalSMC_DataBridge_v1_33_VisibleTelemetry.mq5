@@ -6,7 +6,7 @@
 #define OnDeinit TZ132_OnDeinit
 #define OnTimer TZ132_OnTimer
 #define OnTradeTransaction TZ132_OnTradeTransaction
-#include "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5"
+#include <TradeZoneCore\InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5>
 #undef OnInit
 #undef OnDeinit
 #undef OnTimer
