@@ -7,6 +7,7 @@ from typing import Awaitable, Callable
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_interacting
+from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
 from .timezones import safe_zoneinfo
 
@@ -118,7 +119,7 @@ def _due_reasons(now_local: datetime) -> list[str]:
 
 
 def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
-    if snap is None or not snap.complete():
+    if snap is None or not prompt_snapshot_complete(snap):
         return False
     age = max(0, int(now_utc) - int(snap.sent_at))
     return age <= SETTINGS.max_snapshot_age_seconds
