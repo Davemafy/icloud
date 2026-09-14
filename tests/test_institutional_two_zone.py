@@ -1,4 +1,8 @@
-from app.institutional_two_zone import apply_two_zone_institutional_map, primary_zone_interacting
+from app.institutional_two_zone import (
+    _compact_envelope,
+    apply_two_zone_institutional_map,
+    primary_zone_interacting,
+)
 from app.models import Analysis, Direction, Grade, LiquidityLevel, MarketSnapshot, Zone, ZoneState
 
 
@@ -39,20 +43,8 @@ def _snapshot(mid=100.0):
     )
 
 
-def test_public_map_keeps_only_best_h4_buy_and_sell(monkeypatch):
-    import app.institutional_two_zone as policy
-
-    monkeypatch.setattr(policy, "atr", lambda bars: 10.0)
-    monkeypatch.setattr(policy, "_touches", lambda *args, **kwargs: 0)
-    monkeypatch.setattr(policy, "_candidate_map", lambda s: {})
-
-    zones = [
-        _zone("H1_SELL", Direction.SELL, "H1", 103.0, 104.0, Grade.A_PLUS),
-        _zone("H4_SELL", Direction.SELL, "H4", 110.0, 111.0, Grade.B_PLUS),
-        _zone("H1_BUY", Direction.BUY, "H1", 96.0, 97.0, Grade.A_PLUS),
-        _zone("H4_BUY", Direction.BUY, "H4", 90.0, 91.0, Grade.B_PLUS),
-    ]
-    analysis = Analysis(
+def _analysis(zones):
+    return Analysis(
         analysis_id="A1",
         generated_at=1000,
         snapshot_at=1000,
@@ -65,50 +57,67 @@ def test_public_map_keeps_only_best_h4_buy_and_sell(monkeypatch):
         approved=True,
     )
 
+
+def test_public_map_keeps_h4_parents_ahead_of_nearer_h1(monkeypatch):
+    import app.institutional_two_zone as policy
+
+    zones = [
+        _zone("H1_SELL", Direction.SELL, "H1", 103.0, 104.0, Grade.A_PLUS),
+        _zone("H4_SELL", Direction.SELL, "H4", 110.0, 111.0, Grade.A, touches=1),
+        _zone("H1_BUY", Direction.BUY, "H1", 96.0, 97.0, Grade.A_PLUS),
+        _zone("H4_BUY", Direction.BUY, "H4", 90.0, 91.0, Grade.A),
+    ]
+    analysis = _analysis(zones)
+    monkeypatch.setattr(policy, "_build_full_candidate_pool", lambda a, s: (zones, {}))
+    monkeypatch.setattr(policy, "_resting_liquidity", lambda z, a, s: z.source_tf == "H4")
+
     selected = apply_two_zone_institutional_map(analysis, _snapshot())
 
-    assert len(selected) == 2
     assert [z.zone_id for z in selected] == ["H4_SELL", "H4_BUY"]
-    assert all("PRIMARY_INSTITUTIONAL_ZONE" in z.notes for z in selected)
-    assert "Two-zone institutional map only" in analysis.trader_brief
+    assert analysis.selected_zone_id == "H4_SELL"
+    assert all(z.core_method.startswith("ARMED|") for z in selected)
+    assert "Primary institutional map" in analysis.trader_brief
+    assert analysis.execution_policy["public_zone_map"]["map_count"] == 2
+
+
+def test_interacting_primary_is_marked_interacting_and_clears_armed_selection(monkeypatch):
+    import app.institutional_two_zone as policy
+
+    sell = _zone("H4_SELL", Direction.SELL, "H4", 100.0, 101.0, Grade.A)
+    buy = _zone("H4_BUY", Direction.BUY, "H4", 90.0, 91.0, Grade.A)
+    zones = [sell, buy]
+    analysis = _analysis(zones)
+    monkeypatch.setattr(policy, "_build_full_candidate_pool", lambda a, s: (zones, {}))
+    monkeypatch.setattr(policy, "_resting_liquidity", lambda *args, **kwargs: True)
+    monkeypatch.setattr(policy, "atr", lambda bars: 2.0)
+    monkeypatch.setattr(policy, "evaluate_zone_state", lambda *args, **kwargs: ZoneState.ACTIVE)
+
+    apply_two_zone_institutional_map(analysis, _snapshot(mid=101.4))
+
+    assert analysis.zones[0].core_method.startswith("INTERACTING|")
+    assert analysis.zones[1].core_method.startswith("ARMED|")
+    assert analysis.selected_zone_id == ""
 
 
 def test_liquidity_support_does_not_stretch_envelope(monkeypatch):
     import app.institutional_two_zone as policy
 
     monkeypatch.setattr(policy, "atr", lambda bars: 10.0)
-    monkeypatch.setattr(policy, "_touches", lambda *args, **kwargs: 0)
-    monkeypatch.setattr(policy, "_candidate_map", lambda s: {})
-
     sell = _zone("H4_SELL", Direction.SELL, "H4", 110.0, 110.2, Grade.A)
-    analysis = Analysis(
-        analysis_id="A2",
-        generated_at=1000,
-        snapshot_at=1000,
-        overall_bias=Direction.SELL,
-        zones=[sell],
-        liquidity_map=[
-            LiquidityLevel(label="DISTAL_BSL", price=124.0, side="ABOVE", source_tf="H4", distance=24.0)
-        ],
-        approved=True,
-    )
 
-    apply_two_zone_institutional_map(analysis, _snapshot())
+    _compact_envelope(sell, _snapshot())
 
-    # H4 envelope uses 0.60 M15 ATR either side of core midpoint: compact and
-    # independent of the distant liquidity price.
-    assert analysis.zones[0].zone_low == 108.9
-    assert analysis.zones[0].zone_high == 111.3
-    assert analysis.zones[0].zone_high < 124.0
-    assert "LIQUIDITY_REFERENCE_ONLY_DOES_NOT_STRETCH_ZONE" in analysis.zones[0].notes
+    assert sell.zone_low == 108.9
+    assert sell.zone_high == 111.3
+    assert "LIQUIDITY_REFERENCE_ONLY_DOES_NOT_STRETCH_ZONE" in sell.notes
 
 
 def test_primary_zone_interaction_uses_core_not_outer_envelope(monkeypatch):
     import app.institutional_two_zone as policy
 
     monkeypatch.setattr(policy, "atr", lambda bars: 2.0)
+    monkeypatch.setattr(policy, "evaluate_zone_state", lambda *args, **kwargs: ZoneState.ACTIVE)
     zone = _zone("Z1", Direction.SELL, "H4", 100.0, 101.0, Grade.A)
-    zone.core_method = "ACTIONABLE|H4_PARENT_UNREFINED"
     zone.zone_low = 95.0
     zone.zone_high = 106.0
 

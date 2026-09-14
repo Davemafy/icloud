@@ -14,7 +14,7 @@ def _snapshot(mid: float = 100.0) -> MarketSnapshot:
     )
 
 
-def _watch(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A) -> Zone:
+def _zone(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A, readiness="WATCH") -> Zone:
     return Zone(
         zone_id="Z1",
         original_direction=Direction.BUY,
@@ -25,7 +25,7 @@ def _watch(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A) -> Zon
         state=ZoneState.ACTIVE,
         core_low=core_low,
         core_high=core_high,
-        core_method="WATCH|H1_INDEPENDENT_TACTICAL|M15_REFINED",
+        core_method=f"{readiness}|PRIMARY_TEST",
         location_score=8.0,
         zone_low=95.0,
         zone_high=101.0,
@@ -35,32 +35,54 @@ def _watch(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A) -> Zon
     )
 
 
-def test_watch_interaction_uses_core_not_broad_envelope():
+def test_interaction_uses_core_not_broad_envelope():
     s = _snapshot(100.0)
-    z = _watch()
+    z = _zone()
     assert watch_zone_ready(z, s) is True
 
 
 def test_distant_core_does_not_become_ready_even_if_envelope_is_wide():
     s = _snapshot(100.0)
-    z = _watch(core_low=90.0, core_high=91.0)
+    z = _zone(core_low=90.0, core_high=91.0)
     z.zone_low = 89.0
     z.zone_high = 101.0
     assert watch_zone_ready(z, s) is False
 
 
-def test_context_or_h4_parent_is_not_promoted():
+def test_h4_primary_parent_can_become_ready():
     s = _snapshot(100.0)
-    z = _watch(source_tf="H4")
+    z = _zone(source_tf="H4", readiness="INTERACTING")
+    assert watch_zone_ready(z, s) is True
+
+
+def test_armed_zone_stays_not_ready_until_core_interaction():
+    s = _snapshot(100.0)
+    z = _zone(core_low=105.0, core_high=106.0, source_tf="H4", readiness="ARMED")
     assert watch_zone_ready(z, s) is False
 
 
 def test_promote_sets_selected_zone_and_m1_ready_marker():
     s = _snapshot(100.0)
-    z = _watch()
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING")
     a = Analysis(analysis_id="A1", generated_at=1, snapshot_at=1, zones=[z])
     selected = promote_watch_to_m1_ready(a, s)
     assert selected is z
     assert a.selected_zone_id == "Z1"
     assert z.core_method.startswith("M1_READY|")
     assert "readiness:M1_READY" in z.notes
+
+
+def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
+    s = _snapshot(100.0)
+    z = _zone(core_low=110.0, core_high=111.0, source_tf="H4", readiness="ARMED")
+    a = Analysis(
+        analysis_id="A1",
+        generated_at=1,
+        snapshot_at=1,
+        zones=[z],
+        selected_zone_id="Z1",
+    )
+    selected = promote_watch_to_m1_ready(a, s)
+    assert selected is None
+    assert a.selected_zone_id == "Z1"
+    assert z.core_method.startswith("ARMED|")

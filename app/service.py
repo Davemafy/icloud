@@ -21,55 +21,69 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     now = int(datetime.now(timezone.utc).timestamp())
     a = build_analysis(s, now)
 
-    # PAPER_ONLY H4 location rule first: discover/qualify the newest still-
-    # unmitigated H4 parent on each side while the full internal candidate map is
-    # still available. Resting liquidity qualifies the location but never bypasses
-    # AI/live-data/M1 confirmation.
+    # PAPER_ONLY H4 parent qualification. One clean rejection may remain valid
+    # while resting liquidity remains and M15 has not accepted invalidation.
     h4_ready = apply_latest_h4_liquidity_policy(a, s)
 
-    # Public trading map: exactly one primary SELL and one primary BUY zone. The
-    # internal engine can discover more candidates, but they are not exposed as
-    # competing trading levels on the dashboard/plan workflow.
+    # Public map: one best institutional SELL and one best institutional BUY.
+    # The map is ARMED independently of the execution handoff.
     primary_zones = apply_two_zone_institutional_map(a, s)
 
-    # PAPER_ONLY handoff: an interacting qualified WATCH zone may be exposed to
-    # the existing M1 confirmation sequence. The helper is a no-op outside paper.
+    # PAPER_ONLY handoff: only the primary core price is actually interacting with
+    # may become M1_READY. Existing M1 confirmation remains unchanged downstream.
     ready_zone = promote_watch_to_m1_ready(a, s)
 
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
-    a.prompt_version = "SMC_V6_4_7_TWO_ZONE_INSTITUTIONAL_MAP"
+    a.prompt_version = "SMC_V6_4_8_PRIMARY_ARMED_MAP"
     a.trader_brief += " " + regime_brief(overlay)
     try:
         ok, summary, risks, provider = await validate_with_ai(a, s)
         a.ai_provider = provider
         selected = bool(a.selected_zone_id)
-        a.ai_approved = bool(ok and selected)
-        if selected:
+        execution_selected = bool(
+            ready_zone is not None
+            and a.selected_zone_id
+            and ready_zone.zone_id == a.selected_zone_id
+        )
+        # An ARMED zone is a visible institutional plan, not execution permission.
+        # AI execution approval is therefore only meaningful after M1_READY.
+        a.ai_approved = bool(ok and execution_selected)
+        if execution_selected:
             if summary:
-                a.trader_brief += " AI validation: " + summary
+                a.trader_brief += " AI execution validation: " + summary
+        elif selected:
+            a.trader_brief += " AI validation: primary plan ARMED; execution validation waits for core interaction/M1_READY."
         else:
-            a.trader_brief += " AI validation: waiting for price interaction with one of the two primary zones."
+            a.trader_brief += " AI validation: two primary zones are ARMED; execution validation starts on core interaction."
         if risks:
             a.guards.extend([f"AI:{x}" for x in risks])
-        if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and selected and not ok:
+
+        # Fail closed for execution while the selected public plan is merely ARMED.
+        # A fresh interaction analysis restores approval only after M1_READY and AI.
+        if selected and not execution_selected:
             a.approved = False
+        elif SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and execution_selected and not ok:
+            a.approved = False
+
         audit(
             now,
             "analysis.ai",
             f"reason={reason} provider={provider} approved={a.ai_approved} "
-            f"selected={selected} paper_m1_ready={bool(ready_zone)} "
-            f"h4_liquidity_ready={len(h4_ready)} primary_zones={len(primary_zones)} risks={risks}",
+            f"selected={selected} execution_selected={execution_selected} "
+            f"paper_m1_ready={bool(ready_zone)} h4_liquidity_ready={len(h4_ready)} "
+            f"primary_zones={len(primary_zones)} risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
         a.ai_provider = "ERROR"
         a.ai_approved = False
-        if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and a.selected_zone_id:
+        if a.selected_zone_id:
             a.approved = False
-            a.guards.append("AI_PROVIDER_UNAVAILABLE")
-        elif not a.selected_zone_id:
-            a.trader_brief += " AI validation unavailable; waiting for interaction with a primary zone."
+            if ready_zone is not None:
+                a.guards.append("AI_PROVIDER_UNAVAILABLE")
+        else:
+            a.trader_brief += " AI validation unavailable; primary zones remain analysis-only ARMED locations."
     save_analysis(a)
     if SETTINGS.ml_data_enabled:
         try:
