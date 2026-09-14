@@ -7,6 +7,11 @@ import httpx
 
 from .config import SETTINGS
 from .models import Analysis, MarketSnapshot
+from .prompt_candidate_policy import install_prompt_candidate_policy
+
+# Analysis-source policy only: extend HTF discovery before the cloud builds its map.
+# Existing zone qualification, paper-only handoff, and safety guards stay downstream.
+install_prompt_candidate_policy()
 
 
 def _extract_json(text: str) -> dict[str, Any]:
