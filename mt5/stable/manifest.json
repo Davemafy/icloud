@@ -1,87 +1,15 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.2",
+  "release": "6.3.1",
   "repository": "Davemafy/icloud",
-  "ref": "f093afbf182eddaf33f002d08779e3fb7eb487b0",
+  "ref": "7ed51fe5934b47115b6762fcefcb454124ece8e7",
   "data_bridge_version": "1.33",
-  "sequence_ea_version": "3.24",
+  "sequence_ea_version": "3.23",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
-  "demo_defaults": {
-    "cloud_base_url": "https://icloud-production-9111.up.railway.app",
-    "cloud_api_key": "123",
-    "paper_only": true
-  },
-  "channel_features": [
-    "expert_sources",
-    "support_files",
-    "sha256_verification",
-    "manual_update_compatible",
-    "github_installed_running_version_truth",
-    "persistent_sequence_state",
-    "paper_journal_telemetry",
-    "journal_csv_export",
-    "component_health_panel",
-    "smc_location_authority",
-    "market_regime_classifier",
-    "ict_sniper",
-    "ict_deep_reentry",
-    "momentum_pullback",
-    "vwap_tick_volume_proxy_reclaim",
-    "opening_range_retest",
-    "accepted_zone_flip",
-    "week_open_analysis",
-    "trading_day_open_analysis",
-    "front_facing_versioned_ea_names",
-    "demo_cloud_defaults",
-    "visible_snapshot_logging",
-    "snapshot_retry_watchdog",
-    "h4_unmitigated_liquidity_policy",
-    "cloud_map_ready_status_sync"
-  ],
-  "files": [
-    {
-      "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
-      "requires_reload": true,
-      "sha256": "79fb22b9a7b9039c9c7980f816b67e1c19dbf7b4e29e7021a41ddcb0080088cc"
-    },
-    {
-      "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_24_MapSync_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_24_MapSync_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_24_MapSync_Demo.mq5",
-      "requires_reload": true,
-      "sha256": "f6040adf2cd6b6f8069e3bf4d1271feb7060fe6d9ecd59b6e1df2605c9e1fe25"
-    }
-  ],
-  "support_files": [
-    {
-      "role": "data_bridge_core",
-      "name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "target": "Include\\TradeZoneCore",
-      "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
-    },
-    {
-      "role": "sequence_core",
-      "name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
-      "target": "Include\\TradeZoneCore",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
-      "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
-    },
-    {
-      "role": "sequence_layer",
-      "name": "InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
-      "target": "Include\\TradeZoneCore",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5",
-      "sha256": "f45417ee1b6ecf778826738b476f62c2e2c5119e02f32456bbd797e7491e7aaf"
-    }
-  ]
+  "demo_defaults": {"cloud_base_url": "https://icloud-production-9111.up.railway.app","cloud_api_key": "123","paper_only": true},
+  "channel_features": ["expert_sources","support_files","sha256_verification","manual_update_compatible","github_installed_running_version_truth","persistent_sequence_state","paper_journal_telemetry","journal_csv_export","component_health_panel","smc_location_authority","market_regime_classifier","ict_sniper","ict_deep_reentry","momentum_pullback","vwap_tick_volume_proxy_reclaim","opening_range_retest","accepted_zone_flip","week_open_analysis","trading_day_open_analysis","front_facing_versioned_ea_names","demo_cloud_defaults","visible_snapshot_logging","snapshot_retry_watchdog"],
+  "files": [{"role":"data_bridge","name":"InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5","path":"mt5/stable/InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5","target_name":"InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5","requires_reload":true,"sha256":"79fb22b9a7b9039c9c7980f816b67e1c19dbf7b4e29e7021a41ddcb0080088cc"},{"role":"sequence_ea","name":"InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5","path":"mt5/stable/InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5","target_name":"InstitutionalSMC_SequenceEA_v3_23_MultiModel_Demo.mq5","requires_reload":true,"sha256":"f45417ee1b6ecf778826738b476f62c2e2c5119e02f32456bbd797e7491e7aaf"}],
+  "support_files": [{"role":"data_bridge_core","name":"InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5","path":"mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5","target":"Include\\TradeZoneCore","target_name":"InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5","sha256":"af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"},{"role":"sequence_core","name":"InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5","path":"mt5/stable/InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5","target":"Include\\TradeZoneCore","target_name":"InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5","sha256":"f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"}]
 }
