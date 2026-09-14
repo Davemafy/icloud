@@ -10,6 +10,7 @@ from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 
 
 READY_STATES = {"ACTIONABLE", "M1_READY"}
+H4_PARENT_SOURCES = {"H4", "H4>H1"}
 
 
 def _readiness(zone: Zone) -> str:
@@ -33,6 +34,11 @@ def _distance(mid: float, low: float, high: float) -> float:
 
 def _zone_id(candidate, index: int) -> str:
     return f"Z_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}"
+
+
+def _parent_ts(candidate) -> int:
+    h4 = [int(x.source_ts) for x in candidate.components if str(x.tf) == "H4"]
+    return max(h4) if h4 else int(candidate.source_ts)
 
 
 def _has_resting_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot) -> bool:
@@ -76,9 +82,9 @@ def _refresh_brief_counts(analysis: Analysis) -> None:
 def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
     """Paper-only H4 parent-zone qualification.
 
-    On each side, the newest H4 parent whose tactical core has never been
-    mitigated and still has resting external liquidity on its distal side is
-    kept in the cloud map and promoted to ACTIONABLE. This changes location
+    On each side, the newest H4 parent (raw or H1-refined) whose tactical core has
+    never been mitigated and still has resting external liquidity on its distal
+    side is kept in the cloud map and promoted to ACTIONABLE. This changes location
     qualification only; AI/live-data gates and the existing M1 confirmation
     sequence remain unchanged.
     """
@@ -93,7 +99,7 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
     context = daily_context(s)
 
     for index, candidate in enumerate(build_candidates(s), 1):
-        if candidate.source_tf != "H4":
+        if candidate.source_tf not in H4_PARENT_SOURCES:
             continue
         zid = _zone_id(candidate, index)
         zone = existing.get(zid)
@@ -112,9 +118,8 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
         if not _has_resting_liquidity(zone, analysis, s):
             continue
 
-        # The ordinary envelope-touch retirement rule may be wider than the
-        # actual tactical core. For this specific H4 rule, core mitigation is
-        # authoritative; accepted M15 invalidation still remains authoritative.
+        # Envelope interaction is not core mitigation. Accepted M15 invalidation
+        # remains authoritative for cancelling the original H4 thesis.
         if zone.state == ZoneState.RETIRED:
             zone.state = ZoneState.ACTIVE
         zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
@@ -122,7 +127,7 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
             continue
 
         eligible[zone.original_direction].append(
-            (candidate.source_ts, zone, was_displayed)
+            (_parent_ts(candidate), zone, was_displayed)
         )
 
     promoted: list[Zone] = []
@@ -167,7 +172,8 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
         policy = dict(analysis.execution_policy or {})
         policy["h4_liquidity_parent_rule"] = {
             "paper_only": True,
-            "latest_unmitigated_h4": True,
+            "latest_unmitigated_h4_parent": True,
+            "h1_refined_parent_allowed": True,
             "requires_resting_liquidity": True,
             "core_mitigation_authoritative": True,
             "m1_confirmation_unchanged": True,
