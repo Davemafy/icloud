@@ -11,6 +11,7 @@ from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
+from .secondary_zone_policy import apply_secondary_zone_policy
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_runtime_policy import (
     install_prompt_market_side_policy,
@@ -55,6 +56,10 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
     apply_prompt_confirmation_contract(a, s)
     _stamp_prompt_selection_contract(a)
+    # PAPER/DEMO ONLY: expose one distinct non-executable Level-2 reserve per
+    # side. Reserves never enter analysis.zones and cannot receive M1 authority
+    # while the corresponding Level-1 primary remains valid.
+    apply_secondary_zone_policy(a, s)
     primary_zones = list(a.zones)
 
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
@@ -94,7 +99,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             f"reason={reason} provider={provider} approved={a.ai_approved} "
             f"selected={selected} execution_selected={execution_selected} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14_v654 risks={risks}",
+            f"prompt_zone_engine=2026_09_14_v655 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -119,7 +124,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
-        f"prompt_zone_engine=2026_09_14_v654 "
+        f"prompt_zone_engine=2026_09_14_v655 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
