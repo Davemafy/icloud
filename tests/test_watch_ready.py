@@ -14,11 +14,20 @@ def _snapshot(mid: float = 100.0) -> MarketSnapshot:
     )
 
 
-def _zone(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A, readiness="WATCH") -> Zone:
+def _zone(
+    core_low=99.5,
+    core_high=100.5,
+    source_tf="H1",
+    grade=Grade.A,
+    readiness="WATCH",
+    direction=Direction.BUY,
+    touches=1,
+) -> Zone:
+    required = "SSL_IN_MARKED_ZONE" if direction == Direction.BUY else "BSL_IN_MARKED_ZONE"
     return Zone(
         zone_id="Z1",
-        original_direction=Direction.BUY,
-        flip_direction=Direction.SELL,
+        original_direction=direction,
+        flip_direction=direction.opposite(),
         setup_type="REVERSAL",
         source_tf=source_tf,
         grade=grade,
@@ -29,8 +38,9 @@ def _zone(core_low=99.5, core_high=100.5, source_tf="H1", grade=Grade.A, readine
         location_score=8.0,
         zone_low=95.0,
         zone_high=101.0,
-        touch_count=1,
-        independent_confluence_count=3,
+        touch_count=touches,
+        independent_confluence_count=4,
+        confluences=["INSTITUTIONAL_DISPLACEMENT", "LIQUIDITY_IN_MARKED_ZONE", required],
         clear_run=8.0,
     )
 
@@ -53,6 +63,26 @@ def test_h4_primary_parent_can_become_ready():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4", readiness="INTERACTING")
     assert watch_zone_ready(z, s) is True
+
+
+def test_missing_required_liquidity_blocks_ready():
+    s = _snapshot(100.0)
+    z = _zone(source_tf="H4", readiness="INTERACTING")
+    z.confluences = ["INSTITUTIONAL_DISPLACEMENT"]
+    assert watch_zone_ready(z, s) is False
+
+
+def test_wrong_liquidity_side_blocks_ready():
+    s = _snapshot(100.0)
+    z = _zone(direction=Direction.SELL, readiness="INTERACTING")
+    z.confluences = ["INSTITUTIONAL_DISPLACEMENT", "LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"]
+    assert watch_zone_ready(z, s) is False
+
+
+def test_second_mitigation_blocks_ready():
+    s = _snapshot(100.0)
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING", touches=2)
+    assert watch_zone_ready(z, s) is False
 
 
 def test_armed_zone_stays_not_ready_until_core_interaction():
