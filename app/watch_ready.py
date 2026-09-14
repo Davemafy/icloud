@@ -64,14 +64,23 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
     """Select the interacting primary zone for PAPER-ONLY M1 monitoring."""
     if not SETTINGS.paper_only:
         return None
-    if analysis.selected_zone_id:
-        return next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
 
-    candidates = [z for z in analysis.zones if watch_zone_ready(z, snapshot)]
+    if analysis.selected_zone_id:
+        current = next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
+        if current is not None and _readiness(current) == "M1_READY":
+            return current
+        # An ARMED default plan is intentionally not called M1_READY until price
+        # reaches its core. Keep the selection for plan visibility, but return None.
+        if current is None or not watch_zone_ready(current, snapshot):
+            return None
+        candidates = [current]
+    else:
+        candidates = [z for z in analysis.zones if watch_zone_ready(z, snapshot)]
+
     if not candidates:
         return None
 
-    def rank(z: Zone) -> tuple[float, int, float, int]:
+    def rank(z: Zone) -> tuple:
         distance = _distance_to_range(float(snapshot.mid), float(z.core_low), float(z.core_high))
         grade_rank = 0 if z.grade == Grade.A_PLUS else 1
         tf_rank = 0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2
