@@ -1,39 +1,62 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import statistics
+import uuid
+
 from .config import SETTINGS
-from .engine import GRADE_RANK, _touches, atr, evaluate_zone_state
-from .intraday_engine import _zone as build_zone
-from .intraday_engine import build_candidates, daily_context
-from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from .engine import (
+    _dxy,
+    _location_score,
+    _targets,
+    _touches,
+    atr,
+    displacement_origins,
+    evaluate_zone_state,
+    liquidity_map,
+    structure_bias,
+)
+from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
 
 
-CORE_INTERACTION_BUFFER_M15_ATR = 0.30
-H4_ENVELOPE_HALF_M15_ATR = 0.60
-H4H1_ENVELOPE_HALF_M15_ATR = 0.40
-H1_ENVELOPE_HALF_M15_ATR = 0.25
-LIQUIDITY_ATTACH_MAX_M15_ATR = 0.60
-LIQUIDITY_EDGE_BUFFER_M15_ATR = 0.10
-MAX_MARKED_ZONE_WIDTH_M15_ATR = 3.00
-MAX_PRIMARY_DISTANCE_H1_ATR = 5.00
-H4_PARENT_SOURCES = {"H4", "H4>H1"}
-MAX_PRIMARY_TOUCHES = 1
+SWEEP_LOOKBACK = 8
+FOLLOW_THROUGH_BARS = 3
+MIN_REJECTION_WICK_FRACTION = 0.30
+MIN_FOLLOW_THROUGH_ATR = 0.60
+H1_PARENT_OVERLAP_ATR = 0.25
+INTERACTION_BUFFER_M15_ATR = 0.30
 
 
-def _readiness(zone: Zone) -> str:
-    value = str(zone.core_method or "")
-    return value.split("|", 1)[0] if "|" in value else "WATCH"
+@dataclass
+class PromptSource:
+    direction: Direction
+    tf: str
+    source_ts: int
+    core_low: float
+    core_high: float
+    zone_low: float
+    zone_high: float
+    strength: float
+    fvg: bool
+    source_kind: str
+    volume_expansion: bool
 
 
-def _replace_readiness(zone: Zone, readiness: str) -> None:
-    old = str(zone.core_method or "")
-    tail = old.split("|", 1)[1] if "|" in old else old
-    zone.core_method = readiness if not tail else f"{readiness}|{tail}"
-    zone.notes = [
-        f"readiness:{readiness}" if str(note).startswith("readiness:") else note
-        for note in zone.notes
-    ]
-    if not any(str(note).startswith("readiness:") for note in zone.notes):
-        zone.notes = [f"readiness:{readiness}", *zone.notes]
+@dataclass
+class PromptCandidate:
+    direction: Direction
+    source_tf: str
+    source_ts: int
+    core_low: float
+    core_high: float
+    zone_low: float
+    zone_high: float
+    strength: float
+    fvg: bool
+    source_kind: str
+    volume_expansion: bool
+    method: str
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -43,405 +66,718 @@ def _distance(price: float, low: float, high: float) -> float:
     return lo - price if price < lo else price - hi
 
 
-def _candidate_rows(s: MarketSnapshot):
-    rows = []
-    for index, candidate in enumerate(build_candidates(s), 1):
-        zid = f"Z_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}"
-        rows.append((zid, index, candidate))
-    return rows
+def _bar_by_ts(bars: list[Bar], ts: int) -> Bar | None:
+    return next((b for b in bars if int(b.ts) == int(ts)), None)
 
 
-def _liquidity_kind(level) -> str:
-    label = str(getattr(level, "label", "") or "").upper()
-    if "BSL" in label:
-        return "BSL"
-    if "SSL" in label:
-        return "SSL"
-    return ""
+def _volume_expansion(bars: list[Bar], ts: int) -> bool:
+    idx = next((i for i, b in enumerate(bars) if int(b.ts) == int(ts)), None)
+    if idx is None or idx <= 0:
+        return False
+    prior = [float(x.tick_volume or 0.0) for x in bars[max(0, idx - 20):idx] if float(x.tick_volume or 0.0) > 0]
+    current = float(bars[idx].tick_volume or 0.0)
+    if not prior or current <= 0:
+        return False
+    return current >= 1.25 * statistics.median(prior)
 
 
-def _required_liquidity_kind(direction: Direction) -> str:
+def _source_from_displacement(origin, bars: list[Bar]) -> PromptSource | None:
+    bar = _bar_by_ts(bars, int(origin.source_ts))
+    if bar is None:
+        return None
+    body_low, body_high = sorted((float(bar.open), float(bar.close)))
+    if body_high <= body_low:
+        body_low, body_high = float(bar.low), float(bar.high)
+    return PromptSource(
+        direction=origin.direction,
+        tf=str(origin.tf),
+        source_ts=int(origin.source_ts),
+        core_low=body_low,
+        core_high=body_high,
+        zone_low=float(bar.low),
+        zone_high=float(bar.high),
+        strength=float(origin.strength),
+        fvg=bool(origin.fvg),
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=_volume_expansion(bars, int(origin.source_ts)),
+    )
+
+
+def _median_range(bars: list[Bar], n: int = 20) -> float:
+    values = [float(b.high) - float(b.low) for b in bars[-n:] if float(b.high) > float(b.low)]
+    return statistics.median(values) if values else 0.0
+
+
+def _sweep_rejection_sources(bars: list[Bar], tf: str, max_items: int = 18) -> list[PromptSource]:
+    if len(bars) < 30:
+        return []
+    noise = max(_median_range(bars, 20), atr(bars), 1e-9)
+    tolerance = 0.12 * noise
+    out: list[PromptSource] = []
+    start = max(SWEEP_LOOKBACK, len(bars) - 180)
+
+    for i in range(start, len(bars) - 1):
+        bar = bars[i]
+        rng = float(bar.high) - float(bar.low)
+        if rng <= 0:
+            continue
+        prior = bars[max(0, i - SWEEP_LOOKBACK):i]
+        if len(prior) < 3:
+            continue
+        prior_high = max(float(x.high) for x in prior)
+        prior_low = min(float(x.low) for x in prior)
+        body_low, body_high = sorted((float(bar.open), float(bar.close)))
+        upper_wick = max(0.0, float(bar.high) - body_high)
+        lower_wick = max(0.0, body_low - float(bar.low))
+        follow = bars[i + 1:min(len(bars), i + 1 + FOLLOW_THROUGH_BARS)]
+        if not follow:
+            continue
+
+        sell_raid = float(bar.high) >= prior_high - tolerance and float(bar.close) < prior_high
+        sell_reject = upper_wick / rng >= MIN_REJECTION_WICK_FRACTION or float(bar.close) < float(bar.open)
+        sell_move = min(float(x.low) for x in follow) <= float(bar.close) - MIN_FOLLOW_THROUGH_ATR * noise
+        if sell_raid and sell_reject and sell_move:
+            core_low = body_high
+            core_high = float(bar.high)
+            strength = max(2.0, (float(bar.high) - min(float(x.low) for x in follow)) / noise)
+            out.append(
+                PromptSource(
+                    Direction.SELL, tf, int(bar.ts),
+                    core_low, core_high, float(bar.low), float(bar.high),
+                    round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION",
+                    _volume_expansion(bars, int(bar.ts)),
+                )
+            )
+
+        buy_raid = float(bar.low) <= prior_low + tolerance and float(bar.close) > prior_low
+        buy_reject = lower_wick / rng >= MIN_REJECTION_WICK_FRACTION or float(bar.close) > float(bar.open)
+        buy_move = max(float(x.high) for x in follow) >= float(bar.close) + MIN_FOLLOW_THROUGH_ATR * noise
+        if buy_raid and buy_reject and buy_move:
+            core_low = float(bar.low)
+            core_high = body_low
+            strength = max(2.0, (max(float(x.high) for x in follow) - float(bar.low)) / noise)
+            out.append(
+                PromptSource(
+                    Direction.BUY, tf, int(bar.ts),
+                    core_low, core_high, float(bar.low), float(bar.high),
+                    round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION",
+                    _volume_expansion(bars, int(bar.ts)),
+                )
+            )
+
+    deduped: list[PromptSource] = []
+    for source in reversed(out):
+        if any(
+            source.direction == x.direction
+            and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low)
+            for x in deduped
+        ):
+            continue
+        deduped.append(source)
+        if len(deduped) >= max_items:
+            break
+    return list(reversed(deduped))
+
+
+def _sources(bars: list[Bar], tf: str) -> list[PromptSource]:
+    items: list[PromptSource] = []
+    for origin in displacement_origins(bars, tf, max_items=24):
+        source = _source_from_displacement(origin, bars)
+        if source is not None:
+            items.append(source)
+    items.extend(_sweep_rejection_sources(bars, tf, max_items=24))
+    items.sort(key=lambda x: (x.source_ts, x.strength))
+
+    deduped: list[PromptSource] = []
+    for source in reversed(items):
+        if any(
+            source.direction == x.direction
+            and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low)
+            for x in deduped
+        ):
+            continue
+        deduped.append(source)
+        if len(deduped) >= 24:
+            break
+    return list(reversed(deduped))
+
+
+def _overlap(a_low: float, a_high: float, b_low: float, b_high: float, pad: float = 0.0) -> bool:
+    return not (a_high < b_low - pad or b_high < a_low - pad)
+
+
+def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
+    h4 = _sources(snapshot.xau_h4, "H4")
+    h1 = _sources(snapshot.xau_h1, "H1")
+    pad = H1_PARENT_OVERLAP_ATR * max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9)
+    out: list[PromptCandidate] = []
+
+    for direction in (Direction.BUY, Direction.SELL):
+        parents = [x for x in h4 if x.direction == direction]
+        children = [x for x in h1 if x.direction == direction]
+        used_children: set[int] = set()
+
+        for parent in parents:
+            matches = [
+                child for child in children
+                if _overlap(parent.zone_low, parent.zone_high, child.zone_low, child.zone_high, pad)
+            ]
+            if matches:
+                child = max(matches, key=lambda x: (x.source_ts, x.strength))
+                used_children.add(id(child))
+                out.append(
+                    PromptCandidate(
+                        direction=direction,
+                        source_tf="H4>H1",
+                        source_ts=max(parent.source_ts, child.source_ts),
+                        core_low=child.core_low,
+                        core_high=child.core_high,
+                        zone_low=parent.zone_low,
+                        zone_high=parent.zone_high,
+                        strength=max(parent.strength, child.strength),
+                        fvg=parent.fvg or child.fvg,
+                        source_kind=f"{parent.source_kind}+{child.source_kind}",
+                        volume_expansion=parent.volume_expansion or child.volume_expansion,
+                        method="PROMPT_H4_PARENT_H1_REFINEMENT",
+                    )
+                )
+            else:
+                out.append(
+                    PromptCandidate(
+                        direction=direction,
+                        source_tf="H4",
+                        source_ts=parent.source_ts,
+                        core_low=parent.core_low,
+                        core_high=parent.core_high,
+                        zone_low=parent.zone_low,
+                        zone_high=parent.zone_high,
+                        strength=parent.strength,
+                        fvg=parent.fvg,
+                        source_kind=parent.source_kind,
+                        volume_expansion=parent.volume_expansion,
+                        method="PROMPT_H4_SOURCE_CANDLE",
+                    )
+                )
+
+        for child in children:
+            if id(child) in used_children:
+                continue
+            out.append(
+                PromptCandidate(
+                    direction=direction,
+                    source_tf="H1",
+                    source_ts=child.source_ts,
+                    core_low=child.core_low,
+                    core_high=child.core_high,
+                    zone_low=child.zone_low,
+                    zone_high=child.zone_high,
+                    strength=child.strength,
+                    fvg=child.fvg,
+                    source_kind=child.source_kind,
+                    volume_expansion=child.volume_expansion,
+                    method="PROMPT_H1_TACTICAL_SOURCE",
+                )
+            )
+    return out
+
+
+def _required_liquidity(direction: Direction) -> str:
     return "BSL" if direction == Direction.SELL else "SSL"
 
 
-def _conceptual_confluence_count(confluences) -> int:
-    groups = set()
-    for raw in confluences:
-        c = str(raw or "").upper()
-        if not c:
-            continue
-        if c in {"LIQUIDITY_IN_MARKED_ZONE", "BSL_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE",
-                 "RESTING_LIQUIDITY", "EXTERNAL_LIQUIDITY_ADJACENCY"}:
-            groups.add("LIQUIDITY")
-        elif "DISPLACEMENT" in c and "FVG" not in c:
-            groups.add("DISPLACEMENT")
-        elif "FVG" in c:
-            groups.add("FVG")
-        elif c in {"HTF_OVERLAP", "H4_PARENT_AUTHORITY"}:
-            groups.add("HTF_LOCATION")
-        elif c == "PREMIUM_DISCOUNT_EXTREMITY":
-            groups.add("PREMIUM_DISCOUNT")
-        elif c in {"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE", "SINGLE_REACTION_STILL_VALID"}:
-            continue
-        else:
-            groups.add(c)
-    return len(groups)
-
-
-def _attached_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot):
-    """Return the required BSL/SSL only when it belongs to the marked zone area.
-
-    SELL requires BSL in/at the upper half of the source area.
-    BUY requires SSL in/at the lower half of the source area.
-    A distant liquidity pool is a target/reference, not zone qualification.
-    """
-    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
-    attach = LIQUIDITY_ATTACH_MAX_M15_ATR * m15a
-    edge_tol = LIQUIDITY_EDGE_BUFFER_M15_ATR * m15a
-    lo, hi = sorted((float(zone.core_low), float(zone.core_high)))
-    mid = (lo + hi) / 2.0
-    required = _required_liquidity_kind(zone.original_direction)
-
-    levels = []
-    for level in analysis.liquidity_map:
-        if _liquidity_kind(level) != required:
-            continue
-        p = float(level.price)
-        if zone.original_direction == Direction.SELL:
-            if p < mid - edge_tol or p > hi + attach:
-                continue
-            distance = abs(p - hi)
-        else:
-            if p > mid + edge_tol or p < lo - attach:
-                continue
-            distance = abs(p - lo)
-        levels.append((distance, level))
-
-    if not levels:
+def _attached_liquidity(candidate: PromptCandidate, liq, snapshot: MarketSnapshot):
+    required = _required_liquidity(candidate.direction)
+    tolerance = max(float(snapshot.point) * 5.0, 1e-6)
+    matches = [
+        level for level in liq
+        if required in str(level.label).upper()
+        and str(level.source_tf).upper() in {"D1", "H4", "H1"}
+        and float(candidate.zone_low) - tolerance <= float(level.price) <= float(candidate.zone_high) + tolerance
+    ]
+    if not matches:
         return None
-    levels.sort(key=lambda row: row[0])
-    return levels[0][1]
+    if candidate.direction == Direction.SELL:
+        return max(matches, key=lambda x: float(x.price))
+    return min(matches, key=lambda x: float(x.price))
 
 
-def _parent_ts(zone: Zone, candidate) -> int:
-    if candidate is None:
-        return int(zone.source_ts)
-    h4 = [int(x.source_ts) for x in candidate.components if str(x.tf) == "H4"]
-    return max(h4) if h4 else int(candidate.source_ts)
-
-
-def _max_strength(candidate) -> float:
-    if candidate is None or not candidate.components:
-        return 0.0
-    return max(float(x.strength) for x in candidate.components)
-
-
-def _core_touches(zone: Zone, candidate, s: MarketSnapshot) -> int:
-    source_ts = int(candidate.source_ts) if candidate is not None else int(zone.source_ts)
-    return _touches(
-        float(zone.core_low),
-        float(zone.core_high),
-        source_ts,
-        s.xau_m15,
+def _psy_in_zone(candidate: PromptCandidate, liq) -> bool:
+    return any(
+        str(x.label).upper() == "PSY"
+        and float(candidate.zone_low) <= float(x.price) <= float(candidate.zone_high)
+        for x in liq
     )
 
 
-def _compact_envelope(zone: Zone, s: MarketSnapshot) -> None:
-    """Create a compact source-candle envelope before liquidity attachment."""
-    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
-    mid = (float(zone.core_low) + float(zone.core_high)) / 2.0
-    if zone.source_tf == "H4":
-        half = H4_ENVELOPE_HALF_M15_ATR * m15a
-    elif zone.source_tf == "H4>H1":
-        half = H4H1_ENVELOPE_HALF_M15_ATR * m15a
-    else:
-        half = H1_ENVELOPE_HALF_M15_ATR * m15a
+def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> Grade:
+    score = 0
+    score += 3 if candidate.source_tf == "H4>H1" else 2 if candidate.source_tf == "H4" else 1
+    score += 2 if candidate.strength >= 2.0 else 1 if candidate.strength >= 1.6 else 0
+    score += 1 if candidate.fvg else 0
+    score += 1 if "SWEEP_REJECTION" in candidate.source_kind else 0
+    score += 1 if candidate.volume_expansion else 0
+    score += 2 if touches == 0 else 1 if touches == 1 else -2
+    score += 1 if location_score >= 7.0 else 0
 
-    zone.zone_low = round(min(float(zone.core_low), mid - half), 5)
-    zone.zone_high = round(max(float(zone.core_high), mid + half), 5)
-    zone.invalidation_level = round(
-        zone.zone_high if zone.original_direction == Direction.SELL else zone.zone_low,
-        5,
+    if touches >= 2:
+        return Grade.B_PLUS
+    if score >= 8:
+        return Grade.A_PLUS
+    if score >= 5:
+        return Grade.A
+    return Grade.B_PLUS
+
+
+def _dxy_support(direction: Direction, snapshot: MarketSnapshot) -> str:
+    dxy = _dxy(snapshot)
+    if dxy == Direction.NEUTRAL:
+        return "NEUTRAL"
+    if (direction == Direction.SELL and dxy == Direction.BUY) or (
+        direction == Direction.BUY and dxy == Direction.SELL
+    ):
+        return "SUPPORT"
+    return "CONFLICT"
+
+
+def _candidate_zone(
+    candidate: PromptCandidate,
+    snapshot: MarketSnapshot,
+    liq,
+    context: Direction,
+    index: int,
+) -> tuple[Zone | None, dict]:
+    touches = _touches(
+        float(candidate.zone_low),
+        float(candidate.zone_high),
+        int(candidate.source_ts),
+        snapshot.xau_m15,
     )
-    zone.invalidation_rule = (
-        "M15 accepted body beyond prompt-guided institutional envelope: one >=60% body "
-        "and >=0.40 ATR, or two closes each >=0.20 ATR. Wick-only does not invalidate."
+    required = _required_liquidity(candidate.direction)
+    attached = _attached_liquidity(candidate, liq, snapshot)
+    base_diag = {
+        "direction": candidate.direction.value,
+        "source_tf": candidate.source_tf,
+        "source_method": candidate.method,
+        "source_kind": candidate.source_kind,
+        "source_ts": candidate.source_ts,
+        "core_low": round(candidate.core_low, 5),
+        "core_high": round(candidate.core_high, 5),
+        "zone_low": round(candidate.zone_low, 5),
+        "zone_high": round(candidate.zone_high, 5),
+        "touches": touches,
+        "required_liquidity": required,
+        "attached_liquidity": (
+            f"{attached.label}@{float(attached.price):.5f}" if attached is not None else ""
+        ),
+        "distance_h1_atr": round(
+            _distance(snapshot.mid, candidate.zone_low, candidate.zone_high)
+            / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9),
+            3,
+        ),
+    }
+    if attached is None:
+        return None, {
+            **base_diag,
+            "rejection_code": f"MISSING_{required}_IN_MARKED_ZONE",
+            "rejection_reason": (
+                f"{required} is mandatory and no structural {required} from D1/H4/H1 "
+                "is physically inside this exact source-candle zone."
+            ),
+        }
+
+    core_mid = (float(candidate.core_low) + float(candidate.core_high)) / 2.0
+    loc = _location_score(candidate.direction, core_mid, snapshot, liq)
+    grade = _grade(candidate, touches, loc)
+    conf = {
+        "LIQUIDITY_IN_MARKED_ZONE",
+        f"{required}_IN_MARKED_ZONE",
+        "EXACT_SOURCE_CANDLE",
+    }
+    if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
+        conf.add("INSTITUTIONAL_DISPLACEMENT")
+    if "LIQUIDITY_SWEEP_REJECTION" in candidate.source_kind:
+        conf.add("LIQUIDITY_SWEEP_REJECTION")
+    if candidate.source_tf == "H4>H1":
+        conf.add("H4_H1_OVERLAP")
+    if candidate.fvg:
+        conf.add("HISTORICAL_DISPLACEMENT_FVG")
+    if candidate.volume_expansion:
+        conf.add("TICK_VOLUME_EXPANSION")
+    if _psy_in_zone(candidate, liq):
+        conf.add("PSYCHOLOGICAL_LEVEL_CONFLUENCE")
+    if loc >= 7:
+        conf.add("PREMIUM_DISCOUNT_EXTREMITY")
+
+    original_targets = _targets(candidate.direction, core_mid, liq)
+    flip = candidate.direction.opposite()
+    flip_ref = candidate.zone_high if flip == Direction.BUY else candidate.zone_low
+    flip_targets = _targets(flip, float(flip_ref), liq)
+    vals = original_targets + [0.0] * (4 - len(original_targets))
+    fvals = flip_targets + [0.0] * (4 - len(flip_targets))
+    clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
+    countertrend = context not in (Direction.NEUTRAL, candidate.direction)
+    readiness = "ARMED" if grade in {Grade.A_PLUS, Grade.A} and touches <= 1 else "WATCH"
+
+    zone = Zone(
+        zone_id=f"PZ_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}",
+        original_direction=candidate.direction,
+        flip_direction=flip,
+        setup_type="REVERSAL" if countertrend else "CONTINUATION",
+        source_tf=candidate.source_tf,
+        grade=grade,
+        state=ZoneState.ACTIVE,
+        core_low=round(candidate.core_low, 5),
+        core_high=round(candidate.core_high, 5),
+        core_method=f"{readiness}|PROMPT_EXACT_SOURCE_CANDLE|{candidate.method}",
+        location_score=round(loc, 4),
+        zone_low=round(candidate.zone_low, 5),
+        zone_high=round(candidate.zone_high, 5),
+        touch_count=touches,
+        confluences=sorted(conf),
+        independent_confluence_count=len(conf),
+        requires_sweep=True,
+        source_ts=int(candidate.source_ts),
+        invalidation_level=round(
+            candidate.zone_high if candidate.direction == Direction.SELL else candidate.zone_low,
+            5,
+        ),
+        invalidation_rule=(
+            "M15 accepted body beyond the exact source-candle zone invalidates it. "
+            "A wick-only liquidity raid does not invalidate."
+        ),
+        original_target1=float(vals[0]),
+        original_target2=float(vals[1]),
+        original_target3=float(vals[2]),
+        original_runner=float(vals[3]),
+        flip_target1=float(fvals[0]),
+        flip_target2=float(fvals[1]),
+        flip_target3=float(fvals[2]),
+        flip_runner=float(fvals[3]),
+        clear_run=round(clear_run, 5),
+        countertrend=countertrend,
+        dxy_support=_dxy_support(candidate.direction, snapshot),
+        notes=[
+            f"readiness:{readiness}",
+            f"source_candle:{candidate.source_tf}:{candidate.source_ts}",
+            f"source_kind:{candidate.source_kind}",
+            f"attached_liquidity:{required}:{attached.label}@{float(attached.price):.5f}",
+            f"mitigations:{touches}",
+            "Liquidity is not used to stretch the zone; it must already sit inside the source candle.",
+            "D1 gives context. H4 is primary. H1 refines/falls back. M15 validates health. M1 only times entry.",
+        ],
     )
-    zone.notes = [
-        note for note in zone.notes
-        if not str(note).startswith("m15_min_width_expansion:")
-        and not str(note).startswith("distal_liquidity:")
-    ]
 
-
-def _attach_liquidity_to_marked_zone(zone: Zone, level, s: MarketSnapshot) -> bool:
-    """Include only the nearby required BSL/SSL in the marked area.
-
-    The zone is rejected if doing so would create a broad, non-intraday envelope.
-    """
-    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
-    buffer_price = LIQUIDITY_EDGE_BUFFER_M15_ATR * m15a
-    p = float(level.price)
-    low = min(float(zone.zone_low), p - buffer_price)
-    high = max(float(zone.zone_high), p + buffer_price)
-    if high - low > MAX_MARKED_ZONE_WIDTH_M15_ATR * m15a:
-        return False
-
-    zone.zone_low = round(low, 5)
-    zone.zone_high = round(high, 5)
-    zone.invalidation_level = round(
-        zone.zone_high if zone.original_direction == Direction.SELL else zone.zone_low,
-        5,
-    )
-    kind = _required_liquidity_kind(zone.original_direction)
-    conf = set(zone.confluences)
-    conf.update({"LIQUIDITY_IN_MARKED_ZONE", f"{kind}_IN_MARKED_ZONE"})
-    zone.confluences = sorted(conf)
-    zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
-    zone.notes = [
-        n for n in zone.notes
-        if not str(n).startswith("attached_liquidity:")
-    ]
-    zone.notes.append(
-        f"attached_liquidity:{kind}:{level.label}@{float(level.price):.5f}"
-    )
-    return True
-
-
-def _institutional_rank(zone: Zone, analysis: Analysis, s: MarketSnapshot, candidate) -> tuple:
-    touches = int(zone.touch_count)
-    parent = zone.source_tf in H4_PARENT_SOURCES
-    strength = _max_strength(candidate)
-    displaced = "INSTITUTIONAL_DISPLACEMENT" in zone.confluences or strength >= 2.0
-    has_fvg = "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences
-
-    if zone.source_tf == "H4>H1" and touches == 0:
-        tier = 0
-    elif zone.source_tf == "H4" and touches == 0:
-        tier = 1
-    elif parent and touches == 1:
-        tier = 2
-    elif zone.source_tf == "H1" and touches == 0:
-        tier = 3
-    elif zone.source_tf == "H1" and touches == 1:
-        tier = 4
-    else:
-        tier = 9
-
-    tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(zone.source_tf, 9)
-    grade_rank = GRADE_RANK.get(zone.grade, 9)
-    distance = _distance(float(s.mid), float(zone.core_low), float(zone.core_high))
-    return (
-        tier,
-        tf_rank,
-        0 if displaced else 1,
-        0 if has_fvg else 1,
-        grade_rank,
-        -float(zone.location_score),
-        -strength,
-        touches,
-        distance,
-        -_parent_ts(zone, candidate),
-    )
-
-
-def _interaction_now(zone: Zone, s: MarketSnapshot) -> bool:
-    if not SETTINGS.paper_only or zone.state != ZoneState.ACTIVE:
-        return False
-    if zone.grade not in {Grade.A_PLUS, Grade.A}:
-        return False
-    if int(zone.touch_count) > MAX_PRIMARY_TOUCHES:
-        return False
-    conf = set(zone.confluences)
-    if "LIQUIDITY_IN_MARKED_ZONE" not in conf:
-        return False
-    state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
+    state = evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15)
     if state != ZoneState.ACTIVE:
+        return None, {
+            **base_diag,
+            "grade": grade.value,
+            "rejection_code": "M15_ACCEPTED_INVALIDATION",
+            "rejection_reason": (
+                "M15 has accepted beyond the source-candle boundary. Wick-only raids are allowed; "
+                "accepted body closes are not."
+            ),
+        }
+
+    return zone, {
+        **base_diag,
+        "grade": grade.value,
+        "rejection_code": "",
+        "rejection_reason": "",
+    }
+
+
+def _rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
+    tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(zone.source_tf, 9)
+    grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
+    distance = _distance(snapshot.mid, zone.zone_low, zone.zone_high)
+    return (
+        tf_rank,
+        grade_rank,
+        int(zone.touch_count),
+        0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1,
+        0 if "TICK_VOLUME_EXPANSION" in zone.confluences else 1,
+        -float(zone.location_score),
+        distance,
+        -int(zone.source_ts),
+    )
+
+
+def _readiness(zone: Zone) -> str:
+    method = str(zone.core_method or "")
+    return method.split("|", 1)[0] if "|" in method else "WATCH"
+
+
+def _set_readiness(zone: Zone, readiness: str) -> None:
+    old = str(zone.core_method or "")
+    tail = old.split("|", 1)[1] if "|" in old else old
+    zone.core_method = f"{readiness}|{tail}" if tail else readiness
+    zone.notes = [
+        f"readiness:{readiness}" if str(note).startswith("readiness:") else note
+        for note in zone.notes
+    ]
+
+
+def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    if zone.state != ZoneState.ACTIVE or zone.grade not in {Grade.A_PLUS, Grade.A}:
         return False
-    m15a = max(float(s.atr_m15 or atr(s.xau_m15)), 1e-9)
-    buffer_price = max(float(s.point) * 5.0, CORE_INTERACTION_BUFFER_M15_ATR * m15a)
-    return _distance(float(s.mid), float(zone.core_low), float(zone.core_high)) <= buffer_price
+    if evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15) != ZoneState.ACTIVE:
+        return False
+    if "LIQUIDITY_IN_MARKED_ZONE" not in set(zone.confluences):
+        return False
+    m15a = max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
+    buffer_price = max(float(snapshot.point) * 5.0, INTERACTION_BUFFER_M15_ATR * m15a)
+    return _distance(snapshot.mid, zone.core_low, zone.core_high) <= buffer_price
 
 
-def primary_zone_interacting(zone: Zone, s: MarketSnapshot) -> bool:
-    return _interaction_now(zone, s)
+def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapshot) -> list[Zone]:
+    """One simple prompt-driven institutional zone per side.
 
+    Hard zone rules:
+    1) exact H4/H1 source candle from displacement/BOS or liquidity sweep/rejection,
+    2) SELL has structural BSL inside the marked source-candle zone,
+    3) BUY has structural SSL inside the marked source-candle zone,
+    4) M15 accepted invalidation removes the zone.
 
-def _build_full_candidate_pool(analysis: Analysis, s: MarketSnapshot):
-    existing = {z.zone_id: z for z in analysis.zones}
-    context = daily_context(s)
-    pool = []
-    cmap = {}
+    Distance, PSY and DXY never create or disqualify a zone. Mitigations affect grade.
+    """
+    candidates = _build_candidates(snapshot)
+    context = analysis.overall_bias
+    accepted: dict[Direction, list[Zone]] = {Direction.BUY: [], Direction.SELL: []}
+    diagnostics: dict[Direction, list[dict]] = {Direction.BUY: [], Direction.SELL: []}
 
-    for zid, index, candidate in _candidate_rows(s):
-        cmap[zid] = candidate
-        zone = existing.get(zid)
-        if zone is None:
-            zone = build_zone(candidate, s, analysis.liquidity_map, context, index)
+    for index, candidate in enumerate(candidates, 1):
+        zone, diag = _candidate_zone(candidate, snapshot, analysis.liquidity_map, context, index)
+        diagnostics[candidate.direction].append(diag)
+        if zone is not None:
+            accepted[candidate.direction].append(zone)
 
-        touches = _core_touches(zone, candidate, s)
-        zone.touch_count = touches
-
-        if touches > MAX_PRIMARY_TOUCHES:
-            continue
-
-        _compact_envelope(zone, s)
-        attached = _attached_liquidity(zone, analysis, s)
-        if attached is None:
-            continue
-        if not _attach_liquidity_to_marked_zone(zone, attached, s):
-            continue
-
-        h1a = max(float(s.atr_h1 or atr(s.xau_h1)), 1e-9)
-        distance_h1_atr = _distance(float(s.mid), float(zone.zone_low), float(zone.zone_high)) / h1a
-        if distance_h1_atr > MAX_PRIMARY_DISTANCE_H1_ATR:
-            continue
-
-        if zone.state == ZoneState.RETIRED and touches <= MAX_PRIMARY_TOUCHES:
-            zone.state = ZoneState.ACTIVE
-        zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
-        if zone.state != ZoneState.ACTIVE:
-            continue
-
-        strength = _max_strength(candidate)
-        displaced = "INSTITUTIONAL_DISPLACEMENT" in zone.confluences or strength >= 2.0
-        if not displaced:
-            continue
-        if float(zone.clear_run) <= 0:
-            continue
-        if _conceptual_confluence_count(zone.confluences) < 2:
-            continue
-
-        if (
-            candidate.source_tf in H4_PARENT_SOURCES
-            and zone.grade not in {Grade.A_PLUS, Grade.A}
-        ):
-            zone.grade = Grade.A
-
-        if zone.grade not in {Grade.A_PLUS, Grade.A}:
-            continue
-
-        conf = set(zone.confluences)
-        conf.update({"PROMPT_GUIDED_PRIMARY_ZONE", "INTRADAY_REACHABLE"})
-        if candidate.source_tf in H4_PARENT_SOURCES:
-            conf.add("H4_PARENT_AUTHORITY")
-        if touches == 1:
-            conf.add("SINGLE_REACTION_STILL_VALID")
-        zone.confluences = sorted(conf)
-        zone.independent_confluence_count = _conceptual_confluence_count(zone.confluences)
-        pool.append(zone)
-
-    return pool, cmap
-
-
-def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
-    """Expose one prompt-guided institutional SELL and one BUY zone."""
-    if analysis is None:
-        return []
-
-    pool, cmap = _build_full_candidate_pool(analysis, s)
     chosen: dict[Direction, Zone] = {}
-
-    for direction in (Direction.BUY, Direction.SELL):
-        side = [z for z in pool if z.original_direction == direction]
+    for direction in (Direction.SELL, Direction.BUY):
+        side = accepted[direction]
         if not side:
             continue
-        side.sort(
-            key=lambda z: _institutional_rank(
-                z, analysis, s, cmap.get(z.zone_id)
-            )
-        )
-        zone = side[0]
-        if "PRIMARY_INSTITUTIONAL_ZONE" not in zone.notes:
-            zone.notes.append("PRIMARY_INSTITUTIONAL_ZONE")
-        chosen[direction] = zone
+        side.sort(key=lambda z: _rank(z, snapshot))
+        chosen[direction] = side[0]
 
     order = (
         [Direction.SELL, Direction.BUY]
-        if analysis.overall_bias == Direction.SELL
+        if context == Direction.SELL
         else [Direction.BUY, Direction.SELL]
-        if analysis.overall_bias == Direction.BUY
+        if context == Direction.BUY
         else [Direction.SELL, Direction.BUY]
     )
     analysis.zones = [chosen[d] for d in order if d in chosen]
 
-    interacting = [z for z in analysis.zones if _interaction_now(z, s)]
     for zone in analysis.zones:
-        _replace_readiness(zone, "INTERACTING" if zone in interacting else "ARMED")
+        _set_readiness(zone, "INTERACTING" if primary_zone_interacting(zone, snapshot) else _readiness(zone))
 
-    if interacting:
-        analysis.selected_zone_id = ""
-    else:
-        preferred = chosen.get(analysis.overall_bias)
-        if preferred is None and analysis.zones:
-            preferred = min(
-                analysis.zones,
-                key=lambda z: _distance(float(s.mid), float(z.core_low), float(z.core_high)),
-            )
-        analysis.selected_zone_id = (
-            preferred.zone_id
-            if preferred is not None
-            and preferred.state == ZoneState.ACTIVE
-            and preferred.grade in {Grade.A_PLUS, Grade.A}
-            else ""
-        )
+    executable = [z for z in analysis.zones if z.grade in {Grade.A_PLUS, Grade.A} and z.state == ZoneState.ACTIVE]
+    preferred = next((z for z in executable if z.original_direction == context), None)
+    if preferred is None and executable:
+        preferred = min(executable, key=lambda z: _distance(snapshot.mid, z.core_low, z.core_high))
+    analysis.selected_zone_id = preferred.zone_id if preferred is not None else ""
 
-    labels = []
-    public = {}
-    for z in analysis.zones:
-        role = "TREND" if not z.countertrend else "REVERSAL"
-        state = _readiness(z)
-        kind = _required_liquidity_kind(z.original_direction)
-        attached_note = next(
-            (n for n in z.notes if str(n).startswith("attached_liquidity:")),
-            "",
-        )
-        labels.append(
-            f"{role} {z.original_direction.value}={z.zone_low:.2f}-{z.zone_high:.2f} "
-            f"({z.source_tf},{z.grade.value},{state},touches={z.touch_count},{kind}=IN_ZONE)"
-        )
-        public[z.original_direction.value.lower()] = {
-            "zone_id": z.zone_id,
-            "state": state,
-            "source_tf": z.source_tf,
-            "grade": z.grade.value,
-            "low": z.zone_low,
-            "high": z.zone_high,
-            "core_low": z.core_low,
-            "core_high": z.core_high,
-            "touches": z.touch_count,
-            "required_liquidity": kind,
+    public: dict[str, dict] = {}
+    labels: list[str] = []
+    for zone in analysis.zones:
+        required = _required_liquidity(zone.original_direction)
+        attached = next((n for n in zone.notes if str(n).startswith("attached_liquidity:")), "")
+        public[zone.original_direction.value.lower()] = {
+            "zone_id": zone.zone_id,
+            "state": _readiness(zone),
+            "source_tf": zone.source_tf,
+            "grade": zone.grade.value,
+            "low": zone.zone_low,
+            "high": zone.zone_high,
+            "core_low": zone.core_low,
+            "core_high": zone.core_high,
+            "touches": zone.touch_count,
+            "required_liquidity": required,
             "liquidity_in_zone": True,
-            "attached_liquidity": attached_note,
+            "attached_liquidity": attached,
+            "source_ts": zone.source_ts,
         }
+        labels.append(
+            f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} "
+            f"({zone.source_tf},{zone.grade.value},{_readiness(zone)},touches={zone.touch_count},{required}=IN_ZONE)"
+        )
 
-    summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = (
-        f"D1 context={analysis.overall_bias.value}. Prompt-guided primary map: {summary}. "
-        "SELL requires BSL inside the marked zone; BUY requires SSL inside the marked zone. "
-        "H4/H4>H1 parent authority, displacement, premium/discount and FVG quality outrank "
-        "mere proximity, but the zone must still be reachable within the intraday ATR map. "
-        "More than one core mitigation rejects the primary zone. "
-        "M15 accepted invalidation removes it. M1 sweep/MSS/displacement/value confirmation "
-        "remains mandatory."
-    )
+    rejected_summary: dict[str, dict] = {}
+    for direction in (Direction.SELL, Direction.BUY):
+        rows = diagnostics[direction]
+        rejected = [x for x in rows if x.get("rejection_code")]
+        strongest = None
+        if rejected:
+            tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}
+            strongest = sorted(
+                rejected,
+                key=lambda x: (
+                    tf_rank.get(str(x.get("source_tf")), 9),
+                    int(x.get("touches") or 0),
+                    float(x.get("distance_h1_atr") or 999.0),
+                    -int(x.get("source_ts") or 0),
+                ),
+            )[0]
+        rejected_summary[direction.value.lower()] = {
+            "candidate_count": len(rows),
+            "rejected_count": len(rejected),
+            "strongest_rejected": strongest,
+            "summary": (
+                "ZONE_SELECTED"
+                if direction in chosen
+                else strongest.get("rejection_code")
+                if strongest
+                else "NO_VALID_H4_H1_SOURCE_CANDLE"
+            ),
+        }
 
     policy = dict(analysis.execution_policy or {})
     policy["public_zone_map"] = {
+        "engine": "PROMPT_ZONE_ENGINE_2026_09_14",
         "map_count": len(analysis.zones),
         "max_zones": 2,
         "one_per_side": True,
         "sell_requires_bsl_in_marked_zone": True,
         "buy_requires_ssl_in_marked_zone": True,
-        "max_primary_touches": MAX_PRIMARY_TOUCHES,
-        "max_primary_distance_h1_atr": MAX_PRIMARY_DISTANCE_H1_ATR,
-        "h4_parent_priority": True,
-        "resting_liquidity_must_be_attached": True,
-        "distant_liquidity_is_target_not_zone_qualification": True,
-        "compact_zone_required": True,
-        "m15_accepted_invalidation_authoritative": True,
-        "m1_confirmation_unchanged": True,
+        "exact_source_candle_zone": True,
+        "h4_primary_h1_refine_or_fallback": True,
+        "m15_health_only": True,
+        "m1_timing_only": True,
+        "distance_is_not_a_hard_zone_filter": True,
+        "psy_is_confluence_not_qualification": True,
+        "dxy_is_confirmation_not_qualification": True,
+        "mitigation_count_affects_grade_not_zone_geometry": True,
+        "wick_only_does_not_invalidate": True,
+        "rejected_diagnostics": rejected_summary,
         **public,
     }
     analysis.execution_policy = policy
+
+    summary = "; ".join(labels) if labels else "none"
+    analysis.trader_brief = (
+        f"D1 context={context.value}. Prompt source-candle map: {summary}. "
+        "SELL exists only when structural BSL is physically inside the exact marked source-candle zone. "
+        "BUY exists only when structural SSL is physically inside the exact marked source-candle zone. "
+        "H4 is primary; H1 refines or falls back. M15 only checks mitigation and accepted invalidation. "
+        "Distance, PSY and DXY do not manufacture or delete zones. M1 remains entry timing only."
+    )
     return analysis.zones
+
+
+def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = None) -> Analysis:
+    now = generated_at or int(datetime.now(timezone.utc).timestamp())
+    liq = liquidity_map(snapshot)
+    context = structure_bias(snapshot.xau_d1)
+
+    structural = [x for x in liq if "BSL" in x.label.upper() or "SSL" in x.label.upper()]
+    if context == Direction.SELL:
+        preferred = sorted(
+            [x for x in structural if "SSL" in x.label.upper() and x.price < snapshot.mid],
+            key=lambda x: x.distance,
+        )
+    elif context == Direction.BUY:
+        preferred = sorted(
+            [x for x in structural if "BSL" in x.label.upper() and x.price > snapshot.mid],
+            key=lambda x: x.distance,
+        )
+    else:
+        preferred = sorted(structural, key=lambda x: x.distance)
+    primary = preferred[0] if preferred else (sorted(structural, key=lambda x: x.distance)[0] if structural else None)
+
+    guards: list[str] = []
+    if not snapshot.complete():
+        guards.append("NO_COMPLETE_HISTORY_CONTEXT")
+    if snapshot.spread_points > SETTINGS.max_spread_points:
+        guards.append(f"SPREAD_HIGH:{snapshot.spread_points:.1f}")
+    if now - snapshot.sent_at > SETTINGS.max_snapshot_age_seconds:
+        guards.append("SNAPSHOT_STALE")
+
+    hard_block = (
+        "NO_COMPLETE_HISTORY_CONTEXT" in guards
+        or "SNAPSHOT_STALE" in guards
+        or any(x.startswith("SPREAD_HIGH:") for x in guards)
+    )
+    usd_news = [
+        {
+            "ts": int(n.ts),
+            "title": str(n.title),
+            "impact": str(n.impact),
+        }
+        for n in snapshot.news
+        if str(n.currency).upper() == "USD"
+    ]
+
+    analysis = Analysis(
+        analysis_id=f"A_{now}_{uuid.uuid4().hex[:8]}",
+        generated_at=now,
+        snapshot_at=snapshot.sent_at,
+        overall_bias=context,
+        primary_liquidity=f"{primary.label}@{primary.price:.5f}" if primary else "",
+        liquidity_map=liq,
+        zones=[],
+        selected_zone_id="",
+        trader_brief="",
+        approved=not hard_block,
+        prompt_version="SMC_PROMPT_ZONE_ENGINE_2026_09_14",
+        execution_policy={
+            "core": "PROMPT_D1_CONTEXT_H4_SOURCE_H1_REFINEMENT_M15_HEALTH_M1_TIMING",
+            "market_structure": {
+                "xau_d1": structure_bias(snapshot.xau_d1).value,
+                "xau_h4": structure_bias(snapshot.xau_h4).value,
+                "xau_h1": structure_bias(snapshot.xau_h1).value,
+                "xau_m15": structure_bias(snapshot.xau_m15).value,
+                "dxy_d1": structure_bias(snapshot.dxy_d1).value,
+                "dxy_h1": structure_bias(snapshot.dxy_h1).value,
+            },
+            "market_inputs": {
+                "atr_h1": float(snapshot.atr_h1 or atr(snapshot.xau_h1)),
+                "atr_m15": float(snapshot.atr_m15 or atr(snapshot.xau_m15)),
+                "spread_points": float(snapshot.spread_points),
+                "usd_news": usd_news,
+            },
+            "primary": [
+                "D1_CONTEXT",
+                "H4_EXACT_SOURCE_CANDLE",
+                "H1_REFINEMENT_OR_FALLBACK",
+                "STRUCTURAL_BSL_OR_SSL_INSIDE_MARKED_ZONE",
+                "DISPLACEMENT_BOS_OR_SWEEP_REJECTION",
+                "FVG_CONFLUENCE_IF_PRESENT",
+                "MITIGATION_COUNT",
+                "M15_ACCEPTED_INVALIDATION",
+                "M1_SWEEP_MSS_DISPLACEMENT_VALUE_ENTRY",
+            ],
+            "reentry": [
+                "THESIS_VALID",
+                "OBJECTIVE_OPEN",
+                "CONTINUATION_BOS",
+                "NEW_DISPLACEMENT",
+                "NEW_M1_DEALING_RANGE",
+                "INTERNAL_LIQUIDITY",
+                "PREMIUM_DISCOUNT",
+                "FRESH_PD_ARRAY",
+            ],
+            "flip": [
+                "M15_ACCEPTANCE_INVALIDATION",
+                "NO_INSTANT_REVERSE",
+                "OPPOSITE_SIDE_RETEST",
+                "M1_MSS_BOS",
+                "DISPLACEMENT",
+                "NEW_M1_DEALING_RANGE",
+                "PREMIUM_DISCOUNT",
+                "OTE",
+                "FRESH_PD_ARRAY",
+            ],
+            "risk": [
+                "ONE_BUDGET_PER_THESIS",
+                "NO_AVERAGING_DOWN",
+                "NO_SL_WIDENING",
+                "STRUCTURE_AWARE_BE",
+                "LIQUIDITY_PARTIALS",
+                "M5_ATR_RUNNER_TRAIL",
+            ],
+        },
+        guards=guards,
+    )
+    apply_two_zone_institutional_map(analysis, snapshot)
+    return analysis
