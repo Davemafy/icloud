@@ -5,10 +5,38 @@ import re
 from .engine import atr
 from .models import Analysis, Grade, MarketSnapshot, Zone
 
-# XAUUSD display convention used by Trade Zone:
+# XAUUSD convention used by Trade Zone:
 # 1 pip = 10 broker points. On the current Deriv XAU feed point=0.01,
 # therefore 1 pip = 0.10 in price.
 XAU_POINTS_PER_PIP = 10.0
+
+# PAPER/DEMO zone geometry requested for v6.5.2.
+CORE_MIN_PIPS = 100.0
+CORE_MAX_PIPS = 200.0
+ENVELOPE_MIN_PIPS = 300.0
+ENVELOPE_MAX_PIPS = 400.0
+MIN_SWEEP_ROOM_PIPS = 50.0
+
+CORE_MIN_POINTS = CORE_MIN_PIPS * XAU_POINTS_PER_PIP
+CORE_MAX_POINTS = CORE_MAX_PIPS * XAU_POINTS_PER_PIP
+ENVELOPE_MIN_POINTS = ENVELOPE_MIN_PIPS * XAU_POINTS_PER_PIP
+ENVELOPE_MAX_POINTS = ENVELOPE_MAX_PIPS * XAU_POINTS_PER_PIP
+MIN_SWEEP_ROOM_POINTS = MIN_SWEEP_ROOM_PIPS * XAU_POINTS_PER_PIP
+
+
+def install_zone_geometry_policy() -> None:
+    """Install the requested PAPER/DEMO XAU zone widths.
+
+    Candidate source detection, BSL/SSL qualification, M15 invalidation and M1
+    confirmation are unchanged. Only the geometry constants are replaced.
+    """
+    from . import institutional_two_zone as zoning
+
+    zoning.CORE_MIN_POINTS = CORE_MIN_POINTS
+    zoning.CORE_MAX_POINTS = CORE_MAX_POINTS
+    zoning.ENVELOPE_MIN_POINTS = ENVELOPE_MIN_POINTS
+    zoning.ENVELOPE_MAX_POINTS = ENVELOPE_MAX_POINTS
+    zoning.MIN_SWEEP_ROOM_POINTS = MIN_SWEEP_ROOM_POINTS
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -44,13 +72,7 @@ def _reachability_bucket(zone: Zone, snapshot: MarketSnapshot) -> tuple[int, flo
 
 
 def intraday_zone_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
-    """Rank valid zones for today's alert without deleting remote HTF zones.
-
-    A/A+ zones remain the execution-quality tier. Freshness comes next, then an
-    intraday reachability bucket, then HTF source authority and finer quality.
-    This lets a much closer equally-valid zone outrank a remote context zone,
-    while B+ WATCH zones still remain below A/A+ zones.
-    """
+    """Rank valid zones for today's alert without deleting remote HTF zones."""
     execution_grade_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A} else 1
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(str(zone.source_tf), 9)
@@ -92,9 +114,11 @@ def _convert_diag_to_pips(row: dict | None) -> None:
             row.pop(old, None)
 
     reason = str(row.get("rejection_reason") or "")
-    reason = reason.replace("200-300 point envelope", "20-30 pip envelope")
-    reason = reason.replace("200-300 points", "20-30 pips")
-    reason = reason.replace("50 points", "5 pips")
+    # The underlying zoning module still contains legacy wording; normalize the
+    # user-facing explanation to the active v6.5.2 pip contract.
+    reason = reason.replace("200-300 point envelope", "300-400 pip envelope")
+    reason = reason.replace("200-300 points", "300-400 pips")
+    reason = reason.replace("50 points", "50 pips")
     row["rejection_reason"] = reason
 
 
@@ -117,22 +141,18 @@ def _convert_zone_notes(zone: Zone) -> None:
                 matched = True
                 break
         if not matched:
-            text = text.replace("100-150 points", "10-15 pips")
-            text = text.replace("200-300 points", "20-30 pips")
-            text = text.replace("50 points", "5 pips")
+            text = text.replace("100-150 points", "100-200 pips")
+            text = text.replace("200-300 points", "300-400 pips")
+            text = text.replace("50 points", "50 pips")
         converted.append(text)
     zone.notes = converted
     zone.invalidation_rule = str(zone.invalidation_rule).replace(
-        "200-300 point envelope", "20-30 pip envelope"
+        "200-300 point envelope", "300-400 pip envelope"
     )
 
 
 def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
-    """Convert user-facing XAU zone width readings from points to pips.
-
-    Geometry itself is unchanged. This also removes duplicated public-map
-    ``zone_id`` fields so DataBridge v1.34 counts only actual entries in zones[].
-    """
+    """Expose all XAU zone widths in pips while retaining broker-point internals."""
     if analysis is None:
         return analysis
 
@@ -146,9 +166,8 @@ def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> 
         entry = zone_map.get(side)
         if isinstance(entry, dict):
             entry = dict(entry)
-            # DataBridge v1.34 scans for the literal key "zone_id" after zones[].
-            # Keeping it here can make one zone appear as MAP 2. The canonical ID
-            # remains in analysis.zones, so removing this duplicate is safe.
+            # DataBridge v1.34 scans literal zone_id keys after zones[]. Removing
+            # this duplicate keeps MAP count equal to the real zones[] count.
             entry.pop("zone_id", None)
             for old, new in (
                 ("core_width_points", "core_width_pips"),
@@ -180,25 +199,29 @@ def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> 
 
     zone_map["width_display_unit"] = "pips"
     zone_map["xau_points_per_pip"] = XAU_POINTS_PER_PIP
-    zone_map["reachability_is_ranking_only"] = True
+    zone_map["core_width_pips_min"] = CORE_MIN_PIPS
+    zone_map["core_width_pips_max"] = CORE_MAX_PIPS
+    zone_map["envelope_width_pips_min"] = ENVELOPE_MIN_PIPS
+    zone_map["envelope_width_pips_max"] = ENVELOPE_MAX_PIPS
+    zone_map["min_sweep_room_pips"] = MIN_SWEEP_ROOM_PIPS
     policy["public_zone_map"] = zone_map
 
     geometry = dict(policy.get("zone_geometry") or {})
-    if "core_width_points" in geometry:
-        geometry["core_width_pips"] = [round(_points_to_pips(x), 1) for x in geometry.pop("core_width_points")]
-    if "envelope_width_points" in geometry:
-        geometry["envelope_width_pips"] = [round(_points_to_pips(x), 1) for x in geometry.pop("envelope_width_points")]
-    if "minimum_sweep_room_points" in geometry:
-        geometry["minimum_sweep_room_pips"] = round(_points_to_pips(geometry.pop("minimum_sweep_room_points")), 1)
+    geometry.pop("core_width_points", None)
+    geometry.pop("envelope_width_points", None)
+    geometry.pop("minimum_sweep_room_points", None)
+    geometry["core_width_pips"] = [CORE_MIN_PIPS, CORE_MAX_PIPS]
+    geometry["envelope_width_pips"] = [ENVELOPE_MIN_PIPS, ENVELOPE_MAX_PIPS]
+    geometry["minimum_sweep_room_pips"] = MIN_SWEEP_ROOM_PIPS
     geometry["display_unit"] = "pips"
     geometry["xau_points_per_pip"] = XAU_POINTS_PER_PIP
     policy["zone_geometry"] = geometry
 
     primary = list(policy.get("primary") or [])
     replacements = {
-        "CORE_100_150_POINTS": "CORE_10_15_PIPS",
-        "ENVELOPE_200_300_POINTS": "ENVELOPE_20_30_PIPS",
-        "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM": "MINIMUM_5_PIP_DISTAL_SWEEP_ROOM",
+        "CORE_100_150_POINTS": "CORE_100_200_PIPS",
+        "ENVELOPE_200_300_POINTS": "ENVELOPE_300_400_PIPS",
+        "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM": "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM",
     }
     policy["primary"] = [replacements.get(x, x) for x in primary]
     analysis.execution_policy = policy
@@ -209,8 +232,8 @@ def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> 
         lambda m: f"sweep_room={float(m.group(1)) / XAU_POINTS_PER_PIP:.1f}pip",
         brief,
     )
-    brief = brief.replace("Core width is 100-150 points.", "Core width is 10-15 pips.")
-    brief = brief.replace("Outer envelope is 200-300 points.", "Outer envelope is 20-30 pips.")
-    brief = brief.replace("at least 50 points reserved", "at least 5 pips reserved")
+    brief = brief.replace("Core width is 100-150 points.", "Core width is 100-200 pips.")
+    brief = brief.replace("Outer envelope is 200-300 points.", "Outer envelope is 300-400 pips.")
+    brief = brief.replace("at least 50 points reserved", "at least 50 pips reserved")
     analysis.trader_brief = brief
     return analysis
