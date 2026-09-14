@@ -93,6 +93,17 @@ def latest_analysis(ai_required: bool = False) -> Optional[Analysis]:
 
 
 def save_feedback(f: Feedback) -> None:
+    # Observer v3.24 is shadow telemetry only. Normalize its context/targets to the
+    # current cloud execution contract before the journal or ML dataset sees it:
+    # wide envelope = context, tactical core = execution handoff, and every target
+    # must sit on the profitable side of the candidate's actual entry.
+    if f.event.upper() == "ML_CANDIDATE":
+        try:
+            from .execution_safety import normalize_candidate_feedback
+            f = normalize_candidate_feedback(f, latest_analysis(ai_required=False), latest_snapshot())
+        except Exception as exc:
+            audit(f.ts, "feedback.execution_safety.error", f"analysis={f.analysis_id} zone={f.zone_id} error={type(exc).__name__}:{exc}")
+
     details_text = _details_text(f.details)
     with _lock, connect() as db:
         db.execute(
