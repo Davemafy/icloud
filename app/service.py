@@ -11,6 +11,12 @@ from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
 from .watch_ready import promote_watch_to_m1_ready
+from .zone_runtime_policy import apply_pip_display_contract, install_zone_geometry_policy
+
+# PAPER/DEMO ONLY: install the requested XAU geometry before any analysis is built.
+# Source detection, BSL/SSL qualification, M15 invalidation and M1 confirmation
+# remain unchanged.
+install_zone_geometry_policy()
 
 
 async def run_analysis(reason: str = "MANUAL") -> Analysis:
@@ -20,9 +26,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     now = int(datetime.now(timezone.utc).timestamp())
 
     # Single authoritative zoning path: today's prompt-driven source-candle engine.
-    # No legacy H4 policy, compact-envelope expansion, distance gate, or old candidate patching.
     a = build_prompt_analysis(s, now)
     apply_prompt_confirmation_contract(a, s)
+    apply_pip_display_contract(a, s)
     primary_zones = list(a.zones)
 
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
@@ -62,7 +68,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             f"reason={reason} provider={provider} approved={a.ai_approved} "
             f"selected={selected} execution_selected={execution_selected} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14 risks={risks}",
+            f"prompt_zone_engine=2026_09_14_v652 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -87,7 +93,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
-        f"prompt_zone_engine=2026_09_14 "
+        f"prompt_zone_engine=2026_09_14_v652 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
