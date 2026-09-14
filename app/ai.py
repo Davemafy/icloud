@@ -56,19 +56,22 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "d1_context_only": True,
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
+            "zone_is_exact_source_candle_range": True,
             "sell_requires_structural_bsl_inside_marked_zone": True,
             "buy_requires_structural_ssl_inside_marked_zone": True,
             "psy_level_alone_never_qualifies_zone": True,
-            "max_primary_core_mitigations": 1,
             "liquidity_sweep_rejection_source_is_valid_htf_source": True,
-            "displacement_source_is_valid_htf_source": True,
-            "distant_liquidity_is_target_not_zone_expansion": True,
-            "m15_or_h1_body_acceptance_invalidates": True,
+            "displacement_bos_source_is_valid_htf_source": True,
+            "fvg_is_quality_confluence_not_mandatory": True,
+            "mitigation_count_affects_strength_and_grade": True,
+            "repeated_mitigation_does_not_expand_or_move_zone": True,
+            "distance_is_not_a_hard_zone_filter": True,
+            "liquidity_must_not_be_used_to_stretch_zone": True,
+            "m15_or_h1_closed_body_acceptance_invalidates": True,
             "wick_only_liquidity_raid_does_not_invalidate": True,
             "dxy_is_confirmation_not_zone_authority": True,
             "zone_has_two_branches": True,
             "invalidation_is_not_flip_entry": True,
-            "htf_location_remains_authority": True,
             "m1_confirmation_cannot_redefine_htf_zone": True,
             "vwap_is_tick_volume_proxy_not_centralized_comex_volume": True,
             "order_flow_disabled_without_centralized_feed": True,
@@ -78,33 +81,35 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
 
 
 SYSTEM = """You are a conservative validation layer for an XAUUSD institutional chart-analysis engine.
-The deterministic engine owns the observed prices, candidate zones, liquidity map and safety guards. You
-MUST NOT invent unseen market data, move a zone to a price that is not in the supplied analysis, or create
-an entry merely because price is close to a level.
+Use ONLY the market data supplied by the deterministic engine. Do not invent prices, unseen candles,
+volume, news, liquidity, FVGs, or zones. Do not move a published zone to make it fit a theory.
 
-Validate the published primary map using this hierarchy:
-1. D1 gives directional/context bias only; D1 must not create the intraday zone geometry.
-2. H4 supplies the parent institutional location. H1 may refine an H4 parent. An H1-only area is fallback
-   only when no valid H4/H4>H1 parent exists on that side.
-3. SELL supply MUST have structural buy-side liquidity (BSL) physically inside/attached to the compact
-   marked area. BUY demand MUST have structural sell-side liquidity (SSL) physically inside/attached.
-   A psychological level or generic nearby liquidity by itself is not enough.
-4. Accept two HTF source styles: a displacement origin, or a closed-candle liquidity sweep/rejection that
-   is followed by decisive displacement away. Strong rejection wicks and stop raids matter when confirmed
-   by that follow-through.
-5. Freshness is strict. More than one core mitigation rejects a primary zone. Do not approve a repeatedly
-   traded internal H1 area as an A/A+ primary zone.
-6. Liquidity is a qualification/sweep reference, not permission to stretch a narrow source into a huge
-   envelope. Distant liquidity belongs to targets/context.
-7. M15/H1 body acceptance beyond the compact zone invalidates the original thesis. A wick-only raid does
-   not. DXY is intermarket confirmation only and cannot create or rescue a weak XAU zone.
-8. Publish at most one primary SELL and one primary BUY. It is acceptable to publish only one side, or no
-   primary zone, when the supplied evidence does not satisfy the rules.
-9. M1 is timing only. The HTF zone exists before M1; M1 confirmation cannot redefine the parent location.
+Validate the prompt-driven zone map with these simple rules:
+1. D1 gives the main context/bias. H4 is the main institutional source timeframe. H1 may refine an H4
+   source or act as tactical fallback. M15 checks health/invalidation. M1 is entry timing only.
+2. Every published zone must come from an exact visible H4/H1 source candle that either:
+   a) caused decisive displacement/BOS away, or
+   b) swept liquidity, rejected, and was followed by decisive displacement.
+3. The marked zone is the source-candle price range. Do not stretch it toward distant liquidity.
+4. SELL supply is valid only when structural BSL is physically inside that marked zone.
+   BUY demand is valid only when structural SSL is physically inside that marked zone.
+   PSY levels are confluence only and never replace BSL/SSL.
+5. FVG/imbalance, rejection wick, premium/discount, tick-volume expansion, H4/H1 overlap and DXY may
+   strengthen a zone, but none of them can replace the required BSL/SSL.
+6. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation should downgrade the
+   zone to weaker/WATCH quality rather than move the zone or manufacture a new one.
+7. Do not reject a structurally valid source-candle zone only because it is far from current price.
+   Distance affects urgency, not whether the institutional zone exists.
+8. Closed-body acceptance on M15 or H1 beyond the source-candle boundary invalidates the original zone.
+   A wick-only liquidity raid does not.
+9. Publish at most one strongest SELL and one strongest BUY. It is acceptable to publish one side or none
+   if no source candle contains the correct structural liquidity.
+10. M1 cannot redefine the HTF zone. Execution still requires the existing sweep -> MSS/BOS ->
+    displacement -> new dealing range -> value/OTE/PD-array sequence.
 
-Reject validation when any published zone contradicts these rules. Be especially strict about: wrong
-liquidity type, liquidity outside the marked area, repeated mitigation, H1 internal noise being promoted
-over a valid H4 parent, or a remote context level being presented as today's primary intraday alert.
+Reject validation only when a published zone breaks these rules or supplied safety guards. Do not reapply
+old compact-envelope, fixed ATR-distance, or mandatory multi-confluence filters that are not in this
+prompt-driven contract.
 
 Return JSON only: {"approved": true|false, "summary": "...", "risks": ["..."]}.
 """
