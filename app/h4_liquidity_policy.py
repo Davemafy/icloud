@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 
 from .config import SETTINGS
-from .engine import _touches, atr
-from .intraday_engine import build_candidates
+from .engine import _touches, atr, evaluate_zone_state
+from .intraday_engine import _zone as build_zone
+from .intraday_engine import build_candidates, daily_context
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 
 
@@ -18,6 +19,10 @@ def _readiness(zone: Zone) -> str:
 def _replace_readiness(zone: Zone, readiness: str) -> None:
     parts = zone.core_method.split("|", 1)
     zone.core_method = readiness if len(parts) == 1 else f"{readiness}|{parts[1]}"
+    zone.notes = [
+        f"readiness:{readiness}" if note.startswith("readiness:") else note
+        for note in zone.notes
+    ]
 
 
 def _distance(mid: float, low: float, high: float) -> float:
@@ -26,12 +31,8 @@ def _distance(mid: float, low: float, high: float) -> float:
     return low - mid if mid < low else mid - high
 
 
-def _candidate_map(s: MarketSnapshot):
-    out = {}
-    for i, c in enumerate(build_candidates(s), 1):
-        zid = f"Z_{c.source_tf.replace('>','')}_{c.direction.value}_{i}"
-        out[zid] = c
-    return out
+def _zone_id(candidate, index: int) -> str:
+    return f"Z_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}"
 
 
 def _has_resting_liquidity(zone: Zone, analysis: Analysis, s: MarketSnapshot) -> bool:
@@ -75,26 +76,30 @@ def _refresh_brief_counts(analysis: Analysis) -> None:
 def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> list[Zone]:
     """Paper-only H4 parent-zone qualification.
 
-    The newest displayed H4 parent on each side that is still unmitigated at its
-    tactical core and still has resting external liquidity on its distal side is
-    promoted from WATCH to ACTIONABLE. This changes location qualification only;
-    all downstream AI/live-data/M1 confirmation gates remain unchanged.
+    On each side, the newest H4 parent whose tactical core has never been
+    mitigated and still has resting external liquidity on its distal side is
+    kept in the cloud map and promoted to ACTIONABLE. This changes location
+    qualification only; AI/live-data gates and the existing M1 confirmation
+    sequence remain unchanged.
     """
-    if not SETTINGS.paper_only or analysis is None or not analysis.zones:
+    if not SETTINGS.paper_only or analysis is None:
         return []
 
-    candidates = _candidate_map(s)
-    eligible: dict[Direction, list[tuple[int, Zone]]] = {
+    existing = {z.zone_id: z for z in analysis.zones}
+    eligible: dict[Direction, list[tuple[int, Zone, bool]]] = {
         Direction.BUY: [],
         Direction.SELL: [],
     }
+    context = daily_context(s)
 
-    for zone in analysis.zones:
-        if zone.source_tf != "H4" or zone.state != ZoneState.ACTIVE:
+    for index, candidate in enumerate(build_candidates(s), 1):
+        if candidate.source_tf != "H4":
             continue
-        candidate = candidates.get(zone.zone_id)
-        if candidate is None or candidate.source_tf != "H4":
-            continue
+        zid = _zone_id(candidate, index)
+        zone = existing.get(zid)
+        was_displayed = zone is not None
+        if zone is None:
+            zone = build_zone(candidate, s, analysis.liquidity_map, context, index)
 
         core_touches = _touches(
             zone.core_low,
@@ -107,16 +112,27 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
         if not _has_resting_liquidity(zone, analysis, s):
             continue
 
-        eligible[zone.original_direction].append((candidate.source_ts, zone))
+        # The ordinary envelope-touch retirement rule may be wider than the
+        # actual tactical core. For this specific H4 rule, core mitigation is
+        # authoritative; accepted M15 invalidation still remains authoritative.
+        if zone.state == ZoneState.RETIRED:
+            zone.state = ZoneState.ACTIVE
+        zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
+        if zone.state != ZoneState.ACTIVE:
+            continue
+
+        eligible[zone.original_direction].append(
+            (candidate.source_ts, zone, was_displayed)
+        )
 
     promoted: list[Zone] = []
     for direction in (Direction.BUY, Direction.SELL):
         side = eligible[direction]
         if not side:
             continue
-        _, zone = max(side, key=lambda item: item[0])
+        _, zone, was_displayed = max(side, key=lambda item: item[0])
         _replace_readiness(zone, "ACTIONABLE")
-        if zone.grade == Grade.B_PLUS:
+        if zone.grade not in (Grade.A_PLUS, Grade.A):
             zone.grade = Grade.A
         zone.touch_count = 0
         conf = set(zone.confluences)
@@ -125,6 +141,9 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
         zone.independent_confluence_count = len(conf)
         if "H4_LAST_UNMITIGATED_LIQUIDITY_READY" not in zone.notes:
             zone.notes.append("H4_LAST_UNMITIGATED_LIQUIDITY_READY")
+        if not was_displayed:
+            analysis.zones.append(zone)
+            existing[zone.zone_id] = zone
         promoted.append(zone)
 
     if promoted and not analysis.selected_zone_id:
@@ -150,6 +169,7 @@ def apply_latest_h4_liquidity_policy(analysis: Analysis, s: MarketSnapshot) -> l
             "paper_only": True,
             "latest_unmitigated_h4": True,
             "requires_resting_liquidity": True,
+            "core_mitigation_authoritative": True,
             "m1_confirmation_unchanged": True,
         }
         analysis.execution_policy = policy
