@@ -52,8 +52,16 @@ def apply_prompt_confirmation_contract(analysis: Analysis, snapshot: MarketSnaps
         else:
             zone.dxy_support = "CONFLICT"
 
-    if prompt_snapshot_complete(snapshot):
+    complete = prompt_snapshot_complete(snapshot)
+    if complete:
         analysis.guards = [g for g in analysis.guards if g != "NO_COMPLETE_HISTORY_CONTEXT"]
+
+    hard_block = (
+        not complete
+        or "SNAPSHOT_STALE" in analysis.guards
+        or any(str(g).startswith("SPREAD_HIGH:") for g in analysis.guards)
+    )
+    analysis.approved = not hard_block
 
     policy = dict(analysis.execution_policy or {})
     structure = dict(policy.get("market_structure") or {})
@@ -63,7 +71,7 @@ def apply_prompt_confirmation_contract(analysis: Analysis, snapshot: MarketSnaps
     policy["market_structure"] = structure
 
     inputs = dict(policy.get("market_inputs") or {})
-    inputs["prompt_snapshot_complete"] = prompt_snapshot_complete(snapshot)
+    inputs["prompt_snapshot_complete"] = complete
     inputs["dxy_confirmation_timeframes"] = ["D1", "H1"]
     policy["market_inputs"] = inputs
     analysis.execution_policy = policy
