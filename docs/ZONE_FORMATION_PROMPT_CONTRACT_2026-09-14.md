@@ -1,7 +1,7 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V654`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V655`
 
 This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
@@ -58,10 +58,10 @@ This is mandatory for the intraday alert map:
 
 ## Selection for today
 
-- Publish at most one BUY and one SELL.
-- Never force both sides.
-- If no valid BUY exists below/interacting with price, BUY = NONE.
-- If no valid SELL exists above/interacting with price, SELL = NONE.
+- Publish at most one PRIMARY BUY and one PRIMARY SELL.
+- Never force both primary sides.
+- If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
+- If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
 - A/A+ execution quality is preferred over B+ WATCH quality.
 - Among already-valid A/A+ candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
@@ -70,6 +70,22 @@ This is mandatory for the intraday alert map:
 - H4/H4>H1 authority remains a quality tiebreaker, not permission to ignore a much nearer valid institutional location.
 - Distance never creates a zone and never excuses missing BSL/SSL.
 - A remote valid HTF source may remain context rather than the primary intraday alert.
+
+## Secondary reserve level
+
+A second level may be published as a BACKUP only. It is not a second active execution zone.
+
+- At most one SECONDARY SELL and one SECONDARY BUY may be shown.
+- SECONDARY must pass the same structural source, BSL/SSL, geometry, freshness and M15-health rules as a primary zone.
+- SECONDARY must be A or A+ and have no more than one core mitigation.
+- SECONDARY must come from a distinct institutional source and must not overlap the primary envelope.
+- For SELL: Level 2 must be a higher supply zone beyond the primary SELL invalidation side.
+- For BUY: Level 2 must be a lower demand zone beyond the primary BUY invalidation side.
+- While Level 1 is valid, Level 2 is `RESERVE` / context only and has zero M1 execution authority.
+- Level 1 invalidation does not instantly activate Level 2.
+- After closed-M15 accepted invalidation of Level 1, a fresh analysis must requalify Level 2. It must still be active, on the correct side of price, retain the required structural liquidity and pass all normal safety rules.
+- Once requalified as the new primary, the normal M1 sweep -> MSS/BOS -> displacement -> dealing range -> value/OTE/PD-array sequence is still mandatory.
+- If no clean non-overlapping reserve exists, SECONDARY = NONE. Do not manufacture a backup zone.
 
 ## Mitigation and invalidation
 
@@ -89,4 +105,4 @@ No chase and no blind entry.
 
 ## Future-change rule
 
-When zoning code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, or automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location.
+When zoning code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, or grants execution authority to a Level-2 reserve while Level 1 remains valid.
