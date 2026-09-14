@@ -37,3 +37,14 @@ def test_existing_session_times_are_preserved(monkeypatch):
     monkeypatch.setattr(scheduler,"latest_snapshot",lambda: None)
     t=datetime(2026,9,14,7,50)
     assert "SESSION_0750" in scheduler._due_reasons(t)
+
+
+def test_startup_bootstrap_requires_fresh_complete_snapshot(monkeypatch):
+    settings=SimpleNamespace(max_snapshot_age_seconds=120)
+    monkeypatch.setattr(scheduler,"SETTINGS",settings)
+    fresh=SimpleNamespace(sent_at=1000,complete=lambda: True)
+    stale=SimpleNamespace(sent_at=800,complete=lambda: True)
+    incomplete=SimpleNamespace(sent_at=1000,complete=lambda: False)
+    assert scheduler._fresh_complete_snapshot(fresh,1100) is True
+    assert scheduler._fresh_complete_snapshot(stale,1100) is False
+    assert scheduler._fresh_complete_snapshot(incomplete,1100) is False
