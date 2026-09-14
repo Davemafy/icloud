@@ -7,7 +7,6 @@ import uuid
 
 from .config import SETTINGS
 from .engine import (
-    _dxy,
     _location_score,
     _targets,
     _touches,
@@ -18,7 +17,7 @@ from .engine import (
     structure_bias,
 )
 from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
-
+from .prompt_contract import prompt_dxy_direction, prompt_snapshot_complete
 
 SWEEP_LOOKBACK = 8
 FOLLOW_THROUGH_BARS = 3
@@ -26,6 +25,11 @@ MIN_REJECTION_WICK_FRACTION = 0.30
 MIN_FOLLOW_THROUGH_ATR = 0.60
 H1_PARENT_OVERLAP_ATR = 0.25
 INTERACTION_BUFFER_M15_ATR = 0.30
+CORE_MIN_POINTS = 100.0
+CORE_MAX_POINTS = 150.0
+ENVELOPE_MIN_POINTS = 200.0
+ENVELOPE_MAX_POINTS = 300.0
+MIN_SWEEP_ROOM_POINTS = 50.0
 
 
 @dataclass
@@ -57,6 +61,14 @@ class PromptCandidate:
     source_kind: str
     volume_expansion: bool
     method: str
+
+
+def _point(snapshot: MarketSnapshot) -> float:
+    return max(abs(float(snapshot.point or 0.01)), 1e-9)
+
+
+def _to_points(distance: float, snapshot: MarketSnapshot) -> float:
+    return float(distance) / _point(snapshot)
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -137,41 +149,19 @@ def _sweep_rejection_sources(bars: list[Bar], tf: str, max_items: int = 18) -> l
         sell_reject = upper_wick / rng >= MIN_REJECTION_WICK_FRACTION or float(bar.close) < float(bar.open)
         sell_move = min(float(x.low) for x in follow) <= float(bar.close) - MIN_FOLLOW_THROUGH_ATR * noise
         if sell_raid and sell_reject and sell_move:
-            core_low = body_high
-            core_high = float(bar.high)
             strength = max(2.0, (float(bar.high) - min(float(x.low) for x in follow)) / noise)
-            out.append(
-                PromptSource(
-                    Direction.SELL, tf, int(bar.ts),
-                    core_low, core_high, float(bar.low), float(bar.high),
-                    round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION",
-                    _volume_expansion(bars, int(bar.ts)),
-                )
-            )
+            out.append(PromptSource(Direction.SELL, tf, int(bar.ts), body_high, float(bar.high), float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts))))
 
         buy_raid = float(bar.low) <= prior_low + tolerance and float(bar.close) > prior_low
         buy_reject = lower_wick / rng >= MIN_REJECTION_WICK_FRACTION or float(bar.close) > float(bar.open)
         buy_move = max(float(x.high) for x in follow) >= float(bar.close) + MIN_FOLLOW_THROUGH_ATR * noise
         if buy_raid and buy_reject and buy_move:
-            core_low = float(bar.low)
-            core_high = body_low
             strength = max(2.0, (max(float(x.high) for x in follow) - float(bar.low)) / noise)
-            out.append(
-                PromptSource(
-                    Direction.BUY, tf, int(bar.ts),
-                    core_low, core_high, float(bar.low), float(bar.high),
-                    round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION",
-                    _volume_expansion(bars, int(bar.ts)),
-                )
-            )
+            out.append(PromptSource(Direction.BUY, tf, int(bar.ts), float(bar.low), body_low, float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts))))
 
     deduped: list[PromptSource] = []
     for source in reversed(out):
-        if any(
-            source.direction == x.direction
-            and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low)
-            for x in deduped
-        ):
+        if any(source.direction == x.direction and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low) for x in deduped):
             continue
         deduped.append(source)
         if len(deduped) >= max_items:
@@ -187,14 +177,9 @@ def _sources(bars: list[Bar], tf: str) -> list[PromptSource]:
             items.append(source)
     items.extend(_sweep_rejection_sources(bars, tf, max_items=24))
     items.sort(key=lambda x: (x.source_ts, x.strength))
-
     deduped: list[PromptSource] = []
     for source in reversed(items):
-        if any(
-            source.direction == x.direction
-            and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low)
-            for x in deduped
-        ):
+        if any(source.direction == x.direction and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low) for x in deduped):
             continue
         deduped.append(source)
         if len(deduped) >= 24:
@@ -216,68 +201,18 @@ def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
         parents = [x for x in h4 if x.direction == direction]
         children = [x for x in h1 if x.direction == direction]
         used_children: set[int] = set()
-
         for parent in parents:
-            matches = [
-                child for child in children
-                if _overlap(parent.zone_low, parent.zone_high, child.zone_low, child.zone_high, pad)
-            ]
+            matches = [child for child in children if _overlap(parent.zone_low, parent.zone_high, child.zone_low, child.zone_high, pad)]
             if matches:
                 child = max(matches, key=lambda x: (x.source_ts, x.strength))
                 used_children.add(id(child))
-                out.append(
-                    PromptCandidate(
-                        direction=direction,
-                        source_tf="H4>H1",
-                        source_ts=max(parent.source_ts, child.source_ts),
-                        core_low=child.core_low,
-                        core_high=child.core_high,
-                        zone_low=parent.zone_low,
-                        zone_high=parent.zone_high,
-                        strength=max(parent.strength, child.strength),
-                        fvg=parent.fvg or child.fvg,
-                        source_kind=f"{parent.source_kind}+{child.source_kind}",
-                        volume_expansion=parent.volume_expansion or child.volume_expansion,
-                        method="PROMPT_H4_PARENT_H1_REFINEMENT",
-                    )
-                )
+                out.append(PromptCandidate(direction, "H4>H1", max(parent.source_ts, child.source_ts), child.core_low, child.core_high, parent.zone_low, parent.zone_high, max(parent.strength, child.strength), parent.fvg or child.fvg, f"{parent.source_kind}+{child.source_kind}", parent.volume_expansion or child.volume_expansion, "PROMPT_H4_PARENT_H1_REFINEMENT"))
             else:
-                out.append(
-                    PromptCandidate(
-                        direction=direction,
-                        source_tf="H4",
-                        source_ts=parent.source_ts,
-                        core_low=parent.core_low,
-                        core_high=parent.core_high,
-                        zone_low=parent.zone_low,
-                        zone_high=parent.zone_high,
-                        strength=parent.strength,
-                        fvg=parent.fvg,
-                        source_kind=parent.source_kind,
-                        volume_expansion=parent.volume_expansion,
-                        method="PROMPT_H4_SOURCE_CANDLE",
-                    )
-                )
-
+                out.append(PromptCandidate(direction, "H4", parent.source_ts, parent.core_low, parent.core_high, parent.zone_low, parent.zone_high, parent.strength, parent.fvg, parent.source_kind, parent.volume_expansion, "PROMPT_H4_SOURCE_CANDLE"))
         for child in children:
             if id(child) in used_children:
                 continue
-            out.append(
-                PromptCandidate(
-                    direction=direction,
-                    source_tf="H1",
-                    source_ts=child.source_ts,
-                    core_low=child.core_low,
-                    core_high=child.core_high,
-                    zone_low=child.zone_low,
-                    zone_high=child.zone_high,
-                    strength=child.strength,
-                    fvg=child.fvg,
-                    source_kind=child.source_kind,
-                    volume_expansion=child.volume_expansion,
-                    method="PROMPT_H1_TACTICAL_SOURCE",
-                )
-            )
+            out.append(PromptCandidate(direction, "H1", child.source_ts, child.core_low, child.core_high, child.zone_low, child.zone_high, child.strength, child.fvg, child.source_kind, child.volume_expansion, "PROMPT_H1_TACTICAL_SOURCE"))
     return out
 
 
@@ -285,28 +220,99 @@ def _required_liquidity(direction: Direction) -> str:
     return "BSL" if direction == Direction.SELL else "SSL"
 
 
-def _attached_liquidity(candidate: PromptCandidate, liq, snapshot: MarketSnapshot):
-    required = _required_liquidity(candidate.direction)
-    tolerance = max(float(snapshot.point) * 5.0, 1e-6)
-    matches = [
-        level for level in liq
-        if required in str(level.label).upper()
-        and str(level.source_tf).upper() in {"D1", "H4", "H1"}
-        and float(candidate.zone_low) - tolerance <= float(level.price) <= float(candidate.zone_high) + tolerance
-    ]
-    if not matches:
-        return None
+def _normalize_core(candidate: PromptCandidate, snapshot: MarketSnapshot) -> tuple[float, float]:
+    point = _point(snapshot)
+    minimum = CORE_MIN_POINTS * point
+    maximum = CORE_MAX_POINTS * point
+    lo, hi = sorted((float(candidate.core_low), float(candidate.core_high)))
+    width = min(max(max(0.0, hi - lo), minimum), maximum)
     if candidate.direction == Direction.SELL:
-        return max(matches, key=lambda x: float(x.price))
-    return min(matches, key=lambda x: float(x.price))
+        return hi - width, hi
+    return lo, lo + width
 
 
-def _psy_in_zone(candidate: PromptCandidate, liq) -> bool:
-    return any(
-        str(x.label).upper() == "PSY"
-        and float(candidate.zone_low) <= float(x.price) <= float(candidate.zone_high)
-        for x in liq
-    )
+def _select_liquidity(candidate: PromptCandidate, core_low: float, core_high: float, liq, snapshot: MarketSnapshot):
+    required = _required_liquidity(candidate.direction)
+    point = _point(snapshot)
+    maximum = ENVELOPE_MAX_POINTS * point
+    sweep_room = MIN_SWEEP_ROOM_POINTS * point
+    source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+    tf_rank = {"D1": 0, "H4": 1, "H1": 2}
+    options = []
+
+    for level in liq:
+        if required not in str(level.label).upper():
+            continue
+        tf = str(level.source_tf).upper()
+        if tf not in {"D1", "H4", "H1"}:
+            continue
+        price = float(level.price)
+        if candidate.direction == Direction.SELL:
+            if price < core_low:
+                continue
+            hard_high = max(core_high, price + sweep_room)
+            if hard_high - core_low > maximum + 1e-9:
+                continue
+            edge_distance = abs(price - core_high)
+        else:
+            if price > core_high:
+                continue
+            hard_low = min(core_low, price - sweep_room)
+            if core_high - hard_low > maximum + 1e-9:
+                continue
+            edge_distance = abs(core_low - price)
+        already_in_source = source_low <= price <= source_high
+        options.append((0 if already_in_source else 1, tf_rank.get(tf, 9), edge_distance, float(level.distance), level))
+
+    if not options:
+        return None
+    options.sort(key=lambda row: row[:-1])
+    return options[0][-1]
+
+
+def _build_geometry(candidate: PromptCandidate, core_low: float, core_high: float, level, snapshot: MarketSnapshot) -> tuple[float, float, float] | None:
+    point = _point(snapshot)
+    minimum = ENVELOPE_MIN_POINTS * point
+    maximum = ENVELOPE_MAX_POINTS * point
+    sweep_room = MIN_SWEEP_ROOM_POINTS * point
+    source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+    liquidity_price = float(level.price)
+
+    if candidate.direction == Direction.SELL:
+        hard_high = max(core_high, liquidity_price + sweep_room)
+        if hard_high - core_low > maximum + 1e-9:
+            return None
+        high = min(max(source_high, hard_high), core_low + maximum)
+        low = min(source_low, core_low)
+        if high - low > maximum:
+            low = high - maximum
+        if high - low < minimum:
+            low = high - minimum
+        if low > core_low + 1e-9 or high < hard_high - 1e-9:
+            return None
+        actual_room = high - liquidity_price
+    else:
+        hard_low = min(core_low, liquidity_price - sweep_room)
+        if core_high - hard_low > maximum + 1e-9:
+            return None
+        low = max(min(source_low, hard_low), core_high - maximum)
+        high = max(source_high, core_high)
+        if high - low > maximum:
+            high = low + maximum
+        if high - low < minimum:
+            high = low + minimum
+        if low > hard_low + 1e-9 or high < core_high - 1e-9:
+            return None
+        actual_room = liquidity_price - low
+
+    width = high - low
+    if width < minimum - 1e-9 or width > maximum + 1e-9 or actual_room < sweep_room - 1e-9:
+        return None
+    return low, high, actual_room
+
+
+def _psy_in_zone(low: float, high: float, liq) -> bool:
+    return any(str(x.label).upper() == "PSY" and float(low) <= float(x.price) <= float(high) for x in liq)
 
 
 def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> Grade:
@@ -318,7 +324,6 @@ def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> G
     score += 1 if candidate.volume_expansion else 0
     score += 2 if touches == 0 else 1 if touches == 1 else -2
     score += 1 if location_score >= 7.0 else 0
-
     if touches >= 2:
         return Grade.B_PLUS
     if score >= 8:
@@ -329,70 +334,65 @@ def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> G
 
 
 def _dxy_support(direction: Direction, snapshot: MarketSnapshot) -> str:
-    dxy = _dxy(snapshot)
+    dxy = prompt_dxy_direction(snapshot)
     if dxy == Direction.NEUTRAL:
         return "NEUTRAL"
-    if (direction == Direction.SELL and dxy == Direction.BUY) or (
-        direction == Direction.BUY and dxy == Direction.SELL
-    ):
+    if (direction == Direction.SELL and dxy == Direction.BUY) or (direction == Direction.BUY and dxy == Direction.SELL):
         return "SUPPORT"
     return "CONFLICT"
 
 
-def _candidate_zone(
-    candidate: PromptCandidate,
-    snapshot: MarketSnapshot,
-    liq,
-    context: Direction,
-    index: int,
-) -> tuple[Zone | None, dict]:
-    touches = _touches(
-        float(candidate.zone_low),
-        float(candidate.zone_high),
-        int(candidate.source_ts),
-        snapshot.xau_m15,
-    )
+def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, context: Direction, index: int) -> tuple[Zone | None, dict]:
+    core_low, core_high = _normalize_core(candidate, snapshot)
     required = _required_liquidity(candidate.direction)
-    attached = _attached_liquidity(candidate, liq, snapshot)
+    attached = _select_liquidity(candidate, core_low, core_high, liq, snapshot)
     base_diag = {
         "direction": candidate.direction.value,
         "source_tf": candidate.source_tf,
         "source_method": candidate.method,
         "source_kind": candidate.source_kind,
         "source_ts": candidate.source_ts,
-        "core_low": round(candidate.core_low, 5),
-        "core_high": round(candidate.core_high, 5),
-        "zone_low": round(candidate.zone_low, 5),
-        "zone_high": round(candidate.zone_high, 5),
-        "touches": touches,
+        "core_low": round(core_low, 5),
+        "core_high": round(core_high, 5),
+        "core_width_points": round(_to_points(core_high - core_low, snapshot), 1),
         "required_liquidity": required,
-        "attached_liquidity": (
-            f"{attached.label}@{float(attached.price):.5f}" if attached is not None else ""
-        ),
-        "distance_h1_atr": round(
-            _distance(snapshot.mid, candidate.zone_low, candidate.zone_high)
-            / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9),
-            3,
-        ),
     }
+
     if attached is None:
         return None, {
             **base_diag,
+            "zone_low": round(candidate.zone_low, 5),
+            "zone_high": round(candidate.zone_high, 5),
+            "envelope_width_points": round(_to_points(abs(float(candidate.zone_high) - float(candidate.zone_low)), snapshot), 1),
+            "touches": 0,
+            "attached_liquidity": "",
+            "sweep_room_points": 0.0,
+            "distance_h1_atr": round(_distance(snapshot.mid, candidate.zone_low, candidate.zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
             "rejection_code": f"MISSING_{required}_IN_MARKED_ZONE",
-            "rejection_reason": (
-                f"{required} is mandatory and no structural {required} from D1/H4/H1 "
-                "is physically inside this exact source-candle zone."
-            ),
+            "rejection_reason": f"No structural {required} can fit inside a 200-300 point envelope around this source while preserving at least {MIN_SWEEP_ROOM_POINTS:.0f} points beyond the liquidity sweep.",
         }
 
-    core_mid = (float(candidate.core_low) + float(candidate.core_high)) / 2.0
+    geometry = _build_geometry(candidate, core_low, core_high, attached, snapshot)
+    if geometry is None:
+        return None, {
+            **base_diag,
+            "zone_low": round(candidate.zone_low, 5),
+            "zone_high": round(candidate.zone_high, 5),
+            "envelope_width_points": round(_to_points(abs(float(candidate.zone_high) - float(candidate.zone_low)), snapshot), 1),
+            "touches": 0,
+            "attached_liquidity": f"{attached.label}@{float(attached.price):.5f}",
+            "sweep_room_points": 0.0,
+            "distance_h1_atr": round(_distance(snapshot.mid, candidate.zone_low, candidate.zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
+            "rejection_code": "ZONE_GEOMETRY_CANNOT_FIT_SWEEP",
+            "rejection_reason": "The core, structural liquidity and required sweep room cannot all fit inside the 200-300 point envelope contract.",
+        }
+
+    zone_low, zone_high, sweep_room = geometry
+    touches = _touches(core_low, core_high, int(candidate.source_ts), snapshot.xau_m15)
+    core_mid = (core_low + core_high) / 2.0
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
     grade = _grade(candidate, touches, loc)
-    conf = {
-        "LIQUIDITY_IN_MARKED_ZONE",
-        f"{required}_IN_MARKED_ZONE",
-        "EXACT_SOURCE_CANDLE",
-    }
+    conf = {"LIQUIDITY_IN_MARKED_ZONE", f"{required}_IN_MARKED_ZONE", "SOURCE_CANDLE_ANCHORED", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "SWEEP_ROOM_RESERVED"}
     if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
         conf.add("INSTITUTIONAL_DISPLACEMENT")
     if "LIQUIDITY_SWEEP_REJECTION" in candidate.source_kind:
@@ -403,14 +403,14 @@ def _candidate_zone(
         conf.add("HISTORICAL_DISPLACEMENT_FVG")
     if candidate.volume_expansion:
         conf.add("TICK_VOLUME_EXPANSION")
-    if _psy_in_zone(candidate, liq):
+    if _psy_in_zone(zone_low, zone_high, liq):
         conf.add("PSYCHOLOGICAL_LEVEL_CONFLUENCE")
     if loc >= 7:
         conf.add("PREMIUM_DISCOUNT_EXTREMITY")
 
     original_targets = _targets(candidate.direction, core_mid, liq)
     flip = candidate.direction.opposite()
-    flip_ref = candidate.zone_high if flip == Direction.BUY else candidate.zone_low
+    flip_ref = zone_high if flip == Direction.BUY else zone_low
     flip_targets = _targets(flip, float(flip_ref), liq)
     vals = original_targets + [0.0] * (4 - len(original_targets))
     fvals = flip_targets + [0.0] * (4 - len(flip_targets))
@@ -426,25 +426,19 @@ def _candidate_zone(
         source_tf=candidate.source_tf,
         grade=grade,
         state=ZoneState.ACTIVE,
-        core_low=round(candidate.core_low, 5),
-        core_high=round(candidate.core_high, 5),
-        core_method=f"{readiness}|PROMPT_EXACT_SOURCE_CANDLE|{candidate.method}",
+        core_low=round(core_low, 5),
+        core_high=round(core_high, 5),
+        core_method=f"{readiness}|PROMPT_SWEEP_ROOM_GEOMETRY|{candidate.method}",
         location_score=round(loc, 4),
-        zone_low=round(candidate.zone_low, 5),
-        zone_high=round(candidate.zone_high, 5),
+        zone_low=round(zone_low, 5),
+        zone_high=round(zone_high, 5),
         touch_count=touches,
         confluences=sorted(conf),
         independent_confluence_count=len(conf),
         requires_sweep=True,
         source_ts=int(candidate.source_ts),
-        invalidation_level=round(
-            candidate.zone_high if candidate.direction == Direction.SELL else candidate.zone_low,
-            5,
-        ),
-        invalidation_rule=(
-            "M15 accepted body beyond the exact source-candle zone invalidates it. "
-            "A wick-only liquidity raid does not invalidate."
-        ),
+        invalidation_level=round(zone_high if candidate.direction == Direction.SELL else zone_low, 5),
+        invalidation_rule="Closed M15 body acceptance beyond the OUTER 200-300 point envelope invalidates the zone. Wick-only liquidity raids do not invalidate.",
         original_target1=float(vals[0]),
         original_target2=float(vals[1]),
         original_target3=float(vals[2]),
@@ -461,46 +455,36 @@ def _candidate_zone(
             f"source_candle:{candidate.source_tf}:{candidate.source_ts}",
             f"source_kind:{candidate.source_kind}",
             f"attached_liquidity:{required}:{attached.label}@{float(attached.price):.5f}",
+            f"core_width_points:{_to_points(core_high - core_low, snapshot):.1f}",
+            f"envelope_width_points:{_to_points(zone_high - zone_low, snapshot):.1f}",
+            f"sweep_room_points:{_to_points(sweep_room, snapshot):.1f}",
             f"mitigations:{touches}",
-            "Liquidity is not used to stretch the zone; it must already sit inside the source candle.",
+            "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
             "D1 gives context. H4 is primary. H1 refines/falls back. M15 validates health. M1 only times entry.",
         ],
     )
 
     state = evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15)
-    if state != ZoneState.ACTIVE:
-        return None, {
-            **base_diag,
-            "grade": grade.value,
-            "rejection_code": "M15_ACCEPTED_INVALIDATION",
-            "rejection_reason": (
-                "M15 has accepted beyond the source-candle boundary. Wick-only raids are allowed; "
-                "accepted body closes are not."
-            ),
-        }
-
-    return zone, {
+    diag = {
         **base_diag,
+        "zone_low": round(zone_low, 5),
+        "zone_high": round(zone_high, 5),
+        "envelope_width_points": round(_to_points(zone_high - zone_low, snapshot), 1),
+        "touches": touches,
+        "attached_liquidity": f"{attached.label}@{float(attached.price):.5f}",
+        "sweep_room_points": round(_to_points(sweep_room, snapshot), 1),
+        "distance_h1_atr": round(_distance(snapshot.mid, zone_low, zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
         "grade": grade.value,
-        "rejection_code": "",
-        "rejection_reason": "",
     }
+    if state != ZoneState.ACTIVE:
+        return None, {**diag, "rejection_code": "M15_ACCEPTED_INVALIDATION", "rejection_reason": "Closed M15 price has accepted beyond the outer envelope. Wick-only raids are allowed; accepted body closes are not."}
+    return zone, {**diag, "rejection_code": "", "rejection_reason": ""}
 
 
 def _rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(zone.source_tf, 9)
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
-    distance = _distance(snapshot.mid, zone.zone_low, zone.zone_high)
-    return (
-        tf_rank,
-        grade_rank,
-        int(zone.touch_count),
-        0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1,
-        0 if "TICK_VOLUME_EXPANSION" in zone.confluences else 1,
-        -float(zone.location_score),
-        distance,
-        -int(zone.source_ts),
-    )
+    return (tf_rank, grade_rank, int(zone.touch_count), 0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1, 0 if "TICK_VOLUME_EXPANSION" in zone.confluences else 1, -float(zone.location_score), _distance(snapshot.mid, zone.zone_low, zone.zone_high), -int(zone.source_ts))
 
 
 def _readiness(zone: Zone) -> str:
@@ -512,10 +496,7 @@ def _set_readiness(zone: Zone, readiness: str) -> None:
     old = str(zone.core_method or "")
     tail = old.split("|", 1)[1] if "|" in old else old
     zone.core_method = f"{readiness}|{tail}" if tail else readiness
-    zone.notes = [
-        f"readiness:{readiness}" if str(note).startswith("readiness:") else note
-        for note in zone.notes
-    ]
+    zone.notes = [f"readiness:{readiness}" if str(note).startswith("readiness:") else note for note in zone.notes]
 
 
 def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
@@ -526,25 +507,27 @@ def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
     if "LIQUIDITY_IN_MARKED_ZONE" not in set(zone.confluences):
         return False
     m15a = max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
-    buffer_price = max(float(snapshot.point) * 5.0, INTERACTION_BUFFER_M15_ATR * m15a)
+    buffer_price = max(_point(snapshot) * 5.0, INTERACTION_BUFFER_M15_ATR * m15a)
     return _distance(snapshot.mid, zone.core_low, zone.core_high) <= buffer_price
 
 
+def _note_float(zone: Zone, prefix: str) -> float:
+    for note in zone.notes:
+        text = str(note)
+        if text.startswith(prefix):
+            try:
+                return float(text.split(":", 1)[1])
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
 def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapshot) -> list[Zone]:
-    """One simple prompt-driven institutional zone per side.
-
-    Hard zone rules:
-    1) exact H4/H1 source candle from displacement/BOS or liquidity sweep/rejection,
-    2) SELL has structural BSL inside the marked source-candle zone,
-    3) BUY has structural SSL inside the marked source-candle zone,
-    4) M15 accepted invalidation removes the zone.
-
-    Distance, PSY and DXY never create or disqualify a zone. Mitigations affect grade.
-    """
+    """One prompt-driven zone per side with explicit point-width and sweep-room geometry."""
     candidates = _build_candidates(snapshot)
     context = analysis.overall_bias
-    accepted: dict[Direction, list[Zone]] = {Direction.BUY: [], Direction.SELL: []}
-    diagnostics: dict[Direction, list[dict]] = {Direction.BUY: [], Direction.SELL: []}
+    accepted = {Direction.BUY: [], Direction.SELL: []}
+    diagnostics = {Direction.BUY: [], Direction.SELL: []}
 
     for index, candidate in enumerate(candidates, 1):
         zone, diag = _candidate_zone(candidate, snapshot, analysis.liquidity_map, context, index)
@@ -555,20 +538,12 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     chosen: dict[Direction, Zone] = {}
     for direction in (Direction.SELL, Direction.BUY):
         side = accepted[direction]
-        if not side:
-            continue
-        side.sort(key=lambda z: _rank(z, snapshot))
-        chosen[direction] = side[0]
+        if side:
+            side.sort(key=lambda z: _rank(z, snapshot))
+            chosen[direction] = side[0]
 
-    order = (
-        [Direction.SELL, Direction.BUY]
-        if context == Direction.SELL
-        else [Direction.BUY, Direction.SELL]
-        if context == Direction.BUY
-        else [Direction.SELL, Direction.BUY]
-    )
+    order = [Direction.SELL, Direction.BUY] if context == Direction.SELL else [Direction.BUY, Direction.SELL] if context == Direction.BUY else [Direction.SELL, Direction.BUY]
     analysis.zones = [chosen[d] for d in order if d in chosen]
-
     for zone in analysis.zones:
         _set_readiness(zone, "INTERACTING" if primary_zone_interacting(zone, snapshot) else _readiness(zone))
 
@@ -583,6 +558,9 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     for zone in analysis.zones:
         required = _required_liquidity(zone.original_direction)
         attached = next((n for n in zone.notes if str(n).startswith("attached_liquidity:")), "")
+        core_points = _to_points(float(zone.core_high) - float(zone.core_low), snapshot)
+        envelope_points = _to_points(float(zone.zone_high) - float(zone.zone_low), snapshot)
+        sweep_points = _note_float(zone, "sweep_room_points:")
         public[zone.original_direction.value.lower()] = {
             "zone_id": zone.zone_id,
             "state": _readiness(zone),
@@ -592,16 +570,16 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "high": zone.zone_high,
             "core_low": zone.core_low,
             "core_high": zone.core_high,
+            "core_width_points": round(core_points, 1),
+            "envelope_width_points": round(envelope_points, 1),
+            "sweep_room_points": round(sweep_points, 1),
             "touches": zone.touch_count,
             "required_liquidity": required,
             "liquidity_in_zone": True,
             "attached_liquidity": attached,
             "source_ts": zone.source_ts,
         }
-        labels.append(
-            f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} "
-            f"({zone.source_tf},{zone.grade.value},{_readiness(zone)},touches={zone.touch_count},{required}=IN_ZONE)"
-        )
+        labels.append(f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} (core={zone.core_low:.2f}-{zone.core_high:.2f},{zone.source_tf},{zone.grade.value},{_readiness(zone)},touches={zone.touch_count},{required}=IN_ZONE,sweep_room={sweep_points:.0f}pt)")
 
     rejected_summary: dict[str, dict] = {}
     for direction in (Direction.SELL, Direction.BUY):
@@ -610,37 +588,29 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         strongest = None
         if rejected:
             tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}
-            strongest = sorted(
-                rejected,
-                key=lambda x: (
-                    tf_rank.get(str(x.get("source_tf")), 9),
-                    int(x.get("touches") or 0),
-                    float(x.get("distance_h1_atr") or 999.0),
-                    -int(x.get("source_ts") or 0),
-                ),
-            )[0]
+            strongest = sorted(rejected, key=lambda x: (tf_rank.get(str(x.get("source_tf")), 9), int(x.get("touches") or 0), float(x.get("distance_h1_atr") or 999.0), -int(x.get("source_ts") or 0)))[0]
         rejected_summary[direction.value.lower()] = {
             "candidate_count": len(rows),
             "rejected_count": len(rejected),
             "strongest_rejected": strongest,
-            "summary": (
-                "ZONE_SELECTED"
-                if direction in chosen
-                else strongest.get("rejection_code")
-                if strongest
-                else "NO_VALID_H4_H1_SOURCE_CANDLE"
-            ),
+            "summary": "ZONE_SELECTED" if direction in chosen else strongest.get("rejection_code") if strongest else "NO_VALID_H4_H1_SOURCE_CANDLE",
         }
 
     policy = dict(analysis.execution_policy or {})
     policy["public_zone_map"] = {
-        "engine": "PROMPT_ZONE_ENGINE_2026_09_14",
+        "engine": "PROMPT_ZONE_ENGINE_2026_09_14_SWEEP_ROOM",
         "map_count": len(analysis.zones),
         "max_zones": 2,
         "one_per_side": True,
         "sell_requires_bsl_in_marked_zone": True,
         "buy_requires_ssl_in_marked_zone": True,
-        "exact_source_candle_zone": True,
+        "core_width_points_min": CORE_MIN_POINTS,
+        "core_width_points_max": CORE_MAX_POINTS,
+        "envelope_width_points_min": ENVELOPE_MIN_POINTS,
+        "envelope_width_points_max": ENVELOPE_MAX_POINTS,
+        "min_sweep_room_points": MIN_SWEEP_ROOM_POINTS,
+        "liquidity_must_be_inside_envelope": True,
+        "sweep_room_beyond_liquidity_must_be_inside_envelope": True,
         "h4_primary_h1_refine_or_fallback": True,
         "m15_health_only": True,
         "m1_timing_only": True,
@@ -653,15 +623,8 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         **public,
     }
     analysis.execution_policy = policy
-
     summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = (
-        f"D1 context={context.value}. Prompt source-candle map: {summary}. "
-        "SELL exists only when structural BSL is physically inside the exact marked source-candle zone. "
-        "BUY exists only when structural SSL is physically inside the exact marked source-candle zone. "
-        "H4 is primary; H1 refines or falls back. M15 only checks mitigation and accepted invalidation. "
-        "Distance, PSY and DXY do not manufacture or delete zones. M1 remains entry timing only."
-    )
+    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only."
     return analysis.zones
 
 
@@ -669,44 +632,24 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
     now = generated_at or int(datetime.now(timezone.utc).timestamp())
     liq = liquidity_map(snapshot)
     context = structure_bias(snapshot.xau_d1)
-
     structural = [x for x in liq if "BSL" in x.label.upper() or "SSL" in x.label.upper()]
     if context == Direction.SELL:
-        preferred = sorted(
-            [x for x in structural if "SSL" in x.label.upper() and x.price < snapshot.mid],
-            key=lambda x: x.distance,
-        )
+        preferred = sorted([x for x in structural if "SSL" in x.label.upper() and x.price < snapshot.mid], key=lambda x: x.distance)
     elif context == Direction.BUY:
-        preferred = sorted(
-            [x for x in structural if "BSL" in x.label.upper() and x.price > snapshot.mid],
-            key=lambda x: x.distance,
-        )
+        preferred = sorted([x for x in structural if "BSL" in x.label.upper() and x.price > snapshot.mid], key=lambda x: x.distance)
     else:
         preferred = sorted(structural, key=lambda x: x.distance)
-    primary = preferred[0] if preferred else (sorted(structural, key=lambda x: x.distance)[0] if structural else None)
+    primary = preferred[0] if preferred else sorted(structural, key=lambda x: x.distance)[0] if structural else None
 
     guards: list[str] = []
-    if not snapshot.complete():
+    if not prompt_snapshot_complete(snapshot):
         guards.append("NO_COMPLETE_HISTORY_CONTEXT")
     if snapshot.spread_points > SETTINGS.max_spread_points:
         guards.append(f"SPREAD_HIGH:{snapshot.spread_points:.1f}")
     if now - snapshot.sent_at > SETTINGS.max_snapshot_age_seconds:
         guards.append("SNAPSHOT_STALE")
-
-    hard_block = (
-        "NO_COMPLETE_HISTORY_CONTEXT" in guards
-        or "SNAPSHOT_STALE" in guards
-        or any(x.startswith("SPREAD_HIGH:") for x in guards)
-    )
-    usd_news = [
-        {
-            "ts": int(n.ts),
-            "title": str(n.title),
-            "impact": str(n.impact),
-        }
-        for n in snapshot.news
-        if str(n.currency).upper() == "USD"
-    ]
+    hard_block = "NO_COMPLETE_HISTORY_CONTEXT" in guards or "SNAPSHOT_STALE" in guards or any(x.startswith("SPREAD_HIGH:") for x in guards)
+    usd_news = [{"ts": int(n.ts), "title": str(n.title), "impact": str(n.impact)} for n in snapshot.news if str(n.currency).upper() == "USD"]
 
     analysis = Analysis(
         analysis_id=f"A_{now}_{uuid.uuid4().hex[:8]}",
@@ -719,9 +662,9 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
         selected_zone_id="",
         trader_brief="",
         approved=not hard_block,
-        prompt_version="SMC_PROMPT_ZONE_ENGINE_2026_09_14",
+        prompt_version="SMC_PROMPT_ZONE_ENGINE_2026_09_14_SWEEP_ROOM",
         execution_policy={
-            "core": "PROMPT_D1_CONTEXT_H4_SOURCE_H1_REFINEMENT_M15_HEALTH_M1_TIMING",
+            "core": "PROMPT_D1_H4_H1_M15_SWEEP_ROOM_GEOMETRY_M1_TIMING",
             "market_structure": {
                 "xau_d1": structure_bias(snapshot.xau_d1).value,
                 "xau_h4": structure_bias(snapshot.xau_h4).value,
@@ -735,47 +678,20 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
                 "atr_m15": float(snapshot.atr_m15 or atr(snapshot.xau_m15)),
                 "spread_points": float(snapshot.spread_points),
                 "usd_news": usd_news,
+                "prompt_snapshot_complete": prompt_snapshot_complete(snapshot),
+                "dxy_confirmation_timeframes": ["D1", "H1"],
             },
-            "primary": [
-                "D1_CONTEXT",
-                "H4_EXACT_SOURCE_CANDLE",
-                "H1_REFINEMENT_OR_FALLBACK",
-                "STRUCTURAL_BSL_OR_SSL_INSIDE_MARKED_ZONE",
-                "DISPLACEMENT_BOS_OR_SWEEP_REJECTION",
-                "FVG_CONFLUENCE_IF_PRESENT",
-                "MITIGATION_COUNT",
-                "M15_ACCEPTED_INVALIDATION",
-                "M1_SWEEP_MSS_DISPLACEMENT_VALUE_ENTRY",
-            ],
-            "reentry": [
-                "THESIS_VALID",
-                "OBJECTIVE_OPEN",
-                "CONTINUATION_BOS",
-                "NEW_DISPLACEMENT",
-                "NEW_M1_DEALING_RANGE",
-                "INTERNAL_LIQUIDITY",
-                "PREMIUM_DISCOUNT",
-                "FRESH_PD_ARRAY",
-            ],
-            "flip": [
-                "M15_ACCEPTANCE_INVALIDATION",
-                "NO_INSTANT_REVERSE",
-                "OPPOSITE_SIDE_RETEST",
-                "M1_MSS_BOS",
-                "DISPLACEMENT",
-                "NEW_M1_DEALING_RANGE",
-                "PREMIUM_DISCOUNT",
-                "OTE",
-                "FRESH_PD_ARRAY",
-            ],
-            "risk": [
-                "ONE_BUDGET_PER_THESIS",
-                "NO_AVERAGING_DOWN",
-                "NO_SL_WIDENING",
-                "STRUCTURE_AWARE_BE",
-                "LIQUIDITY_PARTIALS",
-                "M5_ATR_RUNNER_TRAIL",
-            ],
+            "zone_geometry": {
+                "core_width_points": [CORE_MIN_POINTS, CORE_MAX_POINTS],
+                "envelope_width_points": [ENVELOPE_MIN_POINTS, ENVELOPE_MAX_POINTS],
+                "minimum_sweep_room_points": MIN_SWEEP_ROOM_POINTS,
+                "sell_sweep_room_side": "ABOVE_BSL",
+                "buy_sweep_room_side": "BELOW_SSL",
+            },
+            "primary": ["D1_CONTEXT", "H4_SOURCE_LOCATION", "H1_REFINEMENT_OR_FALLBACK", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "STRUCTURAL_BSL_OR_SSL_INSIDE_ENVELOPE", "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM", "DISPLACEMENT_BOS_OR_SWEEP_REJECTION", "FVG_CONFLUENCE_IF_PRESENT", "MITIGATION_COUNT", "M15_ACCEPTED_INVALIDATION", "M1_SWEEP_MSS_DISPLACEMENT_VALUE_ENTRY"],
+            "reentry": ["THESIS_VALID", "OBJECTIVE_OPEN", "CONTINUATION_BOS", "NEW_DISPLACEMENT", "NEW_M1_DEALING_RANGE", "INTERNAL_LIQUIDITY", "PREMIUM_DISCOUNT", "FRESH_PD_ARRAY"],
+            "flip": ["M15_ACCEPTANCE_INVALIDATION", "NO_INSTANT_REVERSE", "OPPOSITE_SIDE_RETEST", "M1_MSS_BOS", "DISPLACEMENT", "NEW_M1_DEALING_RANGE", "PREMIUM_DISCOUNT", "OTE", "FRESH_PD_ARRAY"],
+            "risk": ["ONE_BUDGET_PER_THESIS", "NO_AVERAGING_DOWN", "NO_SL_WIDENING", "STRUCTURE_AWARE_BE", "LIQUIDITY_PARTIALS", "M5_ATR_RUNNER_TRAIL"],
         },
         guards=guards,
     )
