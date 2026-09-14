@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from .engine import atr, evaluate_zone_state
+from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
+
+# WATCH zones are market-map locations. M1_READY is a handoff state only:
+# MT5 must still complete its existing M1 sweep/MSS/displacement/value sequence.
+CORE_INTERACTION_BUFFER_M15_ATR = 0.30
+MAX_CORE_WIDTH_M15_ATR = 3.00
+MAX_READY_TOUCHES = 2
+
+
+def _readiness(zone: Zone) -> str:
+    method = str(zone.core_method or "")
+    return method.split("|", 1)[0] if "|" in method else "WATCH"
+
+
+def _distance_to_range(price: float, low: float, high: float) -> float:
+    lo, hi = sorted((float(low), float(high)))
+    if lo <= price <= hi:
+        return 0.0
+    return lo - price if price < lo else price - hi
+
+
+def _m15_atr(snapshot: MarketSnapshot) -> float:
+    return max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
+
+
+def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """Return True only when a qualified WATCH zone is ready for M1 monitoring.
+
+    This function deliberately uses the tactical *core*, not the broader envelope.
+    External-liquidity envelope expansion must not make a distant zone appear to be
+    interacting with live price.
+    """
+    if _readiness(zone) != "WATCH":
+        return False
+    if zone.source_tf not in {"H1", "H4>H1"}:
+        return False
+    if zone.grade not in {Grade.A_PLUS, Grade.A}:
+        return False
+    if int(zone.touch_count) > MAX_READY_TOUCHES:
+        return False
+    if int(zone.independent_confluence_count) < 2:
+        return False
+    if float(zone.clear_run) <= 0:
+        return False
+
+    state = evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15)
+    if state != ZoneState.ACTIVE:
+        return False
+
+    m15a = _m15_atr(snapshot)
+    core_width = max(0.0, float(zone.core_high) - float(zone.core_low))
+    if core_width / m15a > MAX_CORE_WIDTH_M15_ATR:
+        return False
+
+    buffer_price = max(float(snapshot.point) * 5.0, CORE_INTERACTION_BUFFER_M15_ATR * m15a)
+    core_distance = _distance_to_range(float(snapshot.mid), float(zone.core_low), float(zone.core_high))
+    return core_distance <= buffer_price
+
+
+def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
+    """Select the best interacting WATCH zone when no ACTIONABLE zone exists.
+
+    selected_zone_id is the existing cloud->MT5 handoff. Selecting an M1_READY zone
+    does not itself enter a trade; it only lets the existing MT5 M1 sequence monitor
+    that zone. Dynamic spread/news/snapshot guards remain downstream and unchanged.
+    """
+    if analysis.selected_zone_id:
+        return next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
+
+    candidates = [z for z in analysis.zones if watch_zone_ready(z, snapshot)]
+    if not candidates:
+        return None
+
+    def rank(z: Zone) -> tuple[float, int, float, int]:
+        distance = _distance_to_range(float(snapshot.mid), float(z.core_low), float(z.core_high))
+        grade_rank = 0 if z.grade == Grade.A_PLUS else 1
+        return (distance, grade_rank, -float(z.location_score), int(z.touch_count))
+
+    candidates.sort(key=rank)
+    selected = candidates[0]
+    analysis.selected_zone_id = selected.zone_id
+
+    old = str(selected.core_method or "")
+    tail = old.split("|", 1)[1] if "|" in old else old
+    selected.core_method = f"M1_READY|{tail}"
+    if "readiness:M1_READY" not in selected.notes:
+        selected.notes = ["readiness:M1_READY", *selected.notes]
+
+    analysis.trader_brief += (
+        f" M1_READY handoff={selected.zone_id}: live price is interacting with the "
+        "H1 tactical core and M15 health is intact; MT5 must still complete the "
+        "existing M1 confirmation sequence before any paper entry."
+    )
+    return selected
