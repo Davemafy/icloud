@@ -97,7 +97,7 @@ def _compact_envelope(zone: Zone, s: MarketSnapshot) -> None:
 
 
 def _institutional_rank(zone: Zone, analysis: Analysis, s: MarketSnapshot, candidate) -> tuple:
-    touches = _core_touches(zone, candidate, s)
+    touches = int(zone.touch_count)
     has_liq = _resting_liquidity(zone, analysis, s)
     parent = zone.source_tf in {"H4", "H4>H1"}
 
@@ -157,9 +157,27 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
         return []
 
     cmap = _candidate_map(s)
+
+    # Normalize every candidate first. Core touches define mitigation; liquidity
+    # may qualify a location but cannot stretch the execution envelope.
+    normalized: list[Zone] = []
+    for zone in analysis.zones:
+        candidate = cmap.get(zone.zone_id)
+        zone.touch_count = _core_touches(zone, candidate, s)
+        _compact_envelope(zone, s)
+        zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
+        if zone.state != ZoneState.ACTIVE or zone.grade == Grade.REJECT:
+            continue
+        if _resting_liquidity(zone, analysis, s):
+            conf = set(zone.confluences)
+            conf.add("RESTING_LIQUIDITY")
+            zone.confluences = sorted(conf)
+            zone.independent_confluence_count = len(conf)
+        normalized.append(zone)
+
     chosen: dict[Direction, Zone] = {}
     for direction in (Direction.BUY, Direction.SELL):
-        side = [z for z in analysis.zones if z.original_direction == direction]
+        side = [z for z in normalized if z.original_direction == direction]
         if not side:
             continue
         side.sort(
@@ -168,17 +186,8 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
             )
         )
         zone = side[0]
-        candidate = cmap.get(zone.zone_id)
-        zone.touch_count = _core_touches(zone, candidate, s)
-        _compact_envelope(zone, s)
-        zone.state = evaluate_zone_state(zone, s.xau_m15, s.atr_m15)
         if "PRIMARY_INSTITUTIONAL_ZONE" not in zone.notes:
             zone.notes.append("PRIMARY_INSTITUTIONAL_ZONE")
-        if _resting_liquidity(zone, analysis, s):
-            conf = set(zone.confluences)
-            conf.add("RESTING_LIQUIDITY")
-            zone.confluences = sorted(conf)
-            zone.independent_confluence_count = len(conf)
         chosen[direction] = zone
 
     order = (
@@ -190,9 +199,10 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     )
     analysis.zones = [chosen[d] for d in order if d in chosen]
 
-    # Never keep a selected zone that was removed by the two-zone filter.
+    # Never keep a selected zone that was removed or invalidated by the two-zone filter.
     if analysis.selected_zone_id and not any(
-        z.zone_id == analysis.selected_zone_id for z in analysis.zones
+        z.zone_id == analysis.selected_zone_id and z.state == ZoneState.ACTIVE
+        for z in analysis.zones
     ):
         analysis.selected_zone_id = ""
 
