@@ -5,10 +5,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 
 from .config import SETTINGS
-from .db import audit, latest_snapshot
+from .db import audit, latest_analysis, latest_snapshot
 from .timezones import safe_zoneinfo
+from .watch_ready import watch_zone_ready
 
 _last_keys: set[str] = set()
+_watch_interaction_latch: set[str] = set()
+_last_snapshot_seen: int = 0
 
 
 def _parse_hhmm(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
@@ -62,6 +65,9 @@ def scheduler_status() -> dict:
         "week_open_weekday": max(0, min(6, SETTINGS.week_open_weekday)),
         "week_open_time": f"{week_open[0]:02d}:{week_open[1]:02d}",
         "poll_seconds": SETTINGS.scheduler_poll_seconds,
+        "snapshot_watch_refresh": bool(SETTINGS.paper_only),
+        "watch_latch_count": len(_watch_interaction_latch),
+        "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
 
@@ -114,26 +120,33 @@ def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
     return age <= SETTINGS.max_snapshot_age_seconds
 
 
+def _watch_ids(snap) -> set[str]:
+    if not SETTINGS.paper_only:
+        return set()
+    a = latest_analysis(ai_required=False)
+    if a is None or a.selected_zone_id:
+        return set()
+    return {z.zone_id for z in a.zones if watch_zone_ready(z, snap)}
+
+
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
+    global _last_snapshot_seen
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     startup_analysis_pending = True
     while True:
         try:
             now = datetime.now(tz)
-            ran_scheduled_analysis = False
+            ran_analysis = False
             for reason in _due_reasons(now):
                 key = f"{now.date()}:{reason}"
                 if key in _last_keys:
                     continue
                 _last_keys.add(key)
                 await run_analysis(reason)
-                ran_scheduled_analysis = True
+                ran_analysis = True
 
-            # A cloud deploy/restart must not leave AITS waiting until the next
-            # fixed session checkpoint. Once MT5 has supplied the first fresh,
-            # complete snapshot, create exactly one new analysis for this process.
             if startup_analysis_pending:
-                if ran_scheduled_analysis:
+                if ran_analysis:
                     startup_analysis_pending = False
                 else:
                     snap = latest_snapshot()
@@ -141,6 +154,26 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                     if _fresh_complete_snapshot(snap, now_utc):
                         await run_analysis("SERVICE_STARTUP_FRESH_SNAPSHOT")
                         startup_analysis_pending = False
+                        ran_analysis = True
+
+            snap = latest_snapshot()
+            now_utc = int(now.astimezone(timezone.utc).timestamp())
+            if (
+                not ran_analysis
+                and SETTINGS.paper_only
+                and _fresh_complete_snapshot(snap, now_utc)
+                and int(snap.sent_at) != _last_snapshot_seen
+            ):
+                _last_snapshot_seen = int(snap.sent_at)
+                current_ids = _watch_ids(snap)
+                new_ids = current_ids - _watch_interaction_latch
+                _watch_interaction_latch.clear()
+                _watch_interaction_latch.update(current_ids)
+                if new_ids:
+                    names = ",".join(sorted(new_ids)[:3])
+                    audit(now_utc, "scheduler.watch_refresh", f"snapshot={snap.sent_at} zones={names}")
+                    await run_analysis(f"WATCH_CORE_REFRESH:{names}")
+                    ran_analysis = True
 
             if len(_last_keys) > 300:
                 cutoff = (now.date() - timedelta(days=7)).isoformat()
