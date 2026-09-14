@@ -6,7 +6,9 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 
 # Public primary zones stay ARMED until live price reaches the tactical core.
 # M1_READY is still only a PAPER-ONLY handoff into the existing M1 sequence.
-CORE_INTERACTION_BUFFER_M15_ATR = 0.30
+# The wide 300-400 pip envelope is location/sweep context, never an execution
+# trigger. Keep the live buffer deliberately small around the tactical core.
+CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 MAX_READY_TOUCHES = 1
 READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
