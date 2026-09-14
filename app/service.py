@@ -9,6 +9,7 @@ from .execution_models import build_execution_overlay, regime_brief
 from .institutional_two_zone import build_prompt_analysis
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
+from .prompt_contract import apply_prompt_confirmation_contract
 from .watch_ready import promote_watch_to_m1_ready
 
 
@@ -21,6 +22,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # Single authoritative zoning path: today's prompt-driven source-candle engine.
     # No legacy H4 policy, compact-envelope expansion, distance gate, or old candidate patching.
     a = build_prompt_analysis(s, now)
+    apply_prompt_confirmation_contract(a, s)
     primary_zones = list(a.zones)
 
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
