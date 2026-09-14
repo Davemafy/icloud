@@ -74,13 +74,13 @@ def test_public_map_keeps_h4_parents_ahead_of_nearer_h1(monkeypatch):
     selected = apply_two_zone_institutional_map(analysis, _snapshot())
 
     assert [z.zone_id for z in selected] == ["H4_SELL", "H4_BUY"]
-    assert analysis.selected_zone_id == ""
+    assert analysis.selected_zone_id == "H4_SELL"
     assert all(z.core_method.startswith("ARMED|") for z in selected)
     assert "Primary institutional map" in analysis.trader_brief
     assert analysis.execution_policy["public_zone_map"]["map_count"] == 2
 
 
-def test_interacting_primary_is_marked_interacting_not_preselected(monkeypatch):
+def test_interacting_primary_is_marked_interacting_and_clears_armed_selection(monkeypatch):
     import app.institutional_two_zone as policy
 
     sell = _zone("H4_SELL", Direction.SELL, "H4", 100.0, 101.0, Grade.A)
