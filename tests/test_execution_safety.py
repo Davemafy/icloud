@@ -1,0 +1,161 @@
+from app.execution_safety import guard_plan_text, normalize_candidate_feedback
+from app.models import Analysis, Direction, Feedback, Grade, MarketSnapshot, Zone, ZoneState
+
+
+def _snapshot(mid: float, spread_points: float = 18.0) -> MarketSnapshot:
+    half = spread_points * 0.01 / 2.0
+    return MarketSnapshot(
+        sent_at=1,
+        bid=mid - half,
+        ask=mid + half,
+        spread_points=spread_points,
+        point=0.01,
+        atr_h1=20.0,
+        atr_m15=6.0,
+    )
+
+
+def _sell_zone(readiness: str = "M1_READY") -> Zone:
+    return Zone(
+        zone_id="PZ_H4H1_SELL_10",
+        original_direction=Direction.SELL,
+        flip_direction=Direction.BUY,
+        setup_type="CONTINUATION",
+        source_tf="H4>H1",
+        grade=Grade.A_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=4305.88,
+        core_high=4315.88,
+        core_method=f"{readiness}|PROMPT_SWEEP_ROOM_GEOMETRY|PROMPT_H4_PARENT_H1_REFINEMENT",
+        location_score=9.0,
+        zone_low=4282.75,
+        zone_high=4322.75,
+        touch_count=1,
+        independent_confluence_count=6,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "BSL_IN_MARKED_ZONE"],
+        source_ts=1,
+        invalidation_level=4322.75,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=4310.0,
+        original_target2=4300.54,
+        original_target3=4300.0,
+        flip_target1=4324.05,
+        flip_target2=4324.68,
+        flip_target3=4326.29,
+        clear_run=1.0,
+    )
+
+
+def _analysis(zone: Zone) -> Analysis:
+    return Analysis(
+        analysis_id="A1",
+        generated_at=1,
+        snapshot_at=1,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+
+
+def _kv(text: str) -> dict[str, str]:
+    out = {}
+    for line in text.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            out[k] = v
+    return out
+
+
+def test_sell_plan_removes_target_inside_core_and_keeps_only_profit_side_objectives():
+    zone = _sell_zone("M1_READY")
+    snap = _snapshot(4306.50)
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "original_direction=SELL\n"
+        "original_target1=4310.00000\n"
+        "original_target2=4300.54000\n"
+        "original_target3=4300.00000\n"
+        "original_runner=0.00000\n"
+        "flip_target1=4324.05000\n"
+        "flip_target2=4324.68000\n"
+        "flip_target3=4326.29000\n"
+        "flip_runner=0.00000\n"
+    )
+    out = _kv(guard_plan_text(raw, _analysis(zone), snap))
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert float(out["original_target1"]) == 4300.54
+    assert float(out["original_target2"]) == 4300.0
+    assert float(out["original_target3"]) == 0.0
+    assert out["original_targets_removed_wrong_side"] == "1"
+    assert out["live_target_direction_valid"] == "1"
+
+
+def test_armed_zone_cannot_export_executable_plan_before_m1_handoff():
+    zone = _sell_zone("ARMED")
+    snap = _snapshot(4290.0)
+    raw = "ea_mode=DUAL_BRANCH\noriginal_direction=SELL\noriginal_target1=4300.00000\n"
+    out = _kv(guard_plan_text(raw, _analysis(zone), snap))
+    assert out["ea_mode"] == "WATCH_ONLY"
+    assert out["core_handoff_ready"] == "0"
+    assert "CLOUD_M1_HANDOFF_NOT_READY" in out["execution_guard_reason"]
+
+
+def test_primary_observer_candidate_outside_core_is_context_false_and_wrong_targets_are_zeroed():
+    zone = _sell_zone("ARMED")
+    a = _analysis(zone)
+    snap = _snapshot(4290.0)
+    f = Feedback(
+        ts=2,
+        event="ML_CANDIDATE",
+        analysis_id="A1",
+        zone_id=zone.zone_id,
+        price=4290.0,
+        details={
+            "direction": "SELL",
+            "eligible": True,
+            "entry_price": 4290.0,
+            "target1": 4310.0,
+            "target2": 4300.54,
+            "target3": 4300.0,
+            "rejection_reasons": [],
+            "features": {"role": "PRIMARY", "zone_context": 1, "recent_zone_interaction": 1},
+        },
+    )
+    out = normalize_candidate_feedback(f, a, snap)
+    assert out.details["features"]["zone_context"] == 0
+    assert out.details["features"]["recent_zone_interaction"] == 0
+    assert "CORE_NOT_REACHED" in out.details["rejection_reasons"]
+    assert "TARGET_DIRECTION_INVALID" in out.details["rejection_reasons"]
+    assert out.details["eligible"] is False
+    assert out.details["target1"] == 0.0
+    assert out.details["target2"] == 0.0
+    assert out.details["target3"] == 0.0
+
+
+def test_reentry_does_not_require_return_to_original_core_but_still_requires_valid_targets():
+    zone = _sell_zone("M1_READY")
+    a = _analysis(zone)
+    snap = _snapshot(4290.0)
+    f = Feedback(
+        ts=2,
+        event="ML_CANDIDATE",
+        analysis_id="A1",
+        zone_id=zone.zone_id,
+        price=4290.0,
+        details={
+            "direction": "SELL",
+            "eligible": True,
+            "entry_price": 4290.0,
+            "target1": 4280.0,
+            "target2": 4270.0,
+            "target3": 4260.0,
+            "rejection_reasons": [],
+            "features": {"role": "REENTRY", "zone_context": 1, "recent_zone_interaction": 1},
+        },
+    )
+    out = normalize_candidate_feedback(f, a, snap)
+    assert "CORE_NOT_REACHED" not in out.details["rejection_reasons"]
+    assert "TARGET_DIRECTION_INVALID" not in out.details["rejection_reasons"]
+    assert out.details["eligible"] is True
