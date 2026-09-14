@@ -7,11 +7,11 @@ from typing import Awaitable, Callable
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_interacting
-from .prompt_candidate_policy import install_prompt_candidate_policy
+from .runtime_version_truth import install_runtime_version_truth_policy
 from .timezones import safe_zoneinfo
 
-# Analysis-source policy only. Install before any scheduled/startup analysis runs.
-install_prompt_candidate_policy()
+# Runtime/version-truth only. Zoning itself is now a single prompt-driven engine.
+install_runtime_version_truth_policy()
 
 _last_keys: set[str] = set()
 _zone_interaction_latch: set[str] = set()
