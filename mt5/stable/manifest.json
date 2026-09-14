@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.0",
+  "release": "6.3.1",
   "repository": "Davemafy/icloud",
-  "ref": "8a8d7fbaf2614480eb594f7872f8b18602a81a43",
-  "data_bridge_version": "1.32",
+  "ref": "7ed51fe5934b47115b6762fcefcb454124ece8e7",
+  "data_bridge_version": "1.33",
   "sequence_ea_version": "3.23",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -34,16 +34,18 @@
     "week_open_analysis",
     "trading_day_open_analysis",
     "front_facing_versioned_ea_names",
-    "demo_cloud_defaults"
+    "demo_cloud_defaults",
+    "visible_snapshot_logging",
+    "snapshot_retry_watchdog"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_32_RuntimeStatus.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_33_VisibleTelemetry.mq5",
       "requires_reload": true,
-      "sha256": "e1f9c0c68e7e9ea095fd356d33f5358d6d66eafac37c08dccb494871090684d0"
+      "sha256": "79fb22b9a7b9039c9c7980f816b67e1c19dbf7b4e29e7021a41ddcb0080088cc"
     },
     {
       "role": "sequence_ea",
