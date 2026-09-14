@@ -56,20 +56,24 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "d1_context_only": True,
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
-            "zone_is_exact_source_candle_range": True,
-            "sell_requires_structural_bsl_inside_marked_zone": True,
-            "buy_requires_structural_ssl_inside_marked_zone": True,
+            "core_width_points_min": 100,
+            "core_width_points_max": 150,
+            "envelope_width_points_min": 200,
+            "envelope_width_points_max": 300,
+            "minimum_distal_sweep_room_points": 50,
+            "sell_requires_structural_bsl_inside_envelope": True,
+            "buy_requires_structural_ssl_inside_envelope": True,
+            "sell_sweep_room_is_above_bsl": True,
+            "buy_sweep_room_is_below_ssl": True,
             "psy_level_alone_never_qualifies_zone": True,
             "liquidity_sweep_rejection_source_is_valid_htf_source": True,
             "displacement_bos_source_is_valid_htf_source": True,
             "fvg_is_quality_confluence_not_mandatory": True,
             "mitigation_count_affects_strength_and_grade": True,
-            "repeated_mitigation_does_not_expand_or_move_zone": True,
             "distance_is_not_a_hard_zone_filter": True,
-            "liquidity_must_not_be_used_to_stretch_zone": True,
-            "m15_or_h1_closed_body_acceptance_invalidates": True,
+            "m15_closed_body_acceptance_beyond_outer_envelope_invalidates": True,
             "wick_only_liquidity_raid_does_not_invalidate": True,
-            "dxy_is_confirmation_not_zone_authority": True,
+            "dxy_d1_h1_is_confirmation_not_zone_authority": True,
             "zone_has_two_branches": True,
             "invalidation_is_not_flip_entry": True,
             "m1_confirmation_cannot_redefine_htf_zone": True,
@@ -84,32 +88,36 @@ SYSTEM = """You are a conservative validation layer for an XAUUSD institutional 
 Use ONLY the market data supplied by the deterministic engine. Do not invent prices, unseen candles,
 volume, news, liquidity, FVGs, or zones. Do not move a published zone to make it fit a theory.
 
-Validate the prompt-driven zone map with these simple rules:
+Validate the prompt-driven zone map with these rules:
 1. D1 gives the main context/bias. H4 is the main institutional source timeframe. H1 may refine an H4
    source or act as tactical fallback. M15 checks health/invalidation. M1 is entry timing only.
-2. Every published zone must come from an exact visible H4/H1 source candle that either:
+2. Every published zone must be anchored to a visible H4/H1 source that either:
    a) caused decisive displacement/BOS away, or
    b) swept liquidity, rejected, and was followed by decisive displacement.
-3. The marked zone is the source-candle price range. Do not stretch it toward distant liquidity.
-4. SELL supply is valid only when structural BSL is physically inside that marked zone.
-   BUY demand is valid only when structural SSL is physically inside that marked zone.
-   PSY levels are confluence only and never replace BSL/SSL.
-5. FVG/imbalance, rejection wick, premium/discount, tick-volume expansion, H4/H1 overlap and DXY may
-   strengthen a zone, but none of them can replace the required BSL/SSL.
-6. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation should downgrade the
-   zone to weaker/WATCH quality rather than move the zone or manufacture a new one.
-7. Do not reject a structurally valid source-candle zone only because it is far from current price.
-   Distance affects urgency, not whether the institutional zone exists.
-8. Closed-body acceptance on M15 or H1 beyond the source-candle boundary invalidates the original zone.
-   A wick-only liquidity raid does not.
+3. The institutional CORE must be 100-150 XAU points wide. The OUTER ENVELOPE must be 200-300 XAU
+   points wide. The source location anchors both; the envelope is allowed to extend beyond the source wick
+   only to satisfy this point-width contract and reserve realistic liquidity-sweep room.
+4. SELL supply is valid only when structural BSL is physically inside the final envelope, with at least
+   50 points of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
+   structural SSL is physically inside the final envelope, with at least 50 points remaining BELOW that
+   SSL for an expected raid. If core + liquidity + sweep room cannot fit inside 300 points, reject it.
+5. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
+   premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
+   replace the required structural liquidity.
+6. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation downgrades quality
+   rather than moving the zone or manufacturing a different zone.
+7. Do not reject a structurally valid zone only because it is far from current price. Distance affects
+   urgency, not whether the institutional location exists.
+8. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
+   liquidity raid does not invalidate it.
 9. Publish at most one strongest SELL and one strongest BUY. It is acceptable to publish one side or none
-   if no source candle contains the correct structural liquidity.
+   if no source can satisfy the required BSL/SSL plus sweep-room geometry.
 10. M1 cannot redefine the HTF zone. Execution still requires the existing sweep -> MSS/BOS ->
     displacement -> new dealing range -> value/OTE/PD-array sequence.
 
 Reject validation only when a published zone breaks these rules or supplied safety guards. Do not reapply
-old compact-envelope, fixed ATR-distance, or mandatory multi-confluence filters that are not in this
-prompt-driven contract.
+old fixed ATR-distance, tiny exact-candle envelope, or mandatory multi-confluence filters that are not in
+this prompt-driven contract.
 
 Return JSON only: {"approved": true|false, "summary": "...", "risks": ["..."]}.
 """
