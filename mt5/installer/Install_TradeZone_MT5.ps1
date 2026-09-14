@@ -217,12 +217,17 @@ try{
   $expertsBackup=Join-Path $backupRoot 'experts'
   New-Item -ItemType Directory -Force -Path $includeBackup,$expertsBackup|Out-Null
 
-  # Back up old active TradeZone tree outside MQL5, then create a clean front-facing tree.
+  # Back up the complete TradeZone tree, then refresh only root-level managed EA files.
+  # Child folders (for example Observer) are intentionally preserved.
   if(Test-Path $dest){
     Copy-Item $dest (Join-Path $expertsBackup 'TradeZone') -Recurse -Force
-    Remove-Item $dest -Recurse -Force
+    Get-ChildItem $dest -File -ErrorAction SilentlyContinue | ForEach-Object{
+      Remove-Item $_.FullName -Force
+    }
+    Write-Host 'Preserved existing TradeZone subfolders (including Observer).' -ForegroundColor DarkCyan
+  }else{
+    New-Item -ItemType Directory -Force -Path $dest|Out-Null
   }
-  New-Item -ItemType Directory -Force -Path $dest|Out-Null
 
   # Install patched support sources.
   foreach($x in $supportDownloads){
@@ -255,6 +260,7 @@ try{
   Write-Host "  Sequence EA v$($m.sequence_ea_version)" -ForegroundColor Green
   Write-Host "  Cloud URL/key are already the EA defaults." -ForegroundColor Green
   Write-Host "  Old TradeZone Navigator tree backed up to: $expertsBackup" -ForegroundColor DarkGray
+  Write-Host '  Existing TradeZone subfolders were preserved.' -ForegroundColor DarkGray
   Write-Host ''
   Write-Host 'MT5: Navigator > Expert Advisors > right-click Refresh > TradeZone.' -ForegroundColor Cyan
   Write-Host 'Attach DataBridge once to XAUUSD; attach Sequence EA to XAUUSD M1.' -ForegroundColor Cyan
