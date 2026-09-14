@@ -51,11 +51,17 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             for z in a.zones
         ],
         "rules": {
-            "prompt_contract_ref": "ZONE_FORMATION_PROMPT_2026_09_14_V653",
+            "prompt_contract_ref": "ZONE_FORMATION_PROMPT_2026_09_14_V655",
             "no_future_leakage": True,
             "max_primary_zones": 2,
             "one_primary_zone_per_side": True,
-            "no_forced_second_zone": True,
+            "no_forced_second_primary_zone": True,
+            "max_secondary_reserve_per_side": 1,
+            "secondary_reserve_is_context_only": True,
+            "secondary_reserve_has_no_execution_authority": True,
+            "secondary_requires_primary_m15_invalidation_then_fresh_requalification": True,
+            "sell_secondary_must_be_distinct_higher_supply": True,
+            "buy_secondary_must_be_distinct_lower_demand": True,
             "d1_context_only": True,
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
@@ -99,7 +105,7 @@ volume, news, liquidity, FVGs, or zones. Do not move a published zone to make it
 Validate the prompt-driven PAPER/DEMO zone map with these rules:
 1. D1 gives the main context/bias. H4 is the main institutional source timeframe. H1 may refine an H4
    source or act as tactical fallback. M15 checks health/invalidation. M1 is entry timing only.
-2. Every published zone must be anchored to a visible H4/H1 source that either:
+2. Every published primary zone must be anchored to a visible H4/H1 source that either:
    a) caused decisive displacement/BOS away, or
    b) swept liquidity, rejected, and was followed by decisive displacement.
 3. Trade Zone uses 1 XAU pip = 10 broker points. The institutional CORE must be 100-200 pips wide.
@@ -116,27 +122,34 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 6. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-7. Mitigation count measures strength. Fresh zones rank higher; repeated mitigation downgrades quality
-   rather than moving the zone or manufacturing a different zone.
-8. After structural validity and freshness, intraday reachability ranks today's alert candidates. A much
-   nearer A/A+ valid zone should outrank a remote equally-executable candidate. Distance NEVER manufactures
-   a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context instead of the
-   primary intraday alert.
+7. Mitigation count measures strength. Fresh zones rank higher within comparable intraday relevance;
+   repeated mitigation downgrades quality rather than moving the zone or manufacturing a different zone.
+8. After structural validity and A/A+ execution quality, intraday reachability ranks today's alert candidates
+   before freshness and remote HTF authority. A much nearer A/A+ valid zone should outrank a remote
+   equally-executable candidate solely because the remote zone has one fewer touch. Distance NEVER
+   manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
 9. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
    liquidity raid does not invalidate it.
-10. Publish at most one strongest SELL and one strongest BUY, but DO NOT force both sides. If no valid BUY
-    exists below/interacting with price, publish BUY=NONE. If no valid SELL exists above/interacting with
-    price, publish SELL=NONE.
-11. M1 cannot redefine the HTF zone. Execution still requires the existing sweep -> MSS/BOS ->
-    displacement -> new dealing range -> value/OTE/PD-array sequence.
+10. Publish at most one PRIMARY SELL and one PRIMARY BUY, but DO NOT force both sides. If no valid BUY
+    exists below/interacting with price, PRIMARY BUY=NONE. If no valid SELL exists above/interacting with
+    price, PRIMARY SELL=NONE.
+11. A SECONDARY level is a reserve only. At most one reserve per side may be exposed in execution_policy.
+    It must pass the same structural/liquidity/geometry/M15 rules, be A/A+, have <=1 mitigation, come from
+    a distinct non-overlapping institutional source, and sit beyond the primary invalidation side: higher
+    supply for SELL, lower demand for BUY. While Level 1 is valid, Level 2 has zero execution authority.
+    Level-1 invalidation does NOT instantly activate Level 2. A fresh analysis must requalify Level 2 before
+    it can become primary.
+12. M1 cannot redefine the HTF zone. Once any zone becomes primary, execution still requires the existing
+    sweep -> MSS/BOS -> displacement -> new dealing range -> value/OTE/PD-array sequence.
 
 This contract comes from the user's 2026-09-14 institutional XAU prompt: identify the MOST IMPORTANT
 levels where price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15
 structure, liquidity, source candles, displacement, FVG, mitigation, ATR/spread/news and DXY confirmation.
 
-Reject validation only when a published zone breaks these rules or supplied safety guards. Do not reapply
-old fixed ATR-distance, tiny exact-candle envelope, mandatory two-sided output, or mandatory multi-confluence
-filters that are not in this prompt-driven contract.
+Reject validation only when a published primary breaks these rules or supplied safety guards. A reserve
+zone in execution_policy is context-only and must not be treated as an active execution zone. Do not reapply
+old fixed ATR-distance, tiny exact-candle envelope, mandatory two-sided primary output, or mandatory
+multi-confluence filters that are not in this prompt-driven contract.
 
 Return JSON only: {"approved": true|false, "summary": "...", "risks": ["..."]}.
 """
