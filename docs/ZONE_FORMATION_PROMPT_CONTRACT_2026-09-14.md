@@ -1,7 +1,7 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V655`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V656`
 
 This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
@@ -97,12 +97,30 @@ A second level may be published as a BACKUP only. It is not a second active exec
 
 ## M1 execution handoff
 
-After price reaches a qualified HTF zone, paper execution still requires:
+The wide outer envelope is institutional location and sweep room. It is NOT an M1 execution trigger.
 
-`sweep -> MSS/BOS -> displacement -> new M1 dealing range -> value/OTE/PD-array retracement -> entry`
+For the first primary entry:
 
-No chase and no blind entry.
+- M1 handoff begins only when price reaches the tactical core or a very small core buffer.
+- The core buffer is the greater of 5 broker points or 0.10 M15 ATR.
+- Being anywhere inside the 300–400 pip envelope must not set primary `zone_context` or `recent_zone_interaction` by itself.
+- After core handoff, execution still requires `sweep -> MSS/BOS -> displacement -> new M1 dealing range -> value/OTE/PD-array retracement -> entry`.
+- No chase and no blind entry.
+
+Re-entry is different: after a valid primary exists and the position/thesis is protected, re-entry follows the existing continuation/re-entry contract and does not have to revisit the original core.
+
+## Directional target safety
+
+Targets are execution constraints, not decorative levels.
+
+- SELL: every active TP must be below the actual SELL candidate entry by a spread-aware safety gap.
+- BUY: every active TP must be above the actual BUY candidate entry by a spread-aware safety gap.
+- Primary target export is first sanitized against the entire tactical core: SELL objectives must be below the core low; BUY objectives must be above the core high.
+- On every live plan poll, objectives are checked again against the current executable side using at least 1.5× live spread or 5 broker points, whichever is larger.
+- Wrong-side targets are removed from the exported plan/telemetry.
+- If no directionally valid primary target remains, MT5 receives `WATCH_ONLY`; the candidate cannot execute.
+- A flip BUY target must remain above the failed SELL envelope; a flip SELL target must remain below the failed BUY envelope.
 
 ## Future-change rule
 
-When zoning code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, or grants execution authority to a Level-2 reserve while Level 1 remains valid.
+When zoning or execution-handoff code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, or allows a target on the wrong side of the actual candidate entry.
