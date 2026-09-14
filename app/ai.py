@@ -56,11 +56,12 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "d1_context_only": True,
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
-            "core_width_points_min": 100,
-            "core_width_points_max": 150,
-            "envelope_width_points_min": 200,
-            "envelope_width_points_max": 300,
-            "minimum_distal_sweep_room_points": 50,
+            "xau_points_per_pip": 10,
+            "core_width_pips_min": 100,
+            "core_width_pips_max": 200,
+            "envelope_width_pips_min": 300,
+            "envelope_width_pips_max": 400,
+            "minimum_distal_sweep_room_pips": 50,
             "sell_requires_structural_bsl_inside_envelope": True,
             "buy_requires_structural_ssl_inside_envelope": True,
             "sell_sweep_room_is_above_bsl": True,
@@ -88,19 +89,19 @@ SYSTEM = """You are a conservative validation layer for an XAUUSD institutional 
 Use ONLY the market data supplied by the deterministic engine. Do not invent prices, unseen candles,
 volume, news, liquidity, FVGs, or zones. Do not move a published zone to make it fit a theory.
 
-Validate the prompt-driven zone map with these rules:
+Validate the prompt-driven PAPER/DEMO zone map with these rules:
 1. D1 gives the main context/bias. H4 is the main institutional source timeframe. H1 may refine an H4
    source or act as tactical fallback. M15 checks health/invalidation. M1 is entry timing only.
 2. Every published zone must be anchored to a visible H4/H1 source that either:
    a) caused decisive displacement/BOS away, or
    b) swept liquidity, rejected, and was followed by decisive displacement.
-3. The institutional CORE must be 100-150 XAU points wide. The OUTER ENVELOPE must be 200-300 XAU
-   points wide. The source location anchors both; the envelope is allowed to extend beyond the source wick
-   only to satisfy this point-width contract and reserve realistic liquidity-sweep room.
+3. Trade Zone uses 1 XAU pip = 10 broker points. The institutional CORE must be 100-200 pips wide.
+   The OUTER ENVELOPE must be 300-400 pips wide. The source location anchors both; the envelope may
+   extend around the source only to satisfy this width contract and reserve realistic liquidity-sweep room.
 4. SELL supply is valid only when structural BSL is physically inside the final envelope, with at least
-   50 points of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
-   structural SSL is physically inside the final envelope, with at least 50 points remaining BELOW that
-   SSL for an expected raid. If core + liquidity + sweep room cannot fit inside 300 points, reject it.
+   50 pips of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
+   structural SSL is physically inside the final envelope, with at least 50 pips remaining BELOW that
+   SSL for an expected raid. If core + liquidity + sweep room cannot fit inside 400 pips, reject it.
 5. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
