@@ -206,8 +206,9 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     ):
         analysis.selected_zone_id = ""
 
-    # If price is already interacting with one of the two execution-qualified
-    # zones, make that zone authoritative for the paper plan.
+    # The primary zone price is actually touching gets authority. ACTIONABLE can
+    # stay selected directly. WATCH must clear any old selection so the existing
+    # WATCH -> M1_READY helper can perform the proper paper-only handoff.
     interacting = [z for z in analysis.zones if primary_zone_interacting(z, s)]
     if interacting:
         interacting.sort(
@@ -217,7 +218,11 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
                 -float(z.location_score),
             )
         )
-        analysis.selected_zone_id = interacting[0].zone_id
+        touched = interacting[0]
+        if _readiness(touched) in {"ACTIONABLE", "M1_READY"}:
+            analysis.selected_zone_id = touched.zone_id
+        else:
+            analysis.selected_zone_id = ""
 
     labels = []
     for z in analysis.zones:
