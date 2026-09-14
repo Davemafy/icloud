@@ -255,12 +255,30 @@ def apply_two_zone_institutional_map(analysis: Analysis, s: MarketSnapshot) -> l
     )
     analysis.zones = [chosen[d] for d in order if d in chosen]
 
-    # Public map and execution handoff are separate truths. Both primary zones stay
-    # ARMED. Only an actual core interaction is allowed to become M1_READY later.
-    analysis.selected_zone_id = ""
     interacting = [z for z in analysis.zones if _interaction_now(z, s)]
     for zone in analysis.zones:
         _replace_readiness(zone, "INTERACTING" if zone in interacting else "ARMED")
+
+    # Keep one primary plan armed even before price reaches it so the journal and
+    # MT5 plan are never falsely empty. If either zone is actually interacting,
+    # clear the armed selection so the M1_READY handoff can give that touched zone
+    # authority on this same analysis pass.
+    if interacting:
+        analysis.selected_zone_id = ""
+    else:
+        preferred = chosen.get(analysis.overall_bias)
+        if preferred is None and analysis.zones:
+            preferred = min(
+                analysis.zones,
+                key=lambda z: _distance(float(s.mid), float(z.core_low), float(z.core_high)),
+            )
+        analysis.selected_zone_id = (
+            preferred.zone_id
+            if preferred is not None
+            and preferred.state == ZoneState.ACTIVE
+            and preferred.grade in {Grade.A_PLUS, Grade.A}
+            else ""
+        )
 
     labels = []
     public = {}
