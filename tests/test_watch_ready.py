@@ -116,3 +116,41 @@ def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
     assert selected is None
     assert a.selected_zone_id == "Z1"
     assert z.core_method.startswith("ARMED|")
+
+
+def test_confirmed_thesis_can_continue_from_same_core_after_display_downgrade():
+    s = _snapshot(100.0)
+    z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=2)
+    a = Analysis(
+        analysis_id="A1",
+        generated_at=1,
+        snapshot_at=1,
+        zones=[z],
+        selected_zone_id="Z1",
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "owner_zone_id": "Z1",
+                "direction": "BUY",
+                "status": "REACTION_CONFIRMED",
+                "continuation_authority": True,
+            }
+        },
+    )
+    selected = promote_watch_to_m1_ready(a, s)
+    assert selected is z
+    assert z.core_method.startswith("M1_READY|THESIS_CONTINUATION|")
+    assert "execution_role:THESIS_CONTINUATION" in z.notes
+
+
+def test_same_bplus_second_touch_zone_has_no_new_primary_authority_without_thesis():
+    s = _snapshot(100.0)
+    z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=2)
+    a = Analysis(
+        analysis_id="A1",
+        generated_at=1,
+        snapshot_at=1,
+        zones=[z],
+        selected_zone_id="Z1",
+    )
+    assert promote_watch_to_m1_ready(a, s) is None
