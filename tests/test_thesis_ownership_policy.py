@@ -1,5 +1,7 @@
+from app import db
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 import app.thesis_ownership_policy as policy
+from app.zone_reaction_lifecycle import register_analysis_zones, update_zone_reactions
 
 
 def _snapshot(mid: float = 100.0) -> MarketSnapshot:
@@ -123,3 +125,40 @@ def test_no_live_thesis_leaves_normal_selection_unchanged(monkeypatch):
     assert owner is None
     assert analysis.selected_zone_id == "SELL_ZONE"
     assert analysis.execution_policy["active_thesis"]["locked"] is False
+
+
+def test_current_snapshot_interaction_locks_owner_before_opposite_selection(tmp_path, monkeypatch):
+    """Regression for v6.5.9 startup ordering: lifecycle must be current before ownership."""
+    path = tmp_path / "thesis_sync.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    buy = _zone("BUY_ZONE", Direction.BUY, 111, Grade.B_PLUS)
+    sell = _zone("SELL_ZONE", Direction.SELL, 222, Grade.A_PLUS)
+    # Keep the new SELL map far away while current price is inside the BUY core.
+    sell.core_low = 120.0
+    sell.core_high = 121.0
+    sell.zone_low = 118.0
+    sell.zone_high = 123.0
+
+    analysis = Analysis(
+        analysis_id="A_SYNC",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id="SELL_ZONE",
+    )
+    snap = _snapshot(100.0)
+
+    register_analysis_zones(analysis)
+    update_zone_reactions(snap)
+    owner = policy.apply_thesis_ownership(analysis, snap)
+
+    assert owner is buy
+    assert analysis.selected_zone_id == "BUY_ZONE"
+    meta = analysis.execution_policy["active_thesis"]
+    assert meta["locked"] is True
+    assert meta["direction"] == "BUY"
+    assert meta["status"] == "INTERACTING"
+    assert meta["opposite_execution_blocked"] is True
