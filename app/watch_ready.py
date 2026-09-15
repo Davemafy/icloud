@@ -7,7 +7,7 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 # Public primary zones stay ARMED until live price reaches the tactical core.
 # M1_READY is still only a PAPER-ONLY handoff into the existing M1 sequence.
 # The wide 300-400 pip envelope is location/sweep context, never an execution
-# trigger. Keep the live buffer deliberately small around the tactical core.
+# trigger. Keep the initial-entry buffer deliberately small around the tactical core.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 MAX_READY_TOUCHES = 1
@@ -42,7 +42,8 @@ def _core_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
     return core_distance <= buffer_price
 
 
-def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
+def _structural_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """Structural/M15 health that must survive even in PAPER discovery mode."""
     if zone.source_tf not in READY_SOURCE_TFS:
         return False
     if int(zone.independent_confluence_count) < 2:
@@ -55,7 +56,11 @@ def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
     if required not in set(zone.confluences):
         return False
     state = evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15)
-    return bool(state == ZoneState.ACTIVE and _core_ready(zone, snapshot))
+    return bool(state == ZoneState.ACTIVE)
+
+
+def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    return bool(_structural_zone_health(zone, snapshot) and _core_ready(zone, snapshot))
 
 
 def _active_thesis(analysis: Analysis) -> dict:
@@ -77,12 +82,19 @@ def _thesis_continuation_ready(analysis: Analysis, zone: Zone, snapshot: MarketS
         return False
     if not bool(meta.get("continuation_authority")):
         return False
+    if not bool(meta.get("objective_open", True)):
+        return False
     if zone.grade == Grade.REJECT:
         return False
-    # Freshness/mitigation may downgrade the current display after the thesis has
-    # already reacted. It may not silently reverse ownership. The same surviving
-    # geometry still needs structural liquidity, M15 health, core interaction and
-    # a new M1 sequence before a simulated continuation entry.
+
+    # The initial institutional trade still requires the original HTF tactical core.
+    # Once that core has reacted and the thesis is confirmed, however, requiring
+    # every continuation entry to revisit the same HTF core is over-restrictive.
+    # In PAPER discovery mode the original thesis only needs to remain structurally
+    # valid on M15; Sequence 3.23 is then free to look for a fresh M1 sweep/MSS/
+    # displacement/value pattern anywhere along the still-open liquidity run.
+    if SETTINGS.paper_discovery_mode:
+        return _structural_zone_health(zone, snapshot)
     return _common_zone_health(zone, snapshot)
 
 
@@ -108,15 +120,26 @@ def _mark_ready(analysis: Analysis, selected: Zone, thesis_continuation: bool) -
     selected.core_method = f"M1_READY|{tail}"
     selected.notes = [
         "readiness:M1_READY",
-        *( ["execution_role:THESIS_CONTINUATION"] if thesis_continuation else [] ),
+        *(["execution_role:THESIS_CONTINUATION"] if thesis_continuation else []),
+        *(["execution_profile:PAPER_DISCOVERY_MODE"] if thesis_continuation and SETTINGS.paper_discovery_mode else []),
         *[
-            n for n in selected.notes
+            n
+            for n in selected.notes
             if not str(n).startswith("readiness:")
             and not str(n).startswith("execution_role:")
+            and not str(n).startswith("execution_profile:")
         ],
     ]
 
-    if thesis_continuation:
+    if thesis_continuation and SETTINGS.paper_discovery_mode:
+        analysis.trader_brief += (
+            f" PAPER DISCOVERY M1_READY={selected.zone_id}: the confirmed "
+            f"{selected.original_direction.value} thesis is still structurally valid and its liquidity "
+            "objective is open. A return to the original HTF core is no longer required for continuation; "
+            "Sequence may test fresh same-direction M1 sweep/MSS/displacement/value setups while the "
+            "thesis remains valid. Opposite-side execution stays blocked until invalidation or objective completion."
+        )
+    elif thesis_continuation:
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: active {selected.original_direction.value} thesis "
             "is still non-terminal and price has returned to its surviving tactical core. A fresh M1 "
