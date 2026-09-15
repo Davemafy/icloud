@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.4",
+  "release": "6.3.5",
   "repository": "Davemafy/icloud",
-  "ref": "9272b121d1952f3b335434dd85a30e26e3df65df",
+  "ref": "613f14cae93dd2db87f8ef3da2d66ab22ef72efd",
   "data_bridge_version": "1.35",
   "sequence_ea_version": "3.25",
   "updater_min_version": "2.7.0",
@@ -40,14 +40,15 @@
     "minimal_execution_gates",
     "cloud_zone_core_envelope_shading",
     "reserve_zone_context_shading",
-    "active_thesis_zone_highlight"
+    "active_thesis_zone_highlight",
+    "front_facing_filename_matches_runtime_version"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_34_MapStatus.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_34_MapStatus.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_34_MapStatus.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
       "requires_reload": true,
       "sha256": "b9ce54f15d3b93f7bec7159f1a2555fd85984229677aa3381cdd30d0165b5892"
     },
