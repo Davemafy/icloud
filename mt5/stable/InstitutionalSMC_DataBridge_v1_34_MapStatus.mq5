@@ -1,19 +1,20 @@
 #property strict
-#property version "1.34"
-#property description "DEMO/PAPER telemetry bridge with visible snapshots and synchronized two-zone cloud map status."
+#property version "1.35"
+#property description "DEMO/PAPER telemetry bridge with visible snapshots, map status, and visual-only core/envelope zone shading."
 
 #define OnInit TZ_BridgeCore_OnInit
 #define OnDeinit TZ_BridgeCore_OnDeinit
 #define OnTimer TZ_BridgeCore_OnTimer
 #define OnTradeTransaction TZ_BridgeCore_OnTradeTransaction
 #include <TradeZoneCore\InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5>
+#include <TradeZoneCore\TradeZone_ZoneRenderer_v1_0.mqh>
 #undef OnInit
 #undef OnDeinit
 #undef OnTimer
 #undef OnTradeTransaction
 
-#define TZ_BRIDGE_VERSION "1.34"
-#define TZ_SEQUENCE_EXPECTED "3.23"
+#define TZ_BRIDGE_VERSION "1.35"
+#define TZ_SEQUENCE_EXPECTED "3.25"
 
 input bool LogSuccessfulSnapshots=true;
 input int RetryAfterStaleSeconds=90;
@@ -216,18 +217,20 @@ int OnInit()
 {
    int rc=TZ_BridgeCore_OnInit();
    if(rc!=INIT_SUCCEEDED)return rc;
-   TZ_SendSnapshotCycle("V134_VERIFY");
+   TZ_SendSnapshotCycle("V135_VERIFY");
    RefreshPlanContext();
    TZ_ReadTwoZoneMap();
    TZ_RenderTwoZoneMap();
+   TZR_RefreshAndRender();
    TZ_WriteBridgeState();
    TZ_SendHeartbeatV134();
-   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: visible snapshots + synchronized two-zone M1 status.");
+   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: visible snapshots + synchronized map status + visual-only core/envelope shading.");
    return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason)
 {
+   TZR_ClearAll();
    TZ_WriteBridgeState();
    TZ_BridgeCore_OnDeinit(reason);
 }
@@ -238,6 +241,7 @@ void OnTimer()
    RefreshPlanContext();
    TZ_ReadTwoZoneMap();
    TZ_RenderTwoZoneMap();
+   TZR_RefreshAndRender();
    MarkPositions();
    TZ_WriteBridgeState();
    TZ_SendHeartbeatV134();

@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.3",
+  "release": "6.3.4",
   "repository": "Davemafy/icloud",
-  "ref": "97747f17aa3dab13c2c6ca6d7d44b92b57dab53a",
-  "data_bridge_version": "1.34",
+  "ref": "9272b121d1952f3b335434dd85a30e26e3df65df",
+  "data_bridge_version": "1.35",
   "sequence_ea_version": "3.25",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -37,7 +37,10 @@
     "two_zone_map_status_sync",
     "paper_research_flow",
     "continuation_rescue_first_entry",
-    "minimal_execution_gates"
+    "minimal_execution_gates",
+    "cloud_zone_core_envelope_shading",
+    "reserve_zone_context_shading",
+    "active_thesis_zone_highlight"
   ],
   "files": [
     {
@@ -46,7 +49,7 @@
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_34_MapStatus.mq5",
       "target_name": "InstitutionalSMC_DataBridge_v1_34_MapStatus.mq5",
       "requires_reload": true,
-      "sha256": "c38e29734e6d94e3025c2495d2f91502d4f52787957535a4874e97bbbdb2421a"
+      "sha256": "b9ce54f15d3b93f7bec7159f1a2555fd85984229677aa3381cdd30d0165b5892"
     },
     {
       "role": "sequence_ea",
@@ -65,6 +68,14 @@
       "target": "Include\\TradeZoneCore",
       "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
       "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
+    },
+    {
+      "role": "zone_renderer",
+      "name": "TradeZone_ZoneRenderer_v1_0.mqh",
+      "path": "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh",
+      "target": "Include\\TradeZoneCore",
+      "target_name": "TradeZone_ZoneRenderer_v1_0.mqh",
+      "sha256": "d2b5a240385cfae0f9f3bfaea6c8a8069bce4b676dafae8d969669683dcdf869"
     },
     {
       "role": "sequence_core",
