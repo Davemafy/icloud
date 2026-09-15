@@ -14,6 +14,7 @@ from .db import init_db, latest_snapshot, recent_feedback, save_feedback, save_h
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
+from .mt5_zone_render import mt5_zone_render_text
 from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
@@ -145,6 +146,11 @@ def mt5_plan():
                 break
         text += ("live_block=1\nlive_block_reason=" + ",".join(extra) + "\n") if extra else "live_block=0\n"
     return text
+
+
+@app.get("/mt5/zones", response_class=PlainTextResponse, dependencies=[Depends(require_api_key)])
+def mt5_zones():
+    return PlainTextResponse(mt5_zone_render_text(active_analysis()), status_code=200)
 
 
 @app.post("/analysis/run")
