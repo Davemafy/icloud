@@ -1,7 +1,7 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V656`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V657`
 
 This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
@@ -109,6 +109,33 @@ For the first primary entry:
 
 Re-entry is different: after a valid primary exists and the position/thesis is protected, re-entry follows the existing continuation/re-entry contract and does not have to revisit the original core.
 
+## Institutional liquidity objectives
+
+Zone validity and target quality are separate decisions. A valid institutional zone must never be removed, moved or downgraded merely because an old TP map is poor.
+
+For an original SELL, targets are drawn from structural SSL below the legitimate core entry area. For an original BUY, targets are drawn from structural BSL above the legitimate core entry area.
+
+Target hierarchy:
+
+1. TP1 = nearest valid internal/structural liquidity on the profitable side of the full core.
+2. TP2 = a deeper H4/D1 or prior-day liquidity pool when available; do not fill the ladder with several tiny nearby H1 pivots simply because they are closest.
+3. TP3 = when a valid opposing primary zone exists, front-run its proximal envelope edge with a small spread/M15-ATR buffer. That opposing zone is the natural destination of the current move.
+4. Do not automatically target through a still-valid opposing institutional zone. A runner beyond it requires a fresh analysis after M15 accepted invalidation/requalification of that opposing area.
+5. If there are fewer valid structural objectives, leave unused targets empty rather than inventing prices.
+
+Stop logic remains liquidity/structure based:
+
+- SELL operational stop belongs beyond the actual M1 BSL sweep extreme plus a small spread/ATR buffer.
+- BUY operational stop belongs beyond the actual M1 SSL sweep extreme plus a small spread/ATR buffer.
+- The HTF outer envelope is thesis invalidation; it is not automatically the default M1 stop.
+
+Session context changes patience, not zone validity:
+
+- A valid H4/H1 zone remains valid during Asia unless normal structural/M15 invalidation occurs.
+- Low Asian volatility is not permission to delete a valid zone or force an artificially close TP.
+- During Asia, the system may take the first structural liquidity partial while keeping the deeper H4/D1 or opposing-zone objective open into the next liquid session, provided the thesis remains valid and normal risk rules remain satisfied.
+- London/New York participation may accelerate delivery but does not manufacture a zone or a target.
+
 ## Directional target safety
 
 Targets are execution constraints, not decorative levels.
@@ -123,4 +150,4 @@ Targets are execution constraints, not decorative levels.
 
 ## Future-change rule
 
-When zoning or execution-handoff code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
