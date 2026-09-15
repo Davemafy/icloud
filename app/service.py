@@ -7,6 +7,7 @@ from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
 from .execution_models import build_execution_overlay, regime_brief
 from .institutional_two_zone import build_prompt_analysis
+from .liquidity_objective_policy import apply_liquidity_objective_policy
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
@@ -60,6 +61,12 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # side. Reserves never enter analysis.zones and cannot receive M1 authority
     # while the corresponding Level-1 primary remains valid.
     apply_secondary_zone_policy(a, s)
+
+    # PAPER/DEMO ONLY: zoning and objective selection are independent. Preserve
+    # a valid HTF zone even when an old nearest-price TP map is poor. Targets are
+    # rebuilt from structural liquidity and capped in front of an active opposing
+    # institutional zone; session context changes patience, never zone validity.
+    apply_liquidity_objective_policy(a, s)
     primary_zones = list(a.zones)
 
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
@@ -99,7 +106,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             f"reason={reason} provider={provider} approved={a.ai_approved} "
             f"selected={selected} execution_selected={execution_selected} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14_v656 risks={risks}",
+            f"prompt_zone_engine=2026_09_14_v657 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -124,7 +131,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
-        f"prompt_zone_engine=2026_09_14_v656 "
+        f"prompt_zone_engine=2026_09_14_v657 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
