@@ -46,6 +46,36 @@ def _sell_zone(readiness: str = "M1_READY") -> Zone:
     )
 
 
+def _buy_bplus_thesis_zone(readiness: str = "M1_READY|THESIS_CONTINUATION") -> Zone:
+    return Zone(
+        zone_id="PZ_H4H1_BUY_4",
+        original_direction=Direction.BUY,
+        flip_direction=Direction.SELL,
+        setup_type="REVERSAL",
+        source_tf="H4>H1",
+        grade=Grade.B_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=4253.57,
+        core_high=4270.98,
+        core_method=f"{readiness}|PROMPT_SWEEP_ROOM_GEOMETRY|PROMPT_H4_PARENT_H1_REFINEMENT",
+        location_score=8.0,
+        zone_low=4248.57,
+        zone_high=4288.57,
+        touch_count=2,
+        independent_confluence_count=6,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"],
+        source_ts=1789390800,
+        invalidation_level=4248.57,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=4297.83,
+        original_target2=4317.38,
+        original_target3=4322.93,
+        flip_target1=4019.09,
+        flip_target2=3995.91,
+        clear_run=26.85,
+    )
+
+
 def _analysis(zone: Zone) -> Analysis:
     return Analysis(
         analysis_id="A1",
@@ -57,6 +87,23 @@ def _analysis(zone: Zone) -> Analysis:
         approved=True,
         ai_approved=True,
     )
+
+
+def _confirmed_buy_thesis_analysis(zone: Zone, *, ai_approved: bool = True) -> Analysis:
+    a = _analysis(zone)
+    a.ai_approved = ai_approved
+    a.execution_policy = {
+        "active_thesis": {
+            "locked": True,
+            "direction": "BUY",
+            "status": "REACTION_CONFIRMED",
+            "owner_zone_id": zone.zone_id,
+            "owner_zone_present": True,
+            "continuation_authority": True,
+            "objective_open": True,
+        }
+    }
+    return a
 
 
 def _kv(text: str) -> dict[str, str]:
@@ -100,6 +147,76 @@ def test_armed_zone_cannot_export_executable_plan_before_m1_handoff():
     assert out["ea_mode"] == "WATCH_ONLY"
     assert out["core_handoff_ready"] == "0"
     assert "CLOUD_M1_HANDOFF_NOT_READY" in out["execution_guard_reason"]
+
+
+def test_confirmed_bplus_owner_can_export_thesis_continuation_after_strict_m1_ready():
+    zone = _buy_bplus_thesis_zone()
+    analysis = _confirmed_buy_thesis_analysis(zone)
+    snap = _snapshot(4270.70, spread_points=16.0)
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "setup_type=REVERSAL\n"
+        "original_direction=BUY\n"
+        "original_target1=4297.83000\n"
+        "original_target2=4317.38000\n"
+        "original_target3=4322.93000\n"
+        "original_runner=0.00000\n"
+        "flip_target1=4019.09000\n"
+        "flip_target2=3995.91000\n"
+        "flip_target3=0.00000\n"
+        "flip_runner=0.00000\n"
+    )
+
+    out = _kv(guard_plan_text(raw, analysis, snap))
+
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["core_handoff_ready"] == "1"
+    assert out["thesis_continuation_bplus_override"] == "1"
+    assert out["setup_type"] == "CONTINUATION"
+    assert out["zone_setup_type_original"] == "REVERSAL"
+    assert out["execution_role"] == "THESIS_CONTINUATION"
+    assert out["execution_guard_reason"] == ""
+
+
+def test_fresh_or_unconfirmed_bplus_zone_stays_watch_only():
+    zone = _buy_bplus_thesis_zone()
+    analysis = _analysis(zone)
+    snap = _snapshot(4270.70, spread_points=16.0)
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "setup_type=REVERSAL\n"
+        "original_direction=BUY\n"
+        "original_target1=4297.83000\n"
+        "original_target2=4317.38000\n"
+        "original_target3=4322.93000\n"
+    )
+
+    out = _kv(guard_plan_text(raw, analysis, snap))
+
+    assert out["ea_mode"] == "WATCH_ONLY"
+    assert out["thesis_continuation_bplus_override"] == "0"
+    assert out["core_handoff_ready"] == "0"
+
+
+def test_confirmed_bplus_owner_still_fails_closed_without_ai_approval():
+    zone = _buy_bplus_thesis_zone()
+    analysis = _confirmed_buy_thesis_analysis(zone, ai_approved=False)
+    snap = _snapshot(4270.70, spread_points=16.0)
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "setup_type=REVERSAL\n"
+        "original_direction=BUY\n"
+        "original_target1=4297.83000\n"
+    )
+
+    out = _kv(guard_plan_text(raw, analysis, snap))
+
+    assert out["ea_mode"] == "WATCH_ONLY"
+    assert out["thesis_continuation_bplus_override"] == "0"
+    assert out["core_handoff_ready"] == "0"
 
 
 def test_primary_observer_candidate_outside_core_is_context_false_and_wrong_targets_are_zeroed():
