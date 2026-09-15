@@ -3,7 +3,7 @@
   "channel": "stable",
   "release": "6.3.5",
   "repository": "Davemafy/icloud",
-  "ref": "d28f83cd566c74fd13ed5e17ad853931b6512ff3",
+  "ref": "613f14cae93dd2db87f8ef3da2d66ab22ef72efd",
   "data_bridge_version": "1.35",
   "sequence_ea_version": "3.25",
   "updater_min_version": "2.7.0",
