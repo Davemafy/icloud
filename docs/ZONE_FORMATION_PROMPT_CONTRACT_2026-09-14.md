@@ -1,7 +1,7 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V657`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V658`
 
 This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
@@ -136,6 +136,24 @@ Session context changes patience, not zone validity:
 - During Asia, the system may take the first structural liquidity partial while keeping the deeper H4/D1 or opposing-zone objective open into the next liquid session, provided the thesis remains valid and normal risk rules remain satisfied.
 - London/New York participation may accelerate delivery but does not manufacture a zone or a target.
 
+## Persistent reaction lifecycle
+
+A valid institutional zone must keep its historical identity after it interacts and reacts, even if a later analysis selects a different primary zone.
+
+Lifecycle:
+
+`ARMED -> INTERACTING -> REACTION_CONFIRMED -> OBJECTIVE_IN_PROGRESS -> OBJECTIVE_COMPLETE`
+
+- `INTERACTING` begins only after the tactical core is reached.
+- `REACTION_CONFIRMED` requires core interaction followed by a favourable move of at least the greater of 0.50 M15 ATR or 10 XAU pips.
+- Once reaction is confirmed, later primary-map re-selection must not erase or rewrite that fact.
+- Target hits and maximum favourable excursion remain attached to that institutional source in persistent storage.
+- If the deepest planned liquidity objective is reached, status becomes `OBJECTIVE_COMPLETE`.
+- If closed-M15 accepted invalidation occurs before a confirmed reaction, status becomes `INVALIDATED`.
+- If accepted invalidation occurs only after a valid reaction, history becomes `INVALIDATED_AFTER_REACTION`; the prior successful reaction remains preserved.
+- A historical reaction record is observation/journal truth only. It grants no automatic execution authority to an old zone.
+- A fresh continuation/re-entry still requires the normal live execution contract and thesis validity.
+
 ## Directional target safety
 
 Targets are execution constraints, not decorative levels.
@@ -150,4 +168,4 @@ Targets are execution constraints, not decorative levels.
 
 ## Future-change rule
 
-When zoning, execution-handoff or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
