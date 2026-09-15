@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import SETTINGS
+from .dashboard_view import compact_dashboard_html
 from .db import init_db, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
@@ -42,7 +43,9 @@ async def _shutdown():
 @app.get("/", response_class=HTMLResponse)
 def home():
     p = STATIC / "index.html"
-    return p.read_text(encoding="utf-8") if p.exists() else "<h1>Institutional SMC AI Cloud</h1>"
+    if not p.exists():
+        return "<h1>Institutional SMC AI Cloud</h1>"
+    return compact_dashboard_html(p.read_text(encoding="utf-8"))
 
 
 @app.get("/health")
