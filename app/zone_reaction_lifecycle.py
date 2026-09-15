@@ -23,8 +23,9 @@ def _reaction_key(zone: Zone) -> str:
 def register_analysis_zones(analysis: Analysis) -> None:
     """Persist the institutional identity of every published primary zone.
 
-    Re-selection in a later analysis updates the latest reference but never erases
-    an already-recorded reaction lifecycle.
+    Before first core interaction, a repeated analysis may refresh geometry/targets.
+    Once the core has interacted, the historical geometry and objective ladder are
+    frozen so later re-analysis cannot rewrite what the market actually reacted to.
     """
     if not SETTINGS.paper_only:
         return
@@ -56,8 +57,14 @@ def register_analysis_zones(analysis: Analysis) -> None:
                 """
                 UPDATE zone_reactions SET
                     latest_analysis_id=?,latest_zone_id=?,last_seen_at=?,grade=?,
-                    core_low=?,core_high=?,zone_low=?,zone_high=?,
-                    target1=?,target2=?,target3=?,runner=?
+                    core_low=CASE WHEN core_touched_at=0 THEN ? ELSE core_low END,
+                    core_high=CASE WHEN core_touched_at=0 THEN ? ELSE core_high END,
+                    zone_low=CASE WHEN core_touched_at=0 THEN ? ELSE zone_low END,
+                    zone_high=CASE WHEN core_touched_at=0 THEN ? ELSE zone_high END,
+                    target1=CASE WHEN core_touched_at=0 THEN ? ELSE target1 END,
+                    target2=CASE WHEN core_touched_at=0 THEN ? ELSE target2 END,
+                    target3=CASE WHEN core_touched_at=0 THEN ? ELSE target3 END,
+                    runner=CASE WHEN core_touched_at=0 THEN ? ELSE runner END
                 WHERE reaction_key=?
                 """,
                 (
@@ -274,6 +281,7 @@ def attach_lifecycle(analysis: Analysis) -> Analysis:
     policy["zone_reaction_lifecycle"] = {
         "contract": REACTION_LIFECYCLE_CONTRACT,
         "persistence": "SURVIVES_PRIMARY_RESELECTION_AND_ZONE_MAP_REMOVAL",
+        "historical_geometry_and_targets_freeze_after_core_interaction": True,
         "zone_validity_independent_of_target_map": True,
         "reaction_confirmation": "CORE_INTERACTION_THEN_FAVOURABLE_MOVE_AT_LEAST_MAX_0_5_M15_ATR_OR_10_PIPS",
         "terminal_states": sorted(TERMINAL),
