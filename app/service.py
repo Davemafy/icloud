@@ -14,6 +14,7 @@ from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
 from .watch_ready import promote_watch_to_m1_ready
+from .zone_reaction_lifecycle import attach_lifecycle
 from .zone_runtime_policy import (
     install_prompt_market_side_policy,
     install_zone_geometry_policy,
@@ -106,7 +107,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             f"reason={reason} provider={provider} approved={a.ai_approved} "
             f"selected={selected} execution_selected={execution_selected} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14_v657 risks={risks}",
+            f"prompt_zone_engine=2026_09_14_v658 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -120,6 +121,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             a.trader_brief += " AI validation unavailable; prompt zones remain analysis-only locations."
 
     save_analysis(a)
+    # Attach persisted reaction history after registration so the API response and
+    # dashboard can show successful zones even after a later map reselects them.
+    attach_lifecycle(a)
     if SETTINGS.ml_data_enabled:
         try:
             capture_cloud_candidates(a, s, reason)
@@ -131,13 +135,15 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
-        f"prompt_zone_engine=2026_09_14_v657 "
+        f"prompt_zone_engine=2026_09_14_v658 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
 
 
 def active_analysis() -> Analysis | None:
-    # Newest market analysis is always the current truth. AI approval gates the
-    # paper plan; it must never cause an older analysis to replace a newer map.
-    return latest_analysis(ai_required=False)
+    # Newest market analysis is always the current truth. The reaction lifecycle
+    # is attached dynamically from persistent storage, so a confirmed zone remains
+    # visible historically even after today's primary map selects another source.
+    a = latest_analysis(ai_required=False)
+    return attach_lifecycle(a) if a is not None else None
