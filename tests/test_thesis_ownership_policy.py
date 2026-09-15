@@ -51,6 +51,10 @@ def _owner() -> dict:
         "source_ts": 111,
         "status": "REACTION_CONFIRMED",
         "grade": "B+",
+        "core_low": 99.0,
+        "core_high": 101.0,
+        "zone_low": 95.0,
+        "zone_high": 105.0,
         "core_touched_at": 9000,
         "reaction_confirmed_at": 9100,
         "target1": 110.0,
@@ -162,3 +166,25 @@ def test_current_snapshot_interaction_locks_owner_before_opposite_selection(tmp_
     assert meta["direction"] == "BUY"
     assert meta["status"] == "INTERACTING"
     assert meta["opposite_execution_blocked"] is True
+
+
+def test_confirmed_owner_has_separate_broad_and_strict_core_buffers(monkeypatch):
+    """Broad refresh must not consume the later strict M1 handoff edge."""
+    monkeypatch.setattr(policy, "active_owner_snapshot", lambda now: _owner())
+
+    # Core high=101.00, ATR=2.00. Broad 0.30 ATR buffer=0.60, strict 0.10=0.20.
+    broad_only = _snapshot(101.45)
+    assert policy.owner_core_interacting(broad_only) is not None
+    assert policy.owner_m1_handoff_interacting(broad_only) is None
+
+    strict = _snapshot(101.15)
+    assert policy.owner_m1_handoff_interacting(strict) is not None
+
+
+def test_m1_handoff_requires_confirmed_or_in_progress_owner(monkeypatch):
+    owner = _owner()
+    owner["status"] = "INTERACTING"
+    monkeypatch.setattr(policy, "active_owner_snapshot", lambda now: owner)
+
+    assert policy.owner_core_interacting(_snapshot(100.0)) is not None
+    assert policy.owner_m1_handoff_interacting(_snapshot(100.0)) is None
