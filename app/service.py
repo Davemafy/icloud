@@ -15,7 +15,11 @@ from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt
 from .secondary_zone_policy import apply_secondary_zone_policy
 from .thesis_ownership_policy import apply_thesis_ownership, install_thesis_ai_contract
 from .watch_ready import promote_watch_to_m1_ready
-from .zone_reaction_lifecycle import attach_lifecycle
+from .zone_reaction_lifecycle import (
+    attach_lifecycle,
+    register_analysis_zones,
+    update_zone_reactions,
+)
 from .zone_runtime_policy import (
     install_prompt_market_side_policy,
     install_zone_geometry_policy,
@@ -71,6 +75,15 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # institutional zone; session context changes patience, never zone validity.
     apply_liquidity_objective_policy(a, s)
     primary_zones = list(a.zones)
+
+    # IMPORTANT ORDERING: thesis ownership depends on the persisted lifecycle.
+    # Register this analysis first, then replay the CURRENT snapshot through the
+    # lifecycle before choosing an execution owner. Without this, a fresh service
+    # startup could publish SELL, then only afterwards record that the BUY core was
+    # already interacting. That one-analysis lag is exactly what v6.5.10 removes.
+    if SETTINGS.paper_only:
+        register_analysis_zones(a)
+        update_zone_reactions(s)
 
     # A non-terminal interacted thesis owns execution direction. Opposite zones
     # remain visible context but cannot steal M1 authority until the live thesis is
@@ -131,6 +144,8 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         else:
             a.trader_brief += " AI validation unavailable; prompt zones remain analysis-only locations."
 
+    # save_analysis re-registers idempotently; the pre-registration above is only
+    # to make lifecycle truth available before ownership/M1 selection in this run.
     save_analysis(a)
     # Attach persisted reaction history after registration so the API response and
     # dashboard can show successful zones even after a later map reselects them.
@@ -153,8 +168,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
 
 
 def active_analysis() -> Analysis | None:
-    # Newest market analysis is always the current truth. The reaction lifecycle
-    # is attached dynamically from persistent storage, so a confirmed zone remains
-    # visible historically even after today's primary map selects another source.
+    # Newest market analysis is always the base map. Lifecycle is attached
+    # dynamically for display/history. Execution ownership itself is refreshed by
+    # run_analysis whenever lifecycle state/core interaction changes (scheduler),
+    # so we do not create an AI-bypassing executable handoff inside this accessor.
     a = latest_analysis(ai_required=False)
     return attach_lifecycle(a) if a is not None else None

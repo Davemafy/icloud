@@ -9,6 +9,7 @@ from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_interacting
 from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
+from .thesis_ownership_policy import active_owner_snapshot, owner_core_interacting
 from .timezones import safe_zoneinfo
 
 # Runtime/version-truth only. Zoning itself is now a single prompt-driven engine.
@@ -17,6 +18,7 @@ install_runtime_version_truth_policy()
 _last_keys: set[str] = set()
 _zone_interaction_latch: set[str] = set()
 _last_snapshot_seen: int = 0
+_thesis_state_latch: str = ""
 
 
 def _parse_hhmm(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
@@ -72,6 +74,7 @@ def scheduler_status() -> dict:
         "poll_seconds": SETTINGS.scheduler_poll_seconds,
         "snapshot_primary_zone_refresh": bool(SETTINGS.paper_only),
         "primary_zone_latch_count": len(_zone_interaction_latch),
+        "thesis_state_latch": _thesis_state_latch or None,
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
@@ -126,20 +129,36 @@ def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
 
 
 def _interaction_ids(snap) -> set[str]:
+    """Refresh on normal fresh primaries AND on a live thesis returning to core."""
     if not SETTINGS.paper_only:
         return set()
     a = latest_analysis(ai_required=False)
     if a is None:
         return set()
-    return {
+    ids = {
         z.zone_id
         for z in a.zones
         if primary_zone_interacting(z, snap)
     }
+    owner = owner_core_interacting(snap)
+    if owner is not None:
+        owner_id = str(owner.get("latest_zone_id") or owner.get("reaction_key") or "")
+        if owner_id:
+            # Prefix keeps the live-thesis refresh separate from a fresh-primary
+            # latch. It is analysis-only and carries no execution authority itself.
+            ids.add(f"THESIS:{owner_id}")
+    return ids
+
+
+def _thesis_signature(now_utc: int) -> str:
+    owner = active_owner_snapshot(now_utc)
+    if owner is None:
+        return ""
+    return f"{owner.get('reaction_key','')}|{owner.get('status','')}"
 
 
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
-    global _last_snapshot_seen
+    global _last_snapshot_seen, _thesis_state_latch
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     startup_analysis_pending = True
     while True:
@@ -168,20 +187,37 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
             snap = latest_snapshot()
             now_utc = int(now.astimezone(timezone.utc).timestamp())
             if (
-                not ran_analysis
-                and SETTINGS.paper_only
+                SETTINGS.paper_only
                 and _fresh_complete_snapshot(snap, now_utc)
                 and int(snap.sent_at) != _last_snapshot_seen
             ):
                 _last_snapshot_seen = int(snap.sent_at)
+
+                # Track lifecycle changes independently from map ranking. This fixes
+                # the v6.5.9 gap where a BUY could become INTERACTING only after the
+                # saved analysis had already selected SELL. INTERACTING ->
+                # REACTION_CONFIRMED -> OBJECTIVE_IN_PROGRESS and final release all
+                # request a fresh deterministic/AI analysis.
+                thesis_sig = _thesis_signature(now_utc)
+                thesis_state_changed = thesis_sig != _thesis_state_latch
+                previous_thesis_sig = _thesis_state_latch
+                _thesis_state_latch = thesis_sig
+
                 current_ids = _interaction_ids(snap)
                 new_ids = current_ids - _zone_interaction_latch
                 _zone_interaction_latch.clear()
                 _zone_interaction_latch.update(current_ids)
-                if new_ids:
+
+                refresh_reason = ""
+                if thesis_state_changed and (thesis_sig or previous_thesis_sig):
+                    refresh_reason = f"ACTIVE_THESIS_STATE:{thesis_sig or 'RELEASED'}"
+                elif new_ids:
                     names = ",".join(sorted(new_ids)[:2])
-                    audit(now_utc, "scheduler.primary_zone_refresh", f"snapshot={snap.sent_at} zones={names}")
-                    await run_analysis(f"PRIMARY_ZONE_REFRESH:{names}")
+                    refresh_reason = f"PRIMARY_ZONE_REFRESH:{names}"
+
+                if refresh_reason and not ran_analysis:
+                    audit(now_utc, "scheduler.thesis_refresh", f"snapshot={snap.sent_at} reason={refresh_reason}")
+                    await run_analysis(refresh_reason)
                     ran_analysis = True
 
             if len(_last_keys) > 300:

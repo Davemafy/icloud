@@ -6,7 +6,7 @@ from .config import SETTINGS
 from .db import connect
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 
-THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V659"
+THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6510"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 
@@ -63,6 +63,36 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
     if not rows:
         return None
     return dict(rows[0])
+
+
+def active_owner_snapshot(now: int) -> dict[str, Any] | None:
+    """Public read-only owner snapshot for scheduler refresh decisions."""
+    if not SETTINGS.paper_only:
+        return None
+    return _active_owner_row(int(now))
+
+
+def owner_core_interacting(snapshot: MarketSnapshot) -> dict[str, Any] | None:
+    """Return owner metadata when price is back at its tactical core.
+
+    This only requests a fresh analysis. It grants no execution authority itself.
+    The wider 0.30 M15-ATR refresh buffer matches the existing scheduler's primary
+    interaction sensitivity; the execution handoff still uses the stricter 0.10
+    M15-ATR core buffer in watch_ready.py.
+    """
+    owner = active_owner_snapshot(int(snapshot.sent_at))
+    if owner is None:
+        return None
+    low, high = sorted((float(owner.get("core_low") or 0.0), float(owner.get("core_high") or 0.0)))
+    if high <= low:
+        return None
+    px = float(snapshot.mid)
+    if low <= px <= high:
+        distance = 0.0
+    else:
+        distance = low - px if px < low else px - high
+    buffer_price = max(float(snapshot.point or 0.01) * 5.0, 0.30 * max(float(snapshot.atr_m15 or 0.0), float(snapshot.point or 0.01)))
+    return owner if distance <= buffer_price else None
 
 
 def _matches_owner(zone: Zone, owner: dict[str, Any]) -> bool:
