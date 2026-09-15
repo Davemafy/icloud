@@ -30,11 +30,18 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.12"
+    app_version: str = "6.5.13"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
     paper_only: bool = _b("PAPER_ONLY", True)
+
+    # PAPER/Demo discovery mode deliberately keeps the institutional location and
+    # thesis rules, but removes the redundant requirement that a confirmed thesis
+    # must return to the original HTF core before Sequence may look for a fresh M1
+    # continuation. It is intended for data collection and can be disabled later
+    # without another code change.
+    paper_discovery_mode: bool = _b("PAPER_DISCOVERY_MODE", True)
 
     # Existing intraday checkpoints remain unchanged. Opening checkpoints below
     # are aligned to Deriv XAUUSD hours (GMT) but expressed in Africa/Lagos WAT.
