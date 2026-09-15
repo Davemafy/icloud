@@ -38,9 +38,43 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS feedback(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, event TEXT NOT NULL, analysis_id TEXT, zone_id TEXT, price REAL, details TEXT);
         CREATE TABLE IF NOT EXISTS heartbeat(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ea TEXT, version TEXT, symbol TEXT, payload TEXT);
         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS zone_reactions(
+            reaction_key TEXT PRIMARY KEY,
+            first_analysis_id TEXT,
+            latest_analysis_id TEXT,
+            first_zone_id TEXT,
+            latest_zone_id TEXT,
+            direction TEXT NOT NULL,
+            source_tf TEXT,
+            source_ts INTEGER DEFAULT 0,
+            core_low REAL NOT NULL,
+            core_high REAL NOT NULL,
+            zone_low REAL NOT NULL,
+            zone_high REAL NOT NULL,
+            grade TEXT,
+            status TEXT NOT NULL DEFAULT 'ARMED',
+            first_seen_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL,
+            core_touched_at INTEGER DEFAULT 0,
+            reaction_confirmed_at INTEGER DEFAULT 0,
+            target1 REAL DEFAULT 0,
+            target2 REAL DEFAULT 0,
+            target3 REAL DEFAULT 0,
+            runner REAL DEFAULT 0,
+            target1_hit_at INTEGER DEFAULT 0,
+            target2_hit_at INTEGER DEFAULT 0,
+            target3_hit_at INTEGER DEFAULT 0,
+            objective_complete_at INTEGER DEFAULT 0,
+            invalidated_at INTEGER DEFAULT 0,
+            best_price REAL DEFAULT 0,
+            mfe_price REAL DEFAULT 0,
+            last_reason TEXT DEFAULT ''
+        );
         CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
         CREATE INDEX IF NOT EXISTS idx_feedback_analysis_zone ON feedback(analysis_id, zone_id);
         CREATE INDEX IF NOT EXISTS idx_heartbeat_ts ON heartbeat(ts);
+        CREATE INDEX IF NOT EXISTS idx_zone_reactions_status ON zone_reactions(status,last_seen_at);
+        CREATE INDEX IF NOT EXISTS idx_zone_reactions_source ON zone_reactions(direction,source_tf,source_ts);
         """)
     if SETTINGS.ml_data_enabled:
         try:
@@ -63,6 +97,16 @@ def save_snapshot(s: MarketSnapshot) -> None:
     with _lock, connect() as db:
         db.execute("INSERT INTO snapshots(ts,payload) VALUES(?,?)", (s.sent_at, s.model_dump_json()))
         db.execute("DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY id DESC LIMIT 6)")
+
+    # PAPER/DEMO ONLY: persist the institutional lifecycle of a zone after it has
+    # interacted, even if a later analysis no longer publishes it as today's
+    # primary alert. This is historical state only and grants no execution authority.
+    try:
+        from .zone_reaction_lifecycle import update_zone_reactions
+        update_zone_reactions(s)
+    except Exception as exc:
+        audit(s.sent_at, "zone_reaction.update.error", f"{type(exc).__name__}:{exc}")
+
     if SETTINGS.ml_data_enabled:
         try:
             from .ml_foundation import mark_ml_outcomes
@@ -78,6 +122,15 @@ def latest_snapshot() -> Optional[MarketSnapshot]:
 
 
 def save_analysis(a: Analysis) -> None:
+    # Register the current institutional zones before the analysis payload is saved.
+    # Existing lifecycle records are updated by source identity, never deleted by
+    # re-ranking or by a later map choosing another primary.
+    try:
+        from .zone_reaction_lifecycle import register_analysis_zones
+        register_analysis_zones(a)
+    except Exception as exc:
+        audit(a.generated_at, "zone_reaction.register.error", f"analysis={a.analysis_id} {type(exc).__name__}:{exc}")
+
     with _lock, connect() as db:
         db.execute(
             "INSERT OR REPLACE INTO analyses(ts,analysis_id,payload,ai_ok) VALUES(?,?,?,?)",
