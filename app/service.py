@@ -13,6 +13,7 @@ from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
+from .thesis_ownership_policy import apply_thesis_ownership, install_thesis_ai_contract
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_reaction_lifecycle import attach_lifecycle
 from .zone_runtime_policy import (
@@ -26,6 +27,7 @@ from .zone_runtime_policy import (
 install_zone_geometry_policy()
 install_prompt_market_side_policy()
 install_prompt_intraday_selection()
+install_thesis_ai_contract()
 
 
 def _stamp_prompt_selection_contract(a: Analysis) -> None:
@@ -70,6 +72,11 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     apply_liquidity_objective_policy(a, s)
     primary_zones = list(a.zones)
 
+    # A non-terminal interacted thesis owns execution direction. Opposite zones
+    # remain visible context but cannot steal M1 authority until the live thesis is
+    # invalidated or reaches its deepest planned liquidity objective.
+    thesis_owner = apply_thesis_ownership(a, s)
+
     # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
     ready_zone = promote_watch_to_m1_ready(a, s)
 
@@ -90,9 +97,12 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             if summary:
                 a.trader_brief += " AI execution validation: " + summary
         elif selected:
-            a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for core interaction/M1_READY."
+            if thesis_owner is not None:
+                a.trader_brief += " AI validation: active institutional thesis retained; execution waits for same-direction M1_READY confirmation."
+            else:
+                a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for core interaction/M1_READY."
         else:
-            a.trader_brief += " AI validation: no A+/A prompt zone is selected for execution; weaker zones may remain visible as WATCH."
+            a.trader_brief += " AI validation: no executable prompt zone is selected; weaker/context zones may remain visible."
         if risks:
             a.guards.extend([f"AI:{x}" for x in risks])
 
@@ -106,6 +116,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             "analysis.ai",
             f"reason={reason} provider={provider} approved={a.ai_approved} "
             f"selected={selected} execution_selected={execution_selected} "
+            f"thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
             f"prompt_zone_engine=2026_09_14_v658 risks={risks}",
         )
@@ -134,8 +145,8 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         now,
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
-        f"selected={a.selected_zone_id or 'NONE'} paper_m1_ready={bool(ready_zone)} "
-        f"prompt_zone_engine=2026_09_14_v658 "
+        f"selected={a.selected_zone_id or 'NONE'} thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
+        f"paper_m1_ready={bool(ready_zone)} prompt_zone_engine=2026_09_14_v658 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
