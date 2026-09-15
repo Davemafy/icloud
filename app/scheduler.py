@@ -9,7 +9,11 @@ from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_interacting
 from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
-from .thesis_ownership_policy import active_owner_snapshot, owner_core_interacting
+from .thesis_ownership_policy import (
+    active_owner_snapshot,
+    owner_core_interacting,
+    owner_m1_handoff_interacting,
+)
 from .timezones import safe_zoneinfo
 
 # Runtime/version-truth only. Zoning itself is now a single prompt-driven engine.
@@ -17,6 +21,7 @@ install_runtime_version_truth_policy()
 
 _last_keys: set[str] = set()
 _zone_interaction_latch: set[str] = set()
+_thesis_m1_handoff_latch: set[str] = set()
 _last_snapshot_seen: int = 0
 _thesis_state_latch: str = ""
 
@@ -74,6 +79,7 @@ def scheduler_status() -> dict:
         "poll_seconds": SETTINGS.scheduler_poll_seconds,
         "snapshot_primary_zone_refresh": bool(SETTINGS.paper_only),
         "primary_zone_latch_count": len(_zone_interaction_latch),
+        "thesis_m1_handoff_latch_count": len(_thesis_m1_handoff_latch),
         "thesis_state_latch": _thesis_state_latch or None,
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
@@ -129,7 +135,7 @@ def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
 
 
 def _interaction_ids(snap) -> set[str]:
-    """Refresh on normal fresh primaries AND on a live thesis returning to core."""
+    """Broad analysis refresh for fresh primaries and a live thesis near core."""
     if not SETTINGS.paper_only:
         return set()
     a = latest_analysis(ai_required=False)
@@ -144,10 +150,21 @@ def _interaction_ids(snap) -> set[str]:
     if owner is not None:
         owner_id = str(owner.get("latest_zone_id") or owner.get("reaction_key") or "")
         if owner_id:
-            # Prefix keeps the live-thesis refresh separate from a fresh-primary
-            # latch. It is analysis-only and carries no execution authority itself.
+            # Broad 0.30 M15-ATR proximity asks for analysis only. It is not the
+            # execution handoff edge and must not consume that separate latch.
             ids.add(f"THESIS:{owner_id}")
     return ids
+
+
+def _m1_handoff_ids(snap) -> set[str]:
+    """Strict edge trigger when a confirmed owner reaches the 0.10-ATR M1 core buffer."""
+    if not SETTINGS.paper_only:
+        return set()
+    owner = owner_m1_handoff_interacting(snap)
+    if owner is None:
+        return set()
+    owner_id = str(owner.get("latest_zone_id") or owner.get("reaction_key") or "")
+    return {f"THESIS_M1:{owner_id}"} if owner_id else set()
 
 
 def _thesis_signature(now_utc: int) -> str:
@@ -193,24 +210,34 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
             ):
                 _last_snapshot_seen = int(snap.sent_at)
 
-                # Track lifecycle changes independently from map ranking. This fixes
-                # the v6.5.9 gap where a BUY could become INTERACTING only after the
-                # saved analysis had already selected SELL. INTERACTING ->
-                # REACTION_CONFIRMED -> OBJECTIVE_IN_PROGRESS and final release all
+                # Track lifecycle changes independently from map ranking. INTERACTING
+                # -> REACTION_CONFIRMED -> OBJECTIVE_IN_PROGRESS and final release all
                 # request a fresh deterministic/AI analysis.
                 thesis_sig = _thesis_signature(now_utc)
                 thesis_state_changed = thesis_sig != _thesis_state_latch
                 previous_thesis_sig = _thesis_state_latch
                 _thesis_state_latch = thesis_sig
 
+                # Broad proximity and strict execution handoff are intentionally two
+                # separate edge detectors. v6.5.10 had only the broad 0.30-ATR latch,
+                # so it could refresh too early and then fail to re-run when price
+                # later entered the stricter 0.10-ATR M1_READY buffer.
                 current_ids = _interaction_ids(snap)
                 new_ids = current_ids - _zone_interaction_latch
                 _zone_interaction_latch.clear()
                 _zone_interaction_latch.update(current_ids)
 
+                current_m1_ids = _m1_handoff_ids(snap)
+                new_m1_ids = current_m1_ids - _thesis_m1_handoff_latch
+                _thesis_m1_handoff_latch.clear()
+                _thesis_m1_handoff_latch.update(current_m1_ids)
+
                 refresh_reason = ""
                 if thesis_state_changed and (thesis_sig or previous_thesis_sig):
                     refresh_reason = f"ACTIVE_THESIS_STATE:{thesis_sig or 'RELEASED'}"
+                elif new_m1_ids:
+                    names = ",".join(sorted(new_m1_ids)[:2])
+                    refresh_reason = f"ACTIVE_THESIS_M1_HANDOFF:{names}"
                 elif new_ids:
                     names = ",".join(sorted(new_ids)[:2])
                     refresh_reason = f"PRIMARY_ZONE_REFRESH:{names}"
