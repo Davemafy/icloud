@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .config import SETTINGS
 from .engine import atr
-from .models import Analysis, Feedback, MarketSnapshot, Zone
+from .models import Analysis, Feedback, Grade, MarketSnapshot, Zone, ZoneState
 
 # DEMO/PAPER execution safety contract. The wide HTF envelope is location/sweep
 # context only. Primary M1 authority begins at the tactical core (or a very small
@@ -14,7 +15,8 @@ CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 CORE_INTERACTION_MIN_POINTS = 5.0
 TARGET_MIN_POINTS = 5.0
 TARGET_SPREAD_MULTIPLIER = 1.50
-EXECUTION_GUARD_CONTRACT = "CORE_ONLY_TARGET_DIRECTION_V656"
+EXECUTION_GUARD_CONTRACT = "CORE_ONLY_TARGET_DIRECTION_V6512"
+THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 
 
 def _readiness(zone: Zone | None) -> str:
@@ -108,6 +110,42 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
     return "".join(f"{key}={kv[key]}\n" for key in final_order)
 
 
+def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state: str) -> bool:
+    """Permit only a confirmed surviving B+ thesis to reuse the execution handoff.
+
+    A normal fresh B+ zone remains WATCH_ONLY. This exception exists solely when
+    the same zone already produced an institutional reaction, still owns the thesis,
+    has returned to M1_READY through the strict core handoff, and deterministic/AI
+    approvals are still valid. It therefore repairs the legacy A/A+ export gate
+    without weakening new-zone qualification.
+    """
+    if not SETTINGS.paper_only:
+        return False
+    if zone.grade != Grade.B_PLUS or zone.state != ZoneState.ACTIVE:
+        return False
+    if str(plan_state).upper() != ZoneState.ACTIVE.value:
+        return False
+    if _readiness(zone) != "M1_READY":
+        return False
+    if "THESIS_CONTINUATION" not in str(zone.core_method or ""):
+        return False
+    if not bool(analysis.approved):
+        return False
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        return False
+
+    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    return bool(
+        meta.get("locked")
+        and meta.get("continuation_authority")
+        and str(meta.get("status") or "") in THESIS_CONTINUATION_STATUSES
+        and str(meta.get("owner_zone_id") or "") == zone.zone_id
+        and str(meta.get("direction") or "") == zone.original_direction.value
+        and bool(meta.get("owner_zone_present", True))
+        and bool(meta.get("objective_open", True))
+    )
+
+
 def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
     """Fail closed before primary core handoff and sanitize all exported objectives.
 
@@ -127,13 +165,18 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     readiness = _readiness(zone)
     core_now = core_is_interacting(zone, snapshot)
     cloud_ready = readiness == "M1_READY"
-    handoff_ready = bool(cloud_ready and base_mode == "DUAL_BRANCH")
+    plan_state = str(kv.get("zone_state", zone.state.value)).upper()
+    thesis_bplus_override = _confirmed_thesis_bplus_override(analysis, zone, plan_state)
+    effective_mode = "DUAL_BRANCH" if thesis_bplus_override else base_mode
+    handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
 
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
     kv["core_interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
     kv["core_interaction_now"] = "1" if core_now else "0"
     kv["core_handoff_ready"] = "1" if handoff_ready else "0"
+    kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
+    kv["zone_setup_type_original"] = str(zone.setup_type)
 
     # Static objective sanitation: an original target must be beyond the profitable
     # edge of the entire tactical core, so it cannot become a wrong-side TP for a
@@ -197,7 +240,15 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     if handoff_ready and not live_valid:
         guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
 
-    if not handoff_ready or not original_valid or (handoff_ready and not live_valid):
+    if handoff_ready and original_valid and live_valid:
+        kv["ea_mode"] = "DUAL_BRANCH"
+        if thesis_bplus_override:
+            # Once a reversal zone has already reacted, a later first execution is
+            # continuation of that confirmed thesis. This lets Sequence 3.23 use its
+            # normal continuation-capable primary router without relabeling the map.
+            kv["setup_type"] = "CONTINUATION"
+            kv["execution_role"] = "THESIS_CONTINUATION"
+    else:
         kv["ea_mode"] = "WATCH_ONLY"
     kv["execution_guard_reason"] = ",".join(guard_reasons)
     return _serialize_plan(order, kv)
