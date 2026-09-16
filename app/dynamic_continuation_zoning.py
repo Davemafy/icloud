@@ -16,17 +16,15 @@ from .engine import (
 from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from .prompt_contract import prompt_dxy_direction
 from .thesis_ownership_policy import active_owner_snapshot
+from .zone_runtime_policy import MIN_SWEEP_ROOM_POINTS, XAU_POINTS_PER_PIP, _geometry_points
 
 DYNAMIC_CONTINUATION_CONTRACT = "DYNAMIC_CONTINUATION_REZONE_V6521"
-CORE_MIN_POINTS = 100.0
-CORE_MAX_POINTS = 150.0
-ENVELOPE_MIN_POINTS = 200.0
-ENVELOPE_MAX_POINTS = 300.0
-MIN_SWEEP_ROOM_POINTS = 50.0
 MAX_H1_EVENT_AGE_BARS = 8
 MAX_H4_EVENT_AGE_BARS = 3
 REPLACE_ADVANTAGE_H1_ATR = 0.35
 COUNTERTREND_DEMOTE_TOUCHES = 2
+STRONG_EVENT_MIN_STRENGTH = 1.80
+STRONG_EVENT_MAX_AGE_BARS = 3
 
 
 @dataclass(frozen=True)
@@ -123,7 +121,8 @@ def _required_liquidity(direction: Direction) -> str:
 def _select_liquidity(event: ContinuationEvent, analysis: Analysis, snapshot: MarketSnapshot):
     required = _required_liquidity(event.direction)
     point = _point(snapshot)
-    max_core_span = CORE_MAX_POINTS * point
+    contract = _geometry_points(event.source_tf)
+    max_core_span = float(contract["core_max"]) * point
     fvg_mid = (event.fvg_low + event.fvg_high) / 2.0
     tf_rank = {"H1": 0, "H4": 1, "D1": 2}
     options = []
@@ -149,8 +148,12 @@ def _select_liquidity(event: ContinuationEvent, analysis: Analysis, snapshot: Ma
 
 def _liquidity_centered_geometry(event: ContinuationEvent, liquidity_price: float, snapshot: MarketSnapshot):
     point = _point(snapshot)
+    contract = _geometry_points(event.source_tf)
     fvg_width_points = max(0.0, event.fvg_high - event.fvg_low) / point
-    core_width_points = min(max(CORE_MIN_POINTS, fvg_width_points), CORE_MAX_POINTS)
+    core_width_points = min(
+        max(float(contract["core_min"]), fvg_width_points),
+        float(contract["core_max"]),
+    )
     half_core = 0.5 * core_width_points * point
     core_low = liquidity_price - half_core
     core_high = liquidity_price + half_core
@@ -161,8 +164,8 @@ def _liquidity_centered_geometry(event: ContinuationEvent, liquidity_price: floa
     low = min(core_low, event.fvg_low, liquidity_price - sweep)
     high = max(core_high, event.fvg_high, liquidity_price + sweep)
     width = high - low
-    min_width = ENVELOPE_MIN_POINTS * point
-    max_width = ENVELOPE_MAX_POINTS * point
+    min_width = float(contract["envelope_min"]) * point
+    max_width = float(contract["envelope_max"]) * point
     if width < min_width:
         half = 0.5 * min_width
         low = min(low, liquidity_price - half)
@@ -171,7 +174,8 @@ def _liquidity_centered_geometry(event: ContinuationEvent, liquidity_price: floa
     if width > max_width + 1e-9:
         return None
 
-    # Preserve a meaningful buffer on both sides of the structural liquidity.
+    # Preserve at least the V659 50-pip sweep reserve on the distal side while
+    # also keeping a meaningful buffer on the opposite side of the core liquidity.
     if liquidity_price - low < sweep - 1e-9 or high - liquidity_price < sweep - 1e-9:
         return None
     return core_low, core_high, low, high
@@ -216,6 +220,9 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
         f"{required}_IN_MARKED_ZONE",
         "LIQUIDITY_CENTERED_CORE",
         "BALANCED_CORE_BUFFER",
+        "PROFESSIONAL_SOURCE_TF_CORE_WIDTH",
+        "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH",
+        "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM",
         "SWEEP_ROOM_RESERVED",
     }
     if h1_aligned:
@@ -233,7 +240,11 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
     fvals = flipped + [0.0] * (4 - len(flipped))
     clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
     point = _point(snapshot)
-    sweep_points = (zone_high - liquidity_price) / point if event.direction == Direction.SELL else (liquidity_price - zone_low) / point
+    sweep_points = (
+        (zone_high - liquidity_price) / point
+        if event.direction == Direction.SELL
+        else (liquidity_price - zone_low) / point
+    )
 
     zone = Zone(
         zone_id=f"DC_{event.source_tf}_{event.direction.value}_{event.displacement_ts}",
@@ -290,13 +301,24 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
 def _expansion_state(snapshot: MarketSnapshot, context: Direction, events: list[ContinuationEvent]) -> dict[str, Any]:
     h1 = structure_bias(snapshot.xau_h1)
     h4 = structure_bias(snapshot.xau_h4)
-    aligned = bool(context in {Direction.BUY, Direction.SELL} and events and (h1 == context or h4 == context))
+    strong_recent_event = any(
+        e.source_tf == "H1"
+        and e.age_bars <= STRONG_EVENT_MAX_AGE_BARS
+        and e.strength >= STRONG_EVENT_MIN_STRENGTH
+        for e in events
+    )
+    aligned = bool(
+        context in {Direction.BUY, Direction.SELL}
+        and events
+        and (h1 == context or h4 == context or strong_recent_event)
+    )
     return {
         "aligned": aligned,
         "d1": context.value,
         "h1": h1.value,
         "h4": h4.value,
         "recent_event_count": len(events),
+        "strong_recent_h1_displacement": strong_recent_event,
     }
 
 
@@ -347,8 +369,8 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     B+/multi-touch countertrend zone is removed from the *execution map* during a
     confirmed same-direction expansion. A nearer continuation FVG can replace a
     remote primary only when it comes from a recent BOS displacement and has nearby
-    structural BSL/SSL inside a liquidity-centered core. This function never sends
-    orders and never bypasses M1 confirmation.
+    structural BSL/SSL inside a V659 liquidity-centered core. This function never
+    sends orders and never bypasses M1 confirmation.
     """
     if analysis is None or not SETTINGS.paper_only:
         return analysis
@@ -368,6 +390,8 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         "fvg_alone_can_create_zone": False,
         "structural_liquidity_required": True,
         "liquidity_centered_core": True,
+        "professional_v659_geometry": True,
+        "minimum_distal_sweep_room_pips": MIN_SWEEP_ROOM_POINTS / XAU_POINTS_PER_PIP,
         "m1_confirmation_required": True,
         "demoted_context_zones": [],
         "replaced_primary": None,
@@ -405,7 +429,11 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         kept.append(zone)
     analysis.zones = kept
 
-    dynamic_candidates = [z for e in events if (z := _build_dynamic_zone(e, analysis, snapshot)) is not None]
+    dynamic_candidates = [
+        zone
+        for event in events
+        if (zone := _build_dynamic_zone(event, analysis, snapshot)) is not None
+    ]
     if dynamic_candidates:
         dynamic_candidates.sort(
             key=lambda z: (
@@ -443,7 +471,9 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         (
             z
             for z in analysis.zones
-            if z.original_direction == context and z.grade in {Grade.A_PLUS, Grade.A} and z.state == ZoneState.ACTIVE
+            if z.original_direction == context
+            and z.grade in {Grade.A_PLUS, Grade.A}
+            and z.state == ZoneState.ACTIVE
         ),
         None,
     )
@@ -469,4 +499,10 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
             f"(core={z['core_low']:.2f}-{z['core_high']:.2f},{z['source_tf']},{z['grade']}). "
             "It is a fresh displacement/FVG retest with structural liquidity centered in the core; FVG alone has no zone authority."
         )
+
+    active_map = "; ".join(
+        f"{z.original_direction.value}={z.zone_low:.2f}-{z.zone_high:.2f} (core={z.core_low:.2f}-{z.core_high:.2f},{z.source_tf},{z.grade.value})"
+        for z in analysis.zones
+    ) or "none"
+    analysis.trader_brief += f" Active execution map after continuation re-ranking: {active_map}."
     return analysis
