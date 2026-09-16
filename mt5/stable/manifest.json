@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.6",
+  "release": "6.3.7",
   "repository": "Davemafy/icloud",
-  "ref": "5db8abd970f9dc768f14d63809470bb5ebb40789",
+  "ref": "67bf021742006c196914d7d4126dd197ea185d40",
   "data_bridge_version": "1.35",
-  "sequence_ea_version": "3.25",
+  "sequence_ea_version": "3.26",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -46,7 +46,13 @@
     "liquidity_inside_zone_with_50pip_sweep_reserve",
     "eqh_eql_liquidity_only",
     "muted_primary_zone_rendering",
-    "outline_only_reserve_zone_rendering"
+    "outline_only_reserve_zone_rendering",
+    "dual_location_execution_authority",
+    "htf_core_handoff",
+    "liquidity_reversal_handoff",
+    "stale_thesis_hard_release",
+    "paper_ai_outage_advisory_fallback",
+    "liquidity_reversal_reduced_risk"
   ],
   "files": [
     {
@@ -59,11 +65,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_25_ResearchFlow_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_25_ResearchFlow_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_25_ResearchFlow_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_26_DualLocation_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_26_DualLocation_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_26_DualLocation_Demo.mq5",
       "requires_reload": true,
-      "sha256": "a102e56a6b5102df46f82599bf8b3ef43ca4aa8455693c4fc2eedd4901e66ae0"
+      "sha256": "05ed7f074f4b149858739d2a5a030e61d15479e9b08eb3dc353f55819149b3c6"
     }
   ],
   "support_files": [
