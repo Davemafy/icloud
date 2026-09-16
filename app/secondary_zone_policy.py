@@ -3,7 +3,7 @@ from __future__ import annotations
 from .engine import atr
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
 
-SECONDARY_ZONE_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V655_SECONDARY_RESERVE"
+SECONDARY_ZONE_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V659_SECONDARY_RESERVE"
 XAU_POINTS_PER_PIP = 10.0
 MAX_RESERVE_TOUCHES = 1
 RESERVE_GRADES = {Grade.A_PLUS, Grade.A}
@@ -156,6 +156,7 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         "primary_m15_invalidation_required_before_promotion": True,
         "fresh_requalification_required_before_promotion": True,
         "m1_confirmation_still_required_after_promotion": True,
+        "equal_high_low_cannot_create_reserve_without_institutional_source": True,
     }
     zone_map["secondary"] = reserve_map
     policy["public_zone_map"] = zone_map
