@@ -2,6 +2,7 @@
 #define TRADEZONE_ZONE_RENDERER_V1_0_MQH
 
 // Visual-only chart renderer. It never sends orders, changes positions, or alters risk.
+// V659 presentation: muted Primary shading and outline-only Reserve context.
 #define TZR_PREFIX "AITS_ZONE_"
 #define TZR_MAX_ZONES 4
 
@@ -135,24 +136,26 @@ void TZR_DeleteObjects(long chart)
    }
 }
 
-color TZR_EnvelopeColor(string direction)
+color TZR_EnvelopeColor(string direction,bool reserve)
 {
-   return direction=="BUY"?clrLime:clrPink;
+   if(direction=="BUY")return reserve?C'86,116,92':C'76,132,88';
+   return reserve?C'126,100,108':C'150,92,108';
 }
 
-color TZR_CoreColor(string direction)
+color TZR_CoreColor(string direction,bool reserve)
 {
-   return direction=="BUY"?clrGreen:clrRed;
+   if(direction=="BUY")return reserve?C'98,130,103':C'58,151,79';
+   return reserve?C'142,111,119':C'174,78,99';
 }
 
-bool TZR_Rect(long chart,string name,datetime left,datetime right,double low,double high,color c,ENUM_LINE_STYLE style,int width)
+bool TZR_Rect(long chart,string name,datetime left,datetime right,double low,double high,color c,ENUM_LINE_STYLE style,int width,bool fill)
 {
    if(low<=0 || high<=low || right<=left)return false;
    if(!ObjectCreate(chart,name,OBJ_RECTANGLE,0,left,high,right,low))return false;
    ObjectSetInteger(chart,name,OBJPROP_COLOR,c);
    ObjectSetInteger(chart,name,OBJPROP_STYLE,style);
    ObjectSetInteger(chart,name,OBJPROP_WIDTH,width);
-   ObjectSetInteger(chart,name,OBJPROP_FILL,true);
+   ObjectSetInteger(chart,name,OBJPROP_FILL,fill);
    ObjectSetInteger(chart,name,OBJPROP_BACK,true);
    ObjectSetInteger(chart,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(chart,name,OBJPROP_SELECTED,false);
@@ -196,12 +199,13 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
    ENUM_LINE_STYLE env_style=reserve?STYLE_DOT:STYLE_SOLID;
    ENUM_LINE_STYLE core_style=reserve?STYLE_DASH:STYLE_SOLID;
    int core_width=z.active_thesis?3:(reserve?1:2);
-   color env_color=TZR_EnvelopeColor(z.direction);
-   color core_color=TZR_CoreColor(z.direction);
+   color env_color=TZR_EnvelopeColor(z.direction,reserve);
+   color core_color=TZR_CoreColor(z.direction,reserve);
 
-   // Envelope first; the darker core is then drawn inside it.
-   TZR_Rect(chart,base+"ENV",left,right,z.zone_low,z.zone_high,env_color,env_style,1);
-   TZR_Rect(chart,base+"CORE",left,right,z.core_low,z.core_high,core_color,core_style,core_width);
+   // Primary keeps soft shading; Reserve is outline-only context so it cannot
+   // visually compete with the actionable primary zone.
+   TZR_Rect(chart,base+"ENV",left,right,z.zone_low,z.zone_high,env_color,env_style,1,!reserve);
+   TZR_Rect(chart,base+"CORE",left,right,z.core_low,z.core_high,core_color,core_style,core_width,!reserve);
 
    string label=z.direction+" "+z.role;
    if(z.grade!="")label+=" | "+z.grade;
