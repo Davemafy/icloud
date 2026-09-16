@@ -132,6 +132,7 @@ def test_sell_plan_removes_target_inside_core_and_keeps_only_profit_side_objecti
     )
     out = _kv(guard_plan_text(raw, _analysis(zone), snap))
     assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
     assert float(out["original_target1"]) == 4300.54
     assert float(out["original_target2"]) == 4300.0
     assert float(out["original_target3"]) == 0.0
@@ -139,14 +140,54 @@ def test_sell_plan_removes_target_inside_core_and_keeps_only_profit_side_objecti
     assert out["live_target_direction_valid"] == "1"
 
 
-def test_armed_zone_cannot_export_executable_plan_before_m1_handoff():
+def test_armed_zone_cannot_export_executable_plan_before_any_handoff():
     zone = _sell_zone("ARMED")
     snap = _snapshot(4290.0)
     raw = "ea_mode=DUAL_BRANCH\noriginal_direction=SELL\noriginal_target1=4300.00000\n"
     out = _kv(guard_plan_text(raw, _analysis(zone), snap))
     assert out["ea_mode"] == "WATCH_ONLY"
     assert out["core_handoff_ready"] == "0"
-    assert "CLOUD_M1_HANDOFF_NOT_READY" in out["execution_guard_reason"]
+    assert out["liquidity_handoff_ready"] == "0"
+    assert out["execution_authority"] == "NONE"
+    assert "NO_EXECUTION_HANDOFF" in out["execution_guard_reason"]
+
+
+def test_liquidity_reversal_handoff_can_export_dual_branch_without_promoting_liquidity_to_zone():
+    zone = _sell_zone("ARMED")
+    zone.original_target1 = 4280.0
+    zone.original_target2 = 4270.0
+    zone.original_target3 = 4260.0
+    analysis = _analysis(zone)
+    analysis.execution_policy = {
+        "liquidity_reversal_handoff": {
+            "active": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "direction": "SELL",
+            "context_zone_id": zone.zone_id,
+            "liquidity_label": "H1_BSL",
+            "liquidity_source_tf": "H1",
+            "liquidity_price": 4350.0,
+            "sweep_ts": 10,
+            "displacement_ts": 20,
+            "risk_multiplier": 0.50,
+        }
+    }
+    snap = _snapshot(4290.0, spread_points=16.0)
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "original_direction=SELL\n"
+        "original_target1=4280.00000\n"
+        "original_target2=4270.00000\n"
+        "original_target3=4260.00000\n"
+    )
+    out = _kv(guard_plan_text(raw, analysis, snap))
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
+    assert out["core_handoff_ready"] == "0"
+    assert out["liquidity_handoff_ready"] == "1"
+    assert out["execution_role"] == "LIQUIDITY_REVERSAL_HANDOFF"
+    assert out["liquidity_object_promoted_to_zone"] == "0"
+    assert out["liquidity_reversal_risk_multiplier"] == "0.50"
 
 
 def test_confirmed_bplus_owner_can_export_thesis_continuation_after_strict_m1_ready():
@@ -172,6 +213,7 @@ def test_confirmed_bplus_owner_can_export_thesis_continuation_after_strict_m1_re
 
     assert out["ea_mode"] == "DUAL_BRANCH"
     assert out["core_handoff_ready"] == "1"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
     assert out["thesis_continuation_bplus_override"] == "1"
     assert out["setup_type"] == "CONTINUATION"
     assert out["zone_setup_type_original"] == "REVERSAL"
