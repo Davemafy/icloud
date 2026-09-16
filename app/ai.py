@@ -51,7 +51,7 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             for z in a.zones
         ],
         "rules": {
-            "prompt_contract_ref": "ZONE_FORMATION_PROMPT_2026_09_14_V655",
+            "prompt_contract_ref": "ZONE_FORMATION_PROMPT_2026_09_14_V659",
             "no_future_leakage": True,
             "max_primary_zones": 2,
             "one_primary_zone_per_side": True,
@@ -66,15 +66,18 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
             "xau_points_per_pip": 10,
-            "core_width_pips_min": 100,
-            "core_width_pips_max": 200,
-            "envelope_width_pips_min": 300,
-            "envelope_width_pips_max": 400,
+            "geometry_by_source_tf": {
+                "H1": {"core_width_pips": [60, 100], "envelope_width_pips": [140, 220]},
+                "H4": {"core_width_pips": [80, 140], "envelope_width_pips": [180, 260]},
+                "H4>H1": {"core_width_pips": [60, 100], "envelope_width_pips": [180, 260]},
+            },
             "minimum_distal_sweep_room_pips": 50,
             "sell_requires_structural_bsl_inside_envelope": True,
             "buy_requires_structural_ssl_inside_envelope": True,
             "sell_sweep_room_is_above_bsl": True,
             "buy_sweep_room_is_below_ssl": True,
+            "equal_high_low_are_liquidity_objects_only": True,
+            "equal_high_low_do_not_create_zone_without_h4_h1_source": True,
             "buy_zone_must_be_below_or_interacting_with_current_price": True,
             "sell_zone_must_be_above_or_interacting_with_current_price": True,
             "wrong_side_zone_is_rejected_not_flipped": True,
@@ -108,47 +111,52 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 2. Every published primary zone must be anchored to a visible H4/H1 source that either:
    a) caused decisive displacement/BOS away, or
    b) swept liquidity, rejected, and was followed by decisive displacement.
-3. Trade Zone uses 1 XAU pip = 10 broker points. The institutional CORE must be 100-200 pips wide.
-   The OUTER ENVELOPE must be 300-400 pips wide. The source location anchors both; the envelope may
-   extend around the source only to satisfy this width contract and reserve realistic liquidity-sweep room.
+3. Trade Zone uses 1 XAU pip = 10 broker points. Use source-timeframe professional geometry:
+   H1 core 60-100 pips with a 140-220 pip envelope; H4 core 80-140 pips with a 180-260 pip envelope;
+   H4>H1 uses the H1-refined 60-100 pip core inside the H4 180-260 pip envelope. The source location
+   anchors the geometry; never widen beyond the applicable maximum merely to make a candidate qualify.
 4. SELL supply is valid only when structural BSL is physically inside the final envelope, with at least
    50 pips of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
    structural SSL is physically inside the final envelope, with at least 50 pips remaining BELOW that
-   SSL for an expected raid. If core + liquidity + sweep room cannot fit inside 400 pips, reject it.
-5. Alert-side placement is mandatory. A BUY alert zone cannot sit completely above current price; it must
+   SSL for an expected raid. If source + required liquidity + sweep room cannot fit inside the applicable
+   source-timeframe envelope, reject the candidate.
+5. Equal highs/equal lows are liquidity objects only. They may identify resting BSL/SSL, sweep objectives,
+   or inducement, but they do NOT create a trading zone by themselves. A zone still requires the valid
+   H4/H1 institutional source in rule 2.
+6. Alert-side placement is mandatory. A BUY alert zone cannot sit completely above current price; it must
    be below current price, or current price may already be inside/interacting with it. A SELL alert zone
    cannot sit completely below current price; it must be above current price, or current price may already
    be inside/interacting with it. A wrong-side zone is rejected from today's alert map and is NOT flipped.
-6. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
+7. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-7. Mitigation count measures strength. Fresh zones rank higher within comparable intraday relevance;
+8. Mitigation count measures strength. Fresh zones rank higher within comparable intraday relevance;
    repeated mitigation downgrades quality rather than moving the zone or manufacturing a different zone.
-8. After structural validity and A/A+ execution quality, intraday reachability ranks today's alert candidates
+9. After structural validity and A/A+ execution quality, intraday reachability ranks today's alert candidates
    before freshness and remote HTF authority. A much nearer A/A+ valid zone should outrank a remote
    equally-executable candidate solely because the remote zone has one fewer touch. Distance NEVER
    manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
-9. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
-   liquidity raid does not invalidate it.
-10. Publish at most one PRIMARY SELL and one PRIMARY BUY, but DO NOT force both sides. If no valid BUY
+10. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
+    liquidity raid does not invalidate it.
+11. Publish at most one PRIMARY SELL and one PRIMARY BUY, but DO NOT force both sides. If no valid BUY
     exists below/interacting with price, PRIMARY BUY=NONE. If no valid SELL exists above/interacting with
     price, PRIMARY SELL=NONE.
-11. A SECONDARY level is a reserve only. At most one reserve per side may be exposed in execution_policy.
+12. A SECONDARY level is a reserve only. At most one reserve per side may be exposed in execution_policy.
     It must pass the same structural/liquidity/geometry/M15 rules, be A/A+, have <=1 mitigation, come from
     a distinct non-overlapping institutional source, and sit beyond the primary invalidation side: higher
     supply for SELL, lower demand for BUY. While Level 1 is valid, Level 2 has zero execution authority.
     Level-1 invalidation does NOT instantly activate Level 2. A fresh analysis must requalify Level 2 before
-    it can become primary.
-12. M1 cannot redefine the HTF zone. Once any zone becomes primary, execution still requires the existing
+    it can become primary. Do not manufacture a reserve if no second independent institutional source qualifies.
+13. M1 cannot redefine the HTF zone. Once any zone becomes primary, execution still requires the existing
     sweep -> MSS/BOS -> displacement -> new dealing range -> value/OTE/PD-array sequence.
 
-This contract comes from the user's 2026-09-14 institutional XAU prompt: identify the MOST IMPORTANT
-levels where price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15
-structure, liquidity, source candles, displacement, FVG, mitigation, ATR/spread/news and DXY confirmation.
+This contract comes from the user's institutional XAU framework: identify the MOST IMPORTANT levels where
+price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15 structure,
+liquidity, source candles, displacement, FVG, mitigation, ATR/spread/news and DXY confirmation.
 
 Reject validation only when a published primary breaks these rules or supplied safety guards. A reserve
 zone in execution_policy is context-only and must not be treated as an active execution zone. Do not reapply
-old fixed ATR-distance, tiny exact-candle envelope, mandatory two-sided primary output, or mandatory
+old broad fixed-width geometry, tiny exact-candle envelopes, mandatory two-sided primary output, or mandatory
 multi-confluence filters that are not in this prompt-driven contract.
 
 Return JSON only: {"approved": true|false, "summary": "...", "risks": ["..."]}.
