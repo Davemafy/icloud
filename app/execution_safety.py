@@ -7,15 +7,15 @@ from .engine import atr
 from .models import Analysis, Feedback, Grade, MarketSnapshot, Zone, ZoneState
 
 # DEMO/PAPER execution safety contract. The wide HTF envelope is location/sweep
-# context only. Primary M1 authority begins at the tactical core (or a very small
-# volatility buffer around it). Re-entry keeps its separate protected-position
-# contract after a valid primary. Every active target must remain on the profitable
-# side of the actual candidate entry.
+# context only. Primary M1 authority normally begins at the tactical core. v6.5.19
+# adds a second explicit PAPER authority: a confirmed structural-liquidity reversal
+# handoff. It never promotes the liquidity object into an HTF zone and still requires
+# the Sequence EA's full M1 confirmation/value-entry pattern.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 CORE_INTERACTION_MIN_POINTS = 5.0
 TARGET_MIN_POINTS = 5.0
 TARGET_SPREAD_MULTIPLIER = 1.50
-EXECUTION_GUARD_CONTRACT = "CORE_ONLY_TARGET_DIRECTION_V6512"
+EXECUTION_GUARD_CONTRACT = "DUAL_LOCATION_TARGET_DIRECTION_V6519"
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 
 
@@ -111,14 +111,6 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
 
 
 def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state: str) -> bool:
-    """Permit only a confirmed surviving B+ thesis to reuse the execution handoff.
-
-    A normal fresh B+ zone remains WATCH_ONLY. This exception exists solely when
-    the same zone already produced an institutional reaction, still owns the thesis,
-    has returned to M1_READY through the strict core handoff, and deterministic/AI
-    approvals are still valid. It therefore repairs the legacy A/A+ export gate
-    without weakening new-zone qualification.
-    """
     if not SETTINGS.paper_only:
         return False
     if zone.grade != Grade.B_PLUS or zone.state != ZoneState.ACTIVE:
@@ -132,7 +124,9 @@ def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state:
     if not bool(analysis.approved):
         return False
     if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
-        return False
+        fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
+        if not bool(fallback.get("active")):
+            return False
 
     meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
     return bool(
@@ -146,14 +140,29 @@ def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state:
     )
 
 
-def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
-    """Fail closed before primary core handoff and sanitize all exported objectives.
+def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict[str, Any]]:
+    if not SETTINGS.paper_only or not bool(analysis.approved):
+        return False, {}
+    meta = dict((analysis.execution_policy or {}).get("liquidity_reversal_handoff") or {})
+    if not bool(meta.get("active")):
+        return False, meta
+    if str(meta.get("authority") or "") != "LIQUIDITY_REVERSAL_HANDOFF":
+        return False, meta
+    if str(meta.get("context_zone_id") or "") != zone.zone_id:
+        return False, meta
+    if str(meta.get("direction") or "") != zone.original_direction.value:
+        return False, meta
+    if zone.grade not in {Grade.A_PLUS, Grade.A} or zone.state != ZoneState.ACTIVE:
+        return False, meta
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
+        if not bool(fallback.get("active")):
+            return False, meta
+    return True, meta
 
-    The running DEMO Sequence 3.23 already obeys ea_mode and plan targets, so this
-    protection is effective from the cloud without requiring a local MT5 binary
-    replacement. Re-entry remains governed by the EA's existing protected-position
-    rules once a valid M1_READY primary thesis exists.
-    """
+
+def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
+    """Fail closed unless one of the two explicit PAPER execution authorities is active."""
     if analysis is None or snapshot is None:
         return text
     zone = _selected_zone(analysis)
@@ -168,19 +177,31 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     plan_state = str(kv.get("zone_state", zone.state.value)).upper()
     thesis_bplus_override = _confirmed_thesis_bplus_override(analysis, zone, plan_state)
     effective_mode = "DUAL_BRANCH" if thesis_bplus_override else base_mode
-    handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
+    core_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
+    liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
+    handoff_ready = bool(core_handoff_ready or liquidity_handoff_ready)
 
+    authority = "HTF_CORE_HANDOFF" if core_handoff_ready else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready else "NONE"
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
+    kv["execution_authority"] = authority
     kv["core_interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
     kv["core_interaction_now"] = "1" if core_now else "0"
-    kv["core_handoff_ready"] = "1" if handoff_ready else "0"
+    kv["core_handoff_ready"] = "1" if core_handoff_ready else "0"
+    kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
 
-    # Static objective sanitation: an original target must be beyond the profitable
-    # edge of the entire tactical core, so it cannot become a wrong-side TP for a
-    # legitimate primary entry anywhere inside that core.
+    if liquidity_handoff_ready:
+        kv["liquidity_reversal_direction"] = str(lrh.get("direction") or "")
+        kv["liquidity_reversal_label"] = str(lrh.get("liquidity_label") or "")
+        kv["liquidity_reversal_source_tf"] = str(lrh.get("liquidity_source_tf") or "")
+        kv["liquidity_reversal_price"] = f"{float(lrh.get('liquidity_price') or 0.0):.5f}"
+        kv["liquidity_reversal_sweep_ts"] = str(int(lrh.get("sweep_ts") or 0))
+        kv["liquidity_reversal_displacement_ts"] = str(int(lrh.get("displacement_ts") or 0))
+        kv["liquidity_reversal_risk_multiplier"] = f"{float(lrh.get('risk_multiplier') or 0.50):.2f}"
+        kv["liquidity_object_promoted_to_zone"] = "0"
+
     point_gap = max(float(snapshot.point) * CORE_INTERACTION_MIN_POINTS, 1e-9)
     original_values = [
         float(zone.original_target1),
@@ -196,9 +217,6 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         point_gap,
     )
 
-    # Live objective sanitation: even after primary handoff, re-entry can occur at a
-    # different price. Require all targets exported on this poll to remain beyond
-    # the current executable side by at least spread-aware clearance.
     live_reference = float(snapshot.ask if zone.original_direction.value == "BUY" else snapshot.bid)
     live_valid, live_removed = _filter_targets(
         zone.original_direction.value,
@@ -213,8 +231,6 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["original_target_direction_valid"] = "1" if original_valid else "0"
     kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
 
-    # Flip objectives are anchored beyond the failed outer envelope because a flip
-    # may only exist after accepted invalidation and opposite-side retest.
     flip_values = [
         float(zone.flip_target1),
         float(zone.flip_target2),
@@ -233,8 +249,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["flip_target_direction_valid"] = "1" if flip_valid else "0"
 
     guard_reasons: list[str] = []
-    if not cloud_ready:
-        guard_reasons.append("CLOUD_M1_HANDOFF_NOT_READY")
+    if not handoff_ready:
+        guard_reasons.append("NO_EXECUTION_HANDOFF")
     if not original_valid:
         guard_reasons.append("NO_DIRECTIONALLY_VALID_ORIGINAL_TARGET")
     if handoff_ready and not live_valid:
@@ -243,11 +259,10 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     if handoff_ready and original_valid and live_valid:
         kv["ea_mode"] = "DUAL_BRANCH"
         if thesis_bplus_override:
-            # Once a reversal zone has already reacted, a later first execution is
-            # continuation of that confirmed thesis. This lets Sequence 3.23 use its
-            # normal continuation-capable primary router without relabeling the map.
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
+        elif liquidity_handoff_ready:
+            kv["execution_role"] = "LIQUIDITY_REVERSAL_HANDOFF"
     else:
         kv["ea_mode"] = "WATCH_ONLY"
     kv["execution_guard_reason"] = ",".join(guard_reasons)
@@ -255,7 +270,6 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
 
 
 def live_target_guard_reasons(text: str, snapshot: MarketSnapshot | None) -> list[str]:
-    """Optional external check for callers that want a separate live-block reason."""
     if snapshot is None:
         return []
     _, kv = _parse_plan(text)
@@ -271,7 +285,6 @@ def normalize_candidate_feedback(
     analysis: Analysis | None,
     snapshot: MarketSnapshot | None,
 ) -> Feedback:
-    """Normalize observer-only telemetry to the live core/target safety contract."""
     if snapshot is None or analysis is None or str(feedback.event).upper() != "ML_CANDIDATE":
         return feedback
     if feedback.analysis_id and feedback.analysis_id != analysis.analysis_id:
@@ -292,17 +305,23 @@ def normalize_candidate_feedback(
         candidate_direction in {"BUY", "SELL"} and candidate_direction != zone.original_direction.value
     )
 
-    # Primary candidates require tactical-core context. Re-entry deliberately does
-    # not: it already has its own existing-position/protected-thesis gate.
+    lrh = dict((analysis.execution_policy or {}).get("liquidity_reversal_handoff") or {})
+    lrh_primary = bool(
+        lrh.get("active")
+        and str(lrh.get("context_zone_id") or "") == zone.zone_id
+        and str(lrh.get("direction") or "") == candidate_direction
+    )
+
     if not is_flip and role == "PRIMARY":
         px = float(details.get("entry_price") or out.price or snapshot.mid)
         core_now = core_is_interacting(zone, snapshot, px)
         cloud_ready = _readiness(zone) == "M1_READY"
         features["zone_context"] = 1 if core_now else 0
-        features["recent_zone_interaction"] = 1 if (core_now or cloud_ready) else 0
-        features["interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
+        features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary) else 0
+        features["interaction_basis"] = "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary else "TACTICAL_CORE_ONLY_FOR_PRIMARY"
         features["core_interaction_buffer"] = round(core_interaction_buffer(snapshot), 5)
-        if not core_now and not cloud_ready:
+        features["liquidity_reversal_handoff"] = 1 if lrh_primary else 0
+        if not core_now and not cloud_ready and not lrh_primary:
             reasons = list(details.get("rejection_reasons") or [])
             if "CORE_NOT_REACHED" not in reasons:
                 reasons.append("CORE_NOT_REACHED")
