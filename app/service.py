@@ -135,6 +135,11 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
 
     # Single authoritative base zoning path: the prompt-driven institutional engine.
     a = build_prompt_analysis(s, now)
+    # Preserve the original qualified map as lifecycle/context truth before any
+    # execution-relevance re-ranking. Since v6.5.20, registration/interaction alone
+    # cannot acquire thesis ownership, so this cannot create an execution lock.
+    if SETTINGS.paper_only:
+        register_analysis_zones(a)
     # PAPER/DEMO ONLY: after a confirmed directional expansion, allow a fresh
     # displacement/FVG retest with nearby structural liquidity to replace a remote
     # same-direction primary. Exhausted B+/multi-touch countertrend zones are kept
