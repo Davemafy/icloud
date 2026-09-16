@@ -1,9 +1,9 @@
 # Zone Formation Prompt Contract — 2026-09-14
 
 Status: authoritative reference for the DEMO / PAPER ONLY XAU zone map.
-Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V658`
+Contract ID: `ZONE_FORMATION_PROMPT_2026_09_14_V659`
 
-This contract is derived from the user's institutional XAU master-sniper prompt supplied on 2026-09-14. Future zoning changes must preserve these rules unless the user explicitly replaces them.
+This contract is derived from the user's institutional XAU master-sniper framework and the 2026-09-16 refinement request. Future zoning changes must preserve these rules unless the user explicitly replaces them.
 
 ## Purpose
 
@@ -28,23 +28,37 @@ A zone must be anchored to a visible H4/H1 institutional source that either:
 
 FVG/imbalance, rejection wick, premium/discount, psychological level, tick-volume expansion and H4/H1 overlap are quality confluences. They do not replace the required structural liquidity.
 
+Equal highs/equal lows are liquidity objects only. They may represent BSL/SSL, inducement or sweep objectives, but they do not create a trading zone by themselves. A valid H4/H1 institutional source is still mandatory.
+
 ## Liquidity is mandatory
 
 - SELL supply requires structural BSL physically inside the final marked envelope.
 - BUY demand requires structural SSL physically inside the final marked envelope.
+- The attached BSL/SSL must leave the required distal sweep reserve inside the same envelope.
 - Liquidity must not be invented.
 - A PSY level alone never qualifies a zone.
 
-## Zone geometry
+## Professional zone geometry
 
 Trade Zone XAU convention: 1 pip = 10 broker points.
 
-- Core: 100–200 pips.
-- Envelope: 300–400 pips.
-- Minimum distal sweep room: 50 pips.
-- SELL reserves at least 50 pips above the BSL inside the envelope.
-- BUY reserves at least 50 pips below the SSL inside the envelope.
-- If source + required liquidity + sweep room cannot fit inside the envelope contract, reject the candidate.
+Geometry is source-timeframe specific so the chart remains precise without squeezing a genuine H4 location into an H1-sized box:
+
+| Source | Core | Outer envelope |
+| --- | --- | --- |
+| H1 tactical | 60–100 pips | 140–220 pips |
+| H4 structural | 80–140 pips | 180–260 pips |
+| H4>H1 refinement | 60–100 pips H1-refined core | 180–260 pips H4 parent envelope |
+
+Hard sweep rule:
+
+- Minimum distal sweep room = 50 pips.
+- SELL reserves at least 50 pips above the attached BSL inside the envelope.
+- BUY reserves at least 50 pips below the attached SSL inside the envelope.
+- If source + required liquidity + sweep room cannot fit inside the applicable source-timeframe maximum envelope, reject the candidate.
+- Do not widen the zone beyond its source-timeframe maximum merely to make liquidity fit.
+
+The core is the tactical execution location. The outer envelope is context, structural sweep room and M15 thesis invalidation; it is not a blind entry area.
 
 ## Current-price side rule
 
@@ -76,7 +90,7 @@ This is mandatory for the intraday alert map:
 A second level may be published as a BACKUP only. It is not a second active execution zone.
 
 - At most one SECONDARY SELL and one SECONDARY BUY may be shown.
-- SECONDARY must pass the same structural source, BSL/SSL, geometry, freshness and M15-health rules as a primary zone.
+- SECONDARY must pass the same structural source, BSL/SSL, source-timeframe geometry, freshness and M15-health rules as a primary zone.
 - SECONDARY must be A or A+ and have no more than one core mitigation.
 - SECONDARY must come from a distinct institutional source and must not overlap the primary envelope.
 - For SELL: Level 2 must be a higher supply zone beyond the primary SELL invalidation side.
@@ -86,6 +100,16 @@ A second level may be published as a BACKUP only. It is not a second active exec
 - After closed-M15 accepted invalidation of Level 1, a fresh analysis must requalify Level 2. It must still be active, on the correct side of price, retain the required structural liquidity and pass all normal safety rules.
 - Once requalified as the new primary, the normal M1 sweep -> MSS/BOS -> displacement -> dealing range -> value/OTE/PD-array sequence is still mandatory.
 - If no clean non-overlapping reserve exists, SECONDARY = NONE. Do not manufacture a backup zone.
+
+## Chart rendering
+
+The MT5 chart is presentation only; rendering cannot create or authorize zones.
+
+- PRIMARY zones may use a soft filled envelope with a slightly stronger core.
+- RESERVE zones use a lighter/dashed presentation and remain visually subordinate to Primary.
+- Labels must include direction, role, grade, state and touch count.
+- Up to four qualified records may be rendered: Primary SELL, Reserve SELL, Primary BUY, Reserve BUY.
+- Missing records are not forced.
 
 ## Mitigation and invalidation
 
@@ -97,13 +121,13 @@ A second level may be published as a BACKUP only. It is not a second active exec
 
 ## M1 execution handoff
 
-The wide outer envelope is institutional location and sweep room. It is NOT an M1 execution trigger.
+The outer envelope is institutional location and sweep room. It is NOT an M1 execution trigger.
 
 For the first primary entry:
 
 - M1 handoff begins only when price reaches the tactical core or a very small core buffer.
 - The core buffer is the greater of 5 broker points or 0.10 M15 ATR.
-- Being anywhere inside the 300–400 pip envelope must not set primary `zone_context` or `recent_zone_interaction` by itself.
+- Being anywhere inside the outer envelope must not set primary `zone_context` or `recent_zone_interaction` by itself.
 - After core handoff, execution still requires `sweep -> MSS/BOS -> displacement -> new M1 dealing range -> value/OTE/PD-array retracement -> entry`.
 - No chase and no blind entry.
 
@@ -168,4 +192,4 @@ Targets are execution constraints, not decorative levels.
 
 ## Future-change rule
 
-When zoning, execution-handoff, lifecycle or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats broad-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
