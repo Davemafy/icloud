@@ -4,27 +4,28 @@ from typing import Any
 
 from .config import SETTINGS
 from .db import connect
+from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 
-THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6511"
+THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
+EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
 OWNER_REFRESH_BUFFER_M15_ATR = 0.30
 OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
 
 _AI_RULE = """
-13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): once a published zone has actually interacted and its
-    persisted lifecycle is still non-terminal, that thesis owns execution direction until M15 accepted
-    invalidation or the deepest planned liquidity objective completes. A newly ranked opposite zone may
-    remain visible as context, but it cannot steal M1 authority from the live thesis. If the live thesis is
-    REACTION_CONFIRMED or OBJECTIVE_IN_PROGRESS, later mitigation may downgrade the current map display
-    to B+ without automatically cancelling the already-confirmed thesis. This is NOT permission to create
-    a new zone or chase price: continuation authority is same-direction only, must use the same surviving
-    institutional geometry/liquidity, requires price back at the tactical core, and still requires the full
-    M1 sweep -> MSS/BOS -> displacement -> dealing-range -> value/PD-array confirmation. If the owner zone
-    is absent from the current map, fail closed and allow no opposite execution until the lifecycle becomes
-    terminal or a fresh analysis safely republishes the owner.
+13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
+    A thesis may lock execution direction only after an explicit deterministic execution handoff has
+    been acquired: HTF_CORE_HANDOFF or LIQUIDITY_REVERSAL_HANDOFF. WATCH/B+ or repeatedly mitigated
+    zones may remain visible and may have lifecycle reactions, but they cannot block the opposite side
+    merely because price interacted with them. Once a qualified handoff has acquired ownership, that
+    thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
+    completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
+    from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
+    dealing-range -> value/PD-array confirmation. If an acquired owner disappears from the current map,
+    fail closed until lifecycle release or safe requalification.
 """
 
 
@@ -37,13 +38,19 @@ def install_thesis_ai_contract() -> None:
         ai.SYSTEM += _AI_RULE
 
 
-def _active_owner_row(now: int) -> dict[str, Any] | None:
-    """Return the first still-live interacted thesis.
+def _zone_reaction_key(zone: Zone) -> str:
+    source_ts = int(zone.source_ts or 0)
+    if source_ts:
+        return f"{zone.original_direction.value}|{zone.source_tf}|{source_ts}"
+    return (
+        f"{zone.original_direction.value}|{zone.source_tf}|0|"
+        f"{float(zone.core_low):.2f}|{float(zone.core_high):.2f}"
+    )
 
-    Ownership is intentionally sticky: a later opposite alert cannot replace an
-    earlier non-terminal interacted thesis. Lifecycle invalidation/objective
-    completion is the release mechanism.
-    """
+
+def _active_owner_row(now: int) -> dict[str, Any] | None:
+    """Return the oldest still-live thesis that actually acquired execution authority."""
+    ensure_execution_ownership_schema()
     cutoff = int(now) - 7 * 24 * 3600
     with connect() as db:
         rows = db.execute(
@@ -52,14 +59,16 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
                    core_low,core_high,zone_low,zone_high,grade,core_touched_at,
                    reaction_confirmed_at,target1,target2,target3,target1_hit_at,
                    target2_hit_at,target3_hit_at,objective_complete_at,invalidated_at,
-                   best_price,mfe_price,last_reason,first_seen_at,last_seen_at
+                   best_price,mfe_price,last_reason,first_seen_at,last_seen_at,
+                   ownership_acquired_at,ownership_authority,ownership_analysis_id,
+                   ownership_anchor_price
             FROM zone_reactions
             WHERE first_seen_at>=?
-              AND core_touched_at>0
+              AND ownership_acquired_at>0
               AND invalidated_at=0
               AND objective_complete_at=0
               AND status IN ('INTERACTING','REACTION_CONFIRMED','OBJECTIVE_IN_PROGRESS')
-            ORDER BY core_touched_at ASC, first_seen_at ASC
+            ORDER BY ownership_acquired_at ASC, first_seen_at ASC
             """,
             (cutoff,),
         ).fetchall()
@@ -100,22 +109,12 @@ def _owner_core_interaction(
 
 
 def owner_core_interacting(snapshot: MarketSnapshot) -> dict[str, Any] | None:
-    """Broad refresh trigger when a live thesis returns near its tactical core.
-
-    This is analysis scheduling only. It deliberately uses the wider 0.30 M15-ATR
-    buffer and grants no execution authority by itself.
-    """
+    """Broad refresh trigger when an acquired live thesis returns near its tactical core."""
     return _owner_core_interaction(snapshot, OWNER_REFRESH_BUFFER_M15_ATR)
 
 
 def owner_m1_handoff_interacting(snapshot: MarketSnapshot) -> dict[str, Any] | None:
-    """Strict refresh trigger for an already-confirmed thesis entering M1 handoff range.
-
-    v6.5.10 could latch the wider 0.30-ATR interaction first and then miss the
-    later transition into the execution engine's stricter 0.10-ATR core buffer.
-    This separate edge trigger exists only for REACTION_CONFIRMED / OBJECTIVE_IN_PROGRESS
-    owners. A fresh analysis must still promote M1_READY and pass AI/risk guards.
-    """
+    """Strict refresh trigger for a confirmed acquired thesis entering M1 handoff range."""
     return _owner_core_interaction(
         snapshot,
         OWNER_M1_HANDOFF_BUFFER_M15_ATR,
@@ -140,33 +139,10 @@ def _matches_owner(zone: Zone, owner: dict[str, Any]) -> bool:
     )
 
 
-def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
-    """Give a live interacted thesis precedence over newly ranked opposite zones.
-
-    This policy does not change zone formation. Both BUY and SELL maps remain
-    visible. It only controls which side may receive PAPER M1 execution authority.
-    """
-    if not SETTINGS.paper_only:
-        return None
-
-    owner = _active_owner_row(int(snapshot.sent_at))
-    policy = dict(analysis.execution_policy or {})
-
-    if owner is None:
-        policy["active_thesis"] = {
-            "contract": THESIS_OWNERSHIP_CONTRACT,
-            "locked": False,
-            "reason": "NO_NONTERMINAL_INTERACTED_THESIS",
-        }
-        analysis.execution_policy = policy
-        return None
-
-    previous_selected = analysis.selected_zone_id
-    owner_zone = next((z for z in analysis.zones if _matches_owner(z, owner)), None)
+def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any]:
     status = str(owner.get("status") or "INTERACTING")
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
-
-    meta = {
+    return {
         "contract": THESIS_OWNERSHIP_CONTRACT,
         "locked": True,
         "direction": direction,
@@ -176,6 +152,10 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         "source_ts": int(owner.get("source_ts") or 0),
         "owner_zone_id": owner_zone.zone_id if owner_zone is not None else "",
         "owner_zone_present": owner_zone is not None,
+        "ownership_acquired_at": int(owner.get("ownership_acquired_at") or 0),
+        "ownership_authority": str(owner.get("ownership_authority") or ""),
+        "ownership_analysis_id": str(owner.get("ownership_analysis_id") or ""),
+        "ownership_anchor_price": float(owner.get("ownership_anchor_price") or 0.0),
         "same_direction_execution_only": True,
         "opposite_execution_blocked": True,
         "d1_context_cannot_override_live_thesis": True,
@@ -194,20 +174,115 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         "best_price": float(owner.get("best_price") or 0.0),
         "mfe_price": float(owner.get("mfe_price") or 0.0),
     }
-    policy["active_thesis"] = meta
+
+
+def acquire_execution_ownership(
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+    authority: str,
+    zone_id: str,
+    anchor_price: float = 0.0,
+) -> dict[str, Any] | None:
+    """Persist thesis ownership only after a final approved execution handoff.
+
+    HTF_CORE_HANDOFF is expected to originate from the strict tactical-core M1_READY
+    path. LIQUIDITY_REVERSAL_HANDOFF is already M15-confirmed, so its persisted
+    lifecycle begins as REACTION_CONFIRMED even though the remote context core was
+    intentionally not touched. This function never creates a zone or an order.
+    """
+    if not SETTINGS.paper_only or authority not in EXECUTION_AUTHORITIES:
+        return None
+    zone = next((z for z in analysis.zones if z.zone_id == zone_id and z.state == ZoneState.ACTIVE), None)
+    if zone is None:
+        return None
+
+    ensure_execution_ownership_schema()
+    key = _zone_reaction_key(zone)
+    now = int(snapshot.sent_at)
+    anchor = float(anchor_price or snapshot.mid)
+    liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
+    with connect() as db:
+        row = db.execute("SELECT * FROM zone_reactions WHERE reaction_key=?", (key,)).fetchone()
+        if row is None:
+            return None
+        if int(row["invalidated_at"] or 0) or int(row["objective_complete_at"] or 0):
+            return None
+        status = str(row["status"] or "ARMED")
+        if status not in ACTIVE_THESIS_STATUSES and not (liquidity_authority and status == "ARMED"):
+            return None
+
+        db.execute(
+            """
+            UPDATE zone_reactions SET
+                ownership_acquired_at=CASE WHEN ownership_acquired_at=0 THEN ? ELSE ownership_acquired_at END,
+                ownership_authority=CASE WHEN ownership_authority='' THEN ? ELSE ownership_authority END,
+                ownership_analysis_id=CASE WHEN ownership_analysis_id='' THEN ? ELSE ownership_analysis_id END,
+                ownership_anchor_price=CASE WHEN ownership_anchor_price<=0 THEN ? ELSE ownership_anchor_price END,
+                reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
+                status=CASE WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED' ELSE status END,
+                last_reason=?,last_seen_at=?
+            WHERE reaction_key=?
+            """,
+            (
+                now, authority, analysis.analysis_id, anchor,
+                1 if liquidity_authority else 0, now,
+                1 if liquidity_authority else 0,
+                f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
+            ),
+        )
+        refreshed = db.execute("SELECT * FROM zone_reactions WHERE reaction_key=?", (key,)).fetchone()
+    if refreshed is None:
+        return None
+    owner = dict(refreshed)
+    policy = dict(analysis.execution_policy or {})
+    policy["active_thesis"] = _owner_meta(owner, zone)
+    analysis.execution_policy = policy
+    zone.notes = [
+        f"thesis_owner:{zone.original_direction.value}:{owner.get('status','INTERACTING')}",
+        *[n for n in zone.notes if not str(n).startswith("thesis_owner:")],
+    ]
+    analysis.trader_brief += (
+        f" Execution ownership acquired by {authority} for {zone.original_direction.value} {zone.zone_id}; "
+        "ordinary WATCH interaction alone cannot create this lock."
+    )
+    return owner
+
+
+def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
+    """Give a previously acquired live thesis precedence over newly ranked opposite zones."""
+    if not SETTINGS.paper_only:
+        return None
+
+    owner = _active_owner_row(int(snapshot.sent_at))
+    policy = dict(analysis.execution_policy or {})
+
+    if owner is None:
+        policy["active_thesis"] = {
+            "contract": THESIS_OWNERSHIP_CONTRACT,
+            "locked": False,
+            "reason": "NO_ACQUIRED_NONTERMINAL_THESIS",
+            "interaction_alone_never_locks": True,
+        }
+        analysis.execution_policy = policy
+        return None
+
+    previous_selected = analysis.selected_zone_id
+    owner_zone = next((z for z in analysis.zones if _matches_owner(z, owner)), None)
+    status = str(owner.get("status") or "INTERACTING")
+    direction = str(owner.get("direction") or Direction.NEUTRAL.value)
+
+    policy["active_thesis"] = _owner_meta(owner, owner_zone)
     analysis.execution_policy = policy
 
     if owner_zone is None:
-        # Fail closed. Do not allow an unrelated opposite map zone to become the
-        # execution owner while the persisted thesis is still alive.
         analysis.selected_zone_id = ""
         analysis.approved = False
         if "ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP" not in analysis.guards:
             analysis.guards.append("ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP")
         analysis.trader_brief += (
-            f" Active thesis lock={direction} ({status}). Its original institutional zone is not "
-            "currently republished, so opposite-side execution is blocked until fresh requalification "
-            "or lifecycle invalidation/objective completion."
+            f" Active acquired thesis lock={direction} ({status}, {owner.get('ownership_authority','')}). "
+            "Its institutional context zone is not currently republished, so opposite-side execution is "
+            "blocked until lifecycle release or safe requalification."
         )
         return None
 
@@ -219,13 +294,13 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
 
     if previous_selected and previous_selected != owner_zone.zone_id:
         analysis.trader_brief += (
-            f" Active thesis lock={direction} ({status}) on {owner_zone.zone_id}; "
+            f" Active acquired thesis lock={direction} ({status}) on {owner_zone.zone_id}; "
             f"newly ranked {previous_selected} remains map/context only and has no M1 authority until "
-            "the active thesis is invalidated or completes its deepest liquidity objective."
+            "the acquired thesis is invalidated or completes its deepest liquidity objective."
         )
     else:
         analysis.trader_brief += (
-            f" Active thesis lock={direction} ({status}) on {owner_zone.zone_id}; same-direction M1 "
+            f" Active acquired thesis lock={direction} ({status}) on {owner_zone.zone_id}; same-direction M1 "
             "confirmation remains mandatory and opposite-side execution is blocked."
         )
     return owner_zone
