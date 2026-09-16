@@ -18,7 +18,11 @@ from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
 from .thesis_hard_release import hard_release_stale_thesis
-from .thesis_ownership_policy import apply_thesis_ownership, install_thesis_ai_contract
+from .thesis_ownership_policy import (
+    acquire_execution_ownership,
+    apply_thesis_ownership,
+    install_thesis_ai_contract,
+)
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_reaction_lifecycle import (
     attach_lifecycle,
@@ -78,9 +82,48 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
         "risk_multiplier": risk_multiplier,
         "paper_only": True,
         "full_m1_sequence_required": authority != "NONE",
+        "ownership_acquired": False,
     }
     a.execution_policy = policy
     return authority
+
+
+def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: dict) -> tuple[str, dict | None]:
+    """Persist thesis lock only after the handoff survives all current cloud gates."""
+    if authority == "NONE" or not bool(a.approved):
+        return authority, None
+
+    policy = dict(a.execution_policy or {})
+    auth_meta = dict(policy.get("execution_authority") or {})
+    zone_id = str(auth_meta.get("zone_id") or a.selected_zone_id or "")
+    anchor = (
+        float(liquidity_handoff.get("liquidity_price") or s.mid)
+        if authority == "LIQUIDITY_REVERSAL_HANDOFF"
+        else float(s.mid)
+    )
+    owner = acquire_execution_ownership(a, s, authority, zone_id, anchor)
+    policy = dict(a.execution_policy or {})
+    auth_meta = dict(policy.get("execution_authority") or auth_meta)
+    if owner is None:
+        attempted = authority
+        auth_meta["authority"] = "NONE"
+        auth_meta["attempted_authority"] = attempted
+        auth_meta["ownership_acquired"] = False
+        auth_meta["ownership_acquisition_failed"] = True
+        policy["execution_authority"] = auth_meta
+        a.execution_policy = policy
+        a.approved = False
+        if "EXECUTION_OWNERSHIP_ACQUIRE_FAILED" not in a.guards:
+            a.guards.append("EXECUTION_OWNERSHIP_ACQUIRE_FAILED")
+        a.trader_brief += " Execution handoff failed closed because persistent thesis ownership could not be acquired."
+        return "NONE", None
+
+    auth_meta["ownership_acquired"] = True
+    auth_meta["ownership_reaction_key"] = str(owner.get("reaction_key") or "")
+    auth_meta["ownership_acquired_at"] = int(owner.get("ownership_acquired_at") or 0)
+    policy["execution_authority"] = auth_meta
+    a.execution_policy = policy
+    return authority, owner
 
 
 async def run_analysis(reason: str = "MANUAL") -> Analysis:
@@ -106,17 +149,16 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     apply_liquidity_objective_policy(a, s)
     primary_zones = list(a.zones)
 
-    # IMPORTANT ORDERING: thesis ownership depends on the persisted lifecycle.
+    # Lifecycle records all institutional reactions, but an interaction alone no
+    # longer creates execution ownership. Existing pre-v6.5.20 rows migrate with
+    # ownership_acquired_at=0 and therefore cannot inherit a stale execution lock.
     if SETTINGS.paper_only:
         register_analysis_zones(a)
         update_zone_reactions(s)
-        # Emergency lifecycle hygiene only. This can RELEASE a stale owner after
-        # unequivocal stored-zone invalidation; it never creates a new trade.
         hard_release_stale_thesis(s)
 
-    # A non-terminal interacted thesis owns execution direction. Opposite zones
-    # remain visible context but cannot steal M1 authority until the live thesis is
-    # invalidated or reaches its deepest planned liquidity objective.
+    # Only a thesis that previously acquired an explicit execution handoff may
+    # block the opposite side. Ordinary WATCH/INTERACTING lifecycle records do not.
     thesis_owner = apply_thesis_ownership(a, s)
 
     # Authority 1: normal HTF tactical-core handoff.
@@ -124,7 +166,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
 
     # Authority 2: confirmed structural-liquidity reversal before the remote HTF
     # core. This does NOT promote liquidity into a zone and is disabled whenever a
-    # live thesis still owns execution.
+    # previously acquired live thesis still owns execution.
     liquidity_handoff = (
         apply_liquidity_reversal_handoff(a, s)
         if ready_zone is None
@@ -146,7 +188,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
                 a.trader_brief += " AI execution validation: " + summary
         elif selected:
             if thesis_owner is not None:
-                a.trader_brief += " AI validation: active institutional thesis retained; execution waits for same-direction handoff confirmation."
+                a.trader_brief += " AI validation: acquired institutional thesis retained; execution waits for same-direction handoff confirmation."
             else:
                 a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for HTF core or confirmed liquidity-reversal handoff."
         else:
@@ -194,6 +236,10 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         else:
             a.trader_brief += " AI validation unavailable; prompt zones remain analysis-only locations."
 
+    # Final ownership acquisition occurs only after deterministic handoff plus the
+    # current cloud approval path (or the explicit PAPER-only AI outage fallback).
+    authority, ownership_row = _acquire_final_ownership(a, s, authority, liquidity_handoff)
+
     # save_analysis re-registers idempotently; the pre-registration above is only
     # to make lifecycle truth available before ownership/M1 selection in this run.
     save_analysis(a)
@@ -209,7 +255,8 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
-        f"authority={authority} paper_m1_ready={bool(ready_zone)} liquidity_handoff={bool(liquidity_handoff.get('active'))} "
+        f"authority={authority} ownership_acquired={bool(ownership_row)} "
+        f"paper_m1_ready={bool(ready_zone)} liquidity_handoff={bool(liquidity_handoff.get('active'))} "
         f"prompt_zone_engine=2026_09_14_v659 regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
