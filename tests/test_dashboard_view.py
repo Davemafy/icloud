@@ -44,10 +44,40 @@ def test_read_only_map_execution_context_is_injected_without_execution_calls():
     assert "OrderSend" not in cleaned
 
 
+def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
+    html = (
+        '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div>'
+        '<div class="muted">Process checklist — not a prediction.</div></div>'
+        '<div id="checks"></div>'
+        '<h2>Live trading journal</h2>'
+        '</body>'
+    )
+
+    cleaned = compact_dashboard_html(html)
+
+    assert "HTF setup quality" in cleaned
+    assert 'id="htfScore"' in cleaned
+    assert "Execution readiness" in cleaned
+    assert 'id="executionMeta"' in cleaned
+    assert "WAITING FOR LOCATION" in cleaned
+    assert "M1 HANDOFF READY" in cleaned
+    assert "SAFETY BLOCKED" in cleaned
+    assert "HTF location/source quality only" in cleaned
+    assert "Sequence EA still applies its normal sweep" in cleaned
+    assert "/mt5/plan" not in cleaned
+    assert "OrderSend" not in cleaned
+
+
 def test_dashboard_transform_is_idempotent():
-    html = '<h2>Live trading journal</h2></body>'
+    html = (
+        '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div>'
+        '<div class="muted">Process checklist — not a prediction.</div></div>'
+        '<h2>Live trading journal</h2></body>'
+    )
     once = compact_dashboard_html(html)
     twice = compact_dashboard_html(once)
 
     assert twice.count('id="journalContext"') == 1
     assert twice.count('id="journal-context-readonly-script"') == 1
+    assert twice.count('id="htfScore"') == 1
+    assert twice.count('id="executionMeta"') == 1
