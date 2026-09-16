@@ -8,11 +8,16 @@ from .db import audit, latest_analysis, latest_snapshot, save_analysis
 from .execution_models import build_execution_overlay, regime_brief
 from .institutional_two_zone import build_prompt_analysis
 from .liquidity_objective_policy import apply_liquidity_objective_policy
+from .liquidity_reversal_handoff import (
+    apply_liquidity_reversal_handoff,
+    install_liquidity_reversal_ai_contract,
+)
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
+from .thesis_hard_release import hard_release_stale_thesis
 from .thesis_ownership_policy import apply_thesis_ownership, install_thesis_ai_contract
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_reaction_lifecycle import (
@@ -32,6 +37,7 @@ install_zone_geometry_policy()
 install_prompt_market_side_policy()
 install_prompt_intraday_selection()
 install_thesis_ai_contract()
+install_liquidity_reversal_ai_contract()
 
 
 def _stamp_prompt_selection_contract(a: Analysis) -> None:
@@ -51,6 +57,30 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
     zone_map["nearer_valid_a_zone_can_outrank_remote_fresher_a_zone"] = True
     policy["public_zone_map"] = zone_map
     a.execution_policy = policy
+
+
+def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict) -> str:
+    authority = "NONE"
+    zone_id = ""
+    risk_multiplier = 1.0
+    if ready_zone is not None and a.selected_zone_id == ready_zone.zone_id:
+        authority = "HTF_CORE_HANDOFF"
+        zone_id = ready_zone.zone_id
+    elif bool(liquidity_handoff.get("active")):
+        authority = "LIQUIDITY_REVERSAL_HANDOFF"
+        zone_id = str(liquidity_handoff.get("context_zone_id") or "")
+        risk_multiplier = float(liquidity_handoff.get("risk_multiplier") or 0.50)
+
+    policy = dict(a.execution_policy or {})
+    policy["execution_authority"] = {
+        "authority": authority,
+        "zone_id": zone_id,
+        "risk_multiplier": risk_multiplier,
+        "paper_only": True,
+        "full_m1_sequence_required": authority != "NONE",
+    }
+    a.execution_policy = policy
+    return authority
 
 
 async def run_analysis(reason: str = "MANUAL") -> Analysis:
@@ -77,21 +107,30 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     primary_zones = list(a.zones)
 
     # IMPORTANT ORDERING: thesis ownership depends on the persisted lifecycle.
-    # Register this analysis first, then replay the CURRENT snapshot through the
-    # lifecycle before choosing an execution owner. Without this, a fresh service
-    # startup could publish SELL, then only afterwards record that the BUY core was
-    # already interacting. That one-analysis lag is exactly what v6.5.10 removes.
     if SETTINGS.paper_only:
         register_analysis_zones(a)
         update_zone_reactions(s)
+        # Emergency lifecycle hygiene only. This can RELEASE a stale owner after
+        # unequivocal stored-zone invalidation; it never creates a new trade.
+        hard_release_stale_thesis(s)
 
     # A non-terminal interacted thesis owns execution direction. Opposite zones
     # remain visible context but cannot steal M1 authority until the live thesis is
     # invalidated or reaches its deepest planned liquidity objective.
     thesis_owner = apply_thesis_ownership(a, s)
 
-    # PAPER_ONLY handoff: M1 only times entry after price reaches a qualified HTF core.
+    # Authority 1: normal HTF tactical-core handoff.
     ready_zone = promote_watch_to_m1_ready(a, s)
+
+    # Authority 2: confirmed structural-liquidity reversal before the remote HTF
+    # core. This does NOT promote liquidity into a zone and is disabled whenever a
+    # live thesis still owns execution.
+    liquidity_handoff = (
+        apply_liquidity_reversal_handoff(a, s)
+        if ready_zone is None
+        else {"active": False, "authority": "NONE", "reason": "HTF_CORE_HANDOFF_HAS_PRIORITY"}
+    )
+    authority = _stamp_execution_authority(a, ready_zone, liquidity_handoff)
 
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
@@ -100,20 +139,16 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         ok, summary, risks, provider = await validate_with_ai(a, s)
         a.ai_provider = provider
         selected = bool(a.selected_zone_id)
-        execution_selected = bool(
-            ready_zone is not None
-            and a.selected_zone_id
-            and ready_zone.zone_id == a.selected_zone_id
-        )
+        execution_selected = bool(authority != "NONE" and selected)
         a.ai_approved = bool(ok and execution_selected)
         if execution_selected:
             if summary:
                 a.trader_brief += " AI execution validation: " + summary
         elif selected:
             if thesis_owner is not None:
-                a.trader_brief += " AI validation: active institutional thesis retained; execution waits for same-direction M1_READY confirmation."
+                a.trader_brief += " AI validation: active institutional thesis retained; execution waits for same-direction handoff confirmation."
             else:
-                a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for core interaction/M1_READY."
+                a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for HTF core or confirmed liquidity-reversal handoff."
         else:
             a.trader_brief += " AI validation: no executable prompt zone is selected; weaker/context zones may remain visible."
         if risks:
@@ -128,27 +163,40 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             now,
             "analysis.ai",
             f"reason={reason} provider={provider} approved={a.ai_approved} "
-            f"selected={selected} execution_selected={execution_selected} "
+            f"selected={selected} execution_selected={execution_selected} authority={authority} "
             f"thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
-            f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14_v659 risks={risks}",
+            f"paper_m1_ready={bool(ready_zone)} liquidity_handoff={bool(liquidity_handoff.get('active'))} "
+            f"primary_zones={len(primary_zones)} prompt_zone_engine=2026_09_14_v659 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
         a.ai_provider = "ERROR"
         a.ai_approved = False
-        if a.selected_zone_id:
+        execution_selected = bool(authority != "NONE" and a.selected_zone_id)
+        if execution_selected and SETTINGS.paper_only:
+            # PAPER research must not become structurally deadlocked by an external
+            # AI-provider outage. Deterministic handoff + MT5 M1 sequence remain the
+            # authority; all spread/news/snapshot/risk/target guards remain intact.
+            a.approved = True
+            policy = dict(a.execution_policy or {})
+            policy["paper_ai_fallback"] = {
+                "active": True,
+                "reason": "AI_PROVIDER_UNAVAILABLE",
+                "authority": authority,
+                "real_money_allowed": False,
+            }
+            a.execution_policy = policy
+            a.guards.append("AI_PROVIDER_UNAVAILABLE_ADVISORY_PAPER_ONLY")
+            a.trader_brief += " AI provider unavailable; PAPER deterministic execution authority remains active for research only."
+        elif a.selected_zone_id:
             a.approved = False
-            if ready_zone is not None:
-                a.guards.append("AI_PROVIDER_UNAVAILABLE")
+            a.guards.append("AI_PROVIDER_UNAVAILABLE")
         else:
             a.trader_brief += " AI validation unavailable; prompt zones remain analysis-only locations."
 
     # save_analysis re-registers idempotently; the pre-registration above is only
     # to make lifecycle truth available before ownership/M1 selection in this run.
     save_analysis(a)
-    # Attach persisted reaction history after registration so the API response and
-    # dashboard can show successful zones even after a later map reselects them.
     attach_lifecycle(a)
     if SETTINGS.ml_data_enabled:
         try:
@@ -161,16 +209,12 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
-        f"paper_m1_ready={bool(ready_zone)} prompt_zone_engine=2026_09_14_v659 "
-        f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
+        f"authority={authority} paper_m1_ready={bool(ready_zone)} liquidity_handoff={bool(liquidity_handoff.get('active'))} "
+        f"prompt_zone_engine=2026_09_14_v659 regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
 
 
 def active_analysis() -> Analysis | None:
-    # Newest market analysis is always the base map. Lifecycle is attached
-    # dynamically for display/history. Execution ownership itself is refreshed by
-    # run_analysis whenever lifecycle state/core interaction changes (scheduler),
-    # so we do not create an AI-bypassing executable handoff inside this accessor.
     a = latest_analysis(ai_required=False)
     return attach_lifecycle(a) if a is not None else None
