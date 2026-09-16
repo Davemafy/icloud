@@ -1,6 +1,6 @@
 #property strict
 #property version "1.35"
-#property description "DEMO/PAPER telemetry bridge with visible snapshots, map status, and visual-only core/envelope zone shading."
+#property description "DEMO/PAPER telemetry bridge with visible snapshots, map status, and V659 professional core/envelope zone shading."
 
 #define OnInit TZ_BridgeCore_OnInit
 #define OnDeinit TZ_BridgeCore_OnDeinit
@@ -15,6 +15,7 @@
 
 #define TZ_BRIDGE_VERSION "1.35"
 #define TZ_SEQUENCE_EXPECTED "3.25"
+#define TZ_ZONE_RENDER_CONTRACT "V659"
 
 input bool LogSuccessfulSnapshots=true;
 input int RetryAfterStaleSeconds=90;
@@ -151,13 +152,13 @@ void TZ_SendHeartbeatV134()
       "{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_DataBridge\",\"version\":\"%s\",\"symbol\":\"%s\",\"account_login\":%I64d,"
       "\"details\":{\"dxy\":\"%s\",\"journal_sync\":true,\"sequence_magic\":%I64d,\"sequence_expected_version\":\"%s\","
       "\"sequence_open_positions\":%d,\"paper_only\":true,\"snapshot_logging\":true,\"map_sync\":true,\"map_count\":%d,"
-      "\"map_sell_state\":\"%s\",\"map_buy_state\":\"%s\",\"last_snapshot_success\":%I64d,\"consecutive_failures\":%d,"
+      "\"map_sell_state\":\"%s\",\"map_buy_state\":\"%s\",\"zone_render_contract\":\"%s\",\"last_snapshot_success\":%I64d,\"consecutive_failures\":%d,"
       "\"updater_version\":\"%s\",\"stable_release\":\"%s\",\"installed_bridge_version\":\"%s\","
       "\"installed_sequence_version\":\"%s\",\"desired_bridge_version\":\"%s\",\"desired_sequence_version\":\"%s\","
       "\"pending_reload\":\"%s\",\"update_result\":\"%s\",\"last_action\":\"%s\"}}",
       (long)TimeTradeServer(),TZ_BRIDGE_VERSION,JsonEscape(XauSymbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),
       JsonEscape(DxySymbol),(long)SequenceMagicNumber,TZ_SEQUENCE_EXPECTED,openCount,g_tzMapCount,
-      JsonEscape(g_tzSellState),JsonEscape(g_tzBuyState),(long)g_tzLastSnapshotSuccess,g_tzSnapshotFailures,
+      JsonEscape(g_tzSellState),JsonEscape(g_tzBuyState),TZ_ZONE_RENDER_CONTRACT,(long)g_tzLastSnapshotSuccess,g_tzSnapshotFailures,
       JsonEscape(updater),JsonEscape(stable),JsonEscape(installedBridge),JsonEscape(installedSequence),
       JsonEscape(desiredBridge),JsonEscape(desiredSequence),JsonEscape(pending),JsonEscape(updateResult),JsonEscape(lastAction)
    );
@@ -176,7 +177,7 @@ void TZ_LogSnapshot(bool ok,string tag)
    if(ok)
    {
       if(LogSuccessfulSnapshots)
-         Print("AITS Bridge | SNAPSHOT OK | v",TZ_BRIDGE_VERSION," | tag=",tag," | spread=",DoubleToString(spread,1),"pt | failures=0 | map=",g_tzMapCount);
+         Print("AITS Bridge | SNAPSHOT OK | v",TZ_BRIDGE_VERSION," | zone-render=",TZ_ZONE_RENDER_CONTRACT," | tag=",tag," | spread=",DoubleToString(spread,1),"pt | failures=0 | map=",g_tzMapCount);
    }
    else
       Print("AITS Bridge | SNAPSHOT FAILED | v",TZ_BRIDGE_VERSION," | tag=",tag," | failures=",g_tzSnapshotFailures);
@@ -224,7 +225,7 @@ int OnInit()
    TZR_RefreshAndRender();
    TZ_WriteBridgeState();
    TZ_SendHeartbeatV134();
-   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: visible snapshots + synchronized map status + visual-only core/envelope shading.");
+   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: visible snapshots + synchronized map status + ",TZ_ZONE_RENDER_CONTRACT," professional core/envelope shading.");
    return INIT_SUCCEEDED;
 }
 
