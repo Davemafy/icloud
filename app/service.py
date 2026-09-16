@@ -131,7 +131,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             f"selected={selected} execution_selected={execution_selected} "
             f"thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
             f"paper_m1_ready={bool(ready_zone)} primary_zones={len(primary_zones)} "
-            f"prompt_zone_engine=2026_09_14_v658 risks={risks}",
+            f"prompt_zone_engine=2026_09_14_v659 risks={risks}",
         )
     except Exception as exc:
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
@@ -161,7 +161,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         "analysis.completed",
         f"reason={reason} id={a.analysis_id} approved={a.approved} zones={len(a.zones)} "
         f"selected={a.selected_zone_id or 'NONE'} thesis_owner={getattr(thesis_owner, 'zone_id', '') or 'NONE'} "
-        f"paper_m1_ready={bool(ready_zone)} prompt_zone_engine=2026_09_14_v658 "
+        f"paper_m1_ready={bool(ready_zone)} prompt_zone_engine=2026_09_14_v659 "
         f"regime={overlay['regime']['name']} ml_data={SETTINGS.ml_data_enabled}",
     )
     return a
