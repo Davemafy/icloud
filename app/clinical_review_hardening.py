@@ -10,7 +10,7 @@ qualification, AI approval, risk sizing, order placement, or Sequence EA logic.
 import csv
 import io
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Callable
 
 from .config import SETTINGS
 
@@ -32,12 +32,9 @@ _AUDIT_CARD = (
     '<h3>Selected-zone audit <span class="pill paper">READ ONLY</span></h3>'
     '<div id="selectedZoneAudit" class="note">Waiting for selected-zone audit data…</div>'
     '<p class="note"><b>Version domains:</b> Cloud application versions and MT5 stable-package '
-    'releases are separate namespaces. Different numbers do not indicate a version mismatch. '</n    '</p>'
+    'releases are separate namespaces. Different numbers do not indicate a version mismatch.</p>'
     '</div>'
 )
-
-# Python string concatenation above cannot contain a stray HTML-style closing token.
-_AUDIT_CARD = _AUDIT_CARD.replace("'</n    '", "")
 
 _AUDIT_SCRIPT = r'''
 <script id="clinical-review-readonly-script">
@@ -148,8 +145,6 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
             g["last_ts"] = ts
             if setup:
                 g["setup"] = setup
-                if not g.get("display_id") or g.get("display_id") == "TRADE":
-                    g["display_id"] = setup
             if d.get("direction"):
                 g["direction"] = d["direction"]
             if d.get("grade"):
@@ -163,6 +158,8 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
             if position_id not in (None, "", 0, "0"):
                 g["position_id"] = position_id
                 g["display_id"] = f"{g.get('setup') or 'TRADE'} · POS {position_id}"
+            elif setup:
+                g["display_id"] = setup
 
             if event == "ENTRY_OPENED":
                 g["status"] = "OPEN"
@@ -202,11 +199,16 @@ def _performance_summary_factory(journal) -> Callable[[], dict]:
         wins = [x for x in closed if float(x.get("pnl") or 0.0) > 0]
         now = int(datetime.now(timezone.utc).timestamp())
         last_7d = [x for x in closed if int(x.get("exit_ts") or 0) >= now - 7 * 86400]
-        observations = [x for x in journal.recent_feedback(5000) if str(x.get("event") or "").upper() == "ML_CANDIDATE"]
-        unique_observations = set()
+        observations = [
+            x for x in journal.recent_feedback(5000)
+            if str(x.get("event") or "").upper() == "ML_CANDIDATE"
+        ]
+        unique_observations: set[str] = set()
         for row in observations:
             d = journal.parse_details(row.get("details"))
-            unique_observations.add(str(d.get("candidate_id") or row.get("id") or ""))
+            candidate_id = str(d.get("candidate_id") or "")
+            if candidate_id:
+                unique_observations.add(candidate_id)
 
         return {
             "paper_only": SETTINGS.paper_only,
@@ -234,22 +236,39 @@ def _export_csv_factory(journal) -> Callable[[], str]:
     def export_csv_text() -> str:
         rows = journal.build_trades()
         cols = [
-            "trade_id", "display_id", "position_id", "analysis_id", "zone_id",
-            "setup", "direction", "grade", "status", "entry_ts", "exit_ts",
-            "entry_price", "exit_price", "volume", "pnl", "mfe_r", "mae_r",
-            "bridge_version", "sequence_version", "cloud_version", "last_event",
+            "trade_id",
+            "display_id",
+            "position_id",
+            "analysis_id",
+            "zone_id",
+            "setup",
+            "direction",
+            "grade",
+            "status",
+            "entry_ts",
+            "exit_ts",
+            "entry_price",
+            "exit_price",
+            "volume",
+            "pnl",
+            "mfe_r",
+            "mae_r",
+            "bridge_version",
+            "sequence_version",
+            "cloud_version",
+            "last_event",
         ]
         out = io.StringIO()
-        w = csv.DictWriter(out, fieldnames=cols, extrasaction="ignore")
-        w.writeheader()
+        writer = csv.DictWriter(out, fieldnames=cols, extrasaction="ignore")
+        writer.writeheader()
         for row in rows:
-            w.writerow(row)
+            writer.writerow(row)
         return out.getvalue()
 
     return export_csv_text
 
 
-def _component_status_factory(journal, original: Callable[[], dict]) -> Callable[[], dict]:
+def _component_status_factory(original: Callable[[], dict]) -> Callable[[], dict]:
     def component_status() -> dict:
         status = original()
         components = status.get("components", {})
@@ -273,7 +292,7 @@ def _component_status_factory(journal, original: Callable[[], dict]) -> Callable
     return component_status
 
 
-def _system_status_factory(journal, original: Callable[[], dict]) -> Callable[[], dict]:
+def _system_status_factory(original: Callable[[], dict]) -> Callable[[], dict]:
     def system_status() -> dict:
         status = original()
         age = status.get("snapshot_age_seconds")
@@ -284,13 +303,20 @@ def _system_status_factory(journal, original: Callable[[], dict]) -> Callable[[]
         )
         if isinstance(age, (int, float)) and age < -60:
             alerts = list(status.get("alerts") or [])
-            alerts.append({
-                "level": "AMBER",
-                "code": "SNAPSHOT_CLOCK_SKEW",
-                "message": "MT5 snapshot source timestamp is materially ahead of cloud UTC; verify MT5/server clock basis.",
-            })
+            alerts.append(
+                {
+                    "level": "AMBER",
+                    "code": "SNAPSHOT_CLOCK_SKEW",
+                    "message": (
+                        "MT5 snapshot source timestamp is materially ahead of cloud UTC; "
+                        "verify MT5/server clock basis."
+                    ),
+                }
+            )
             status["alerts"] = alerts
-        status["healthy"] = not any(x.get("level") == "RED" for x in status.get("alerts", []))
+        status["healthy"] = not any(
+            item.get("level") == "RED" for item in status.get("alerts", [])
+        )
         return status
 
     return system_status
@@ -329,8 +355,8 @@ def install_clinical_review_hardening() -> None:
     if _INSTALLED:
         return
 
-    from . import journal
     from . import dashboard_view
+    from . import journal
 
     original_component_status = journal.component_status
     original_system_status = journal.system_status
@@ -339,8 +365,8 @@ def install_clinical_review_hardening() -> None:
     journal.build_trades = _build_trades_factory(journal)
     journal.performance_summary = _performance_summary_factory(journal)
     journal.export_csv_text = _export_csv_factory(journal)
-    journal.component_status = _component_status_factory(journal, original_component_status)
-    journal.system_status = _system_status_factory(journal, original_system_status)
+    journal.component_status = _component_status_factory(original_component_status)
+    journal.system_status = _system_status_factory(original_system_status)
     dashboard_view.compact_dashboard_html = _dashboard_factory(original_dashboard)
 
     _INSTALLED = True
