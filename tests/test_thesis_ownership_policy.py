@@ -64,6 +64,10 @@ def _owner() -> dict:
         "invalidated_at": 0,
         "best_price": 104.0,
         "mfe_price": 3.0,
+        "ownership_acquired_at": 9050,
+        "ownership_authority": "HTF_CORE_HANDOFF",
+        "ownership_analysis_id": "A0",
+        "ownership_anchor_price": 100.0,
     }
 
 
@@ -88,6 +92,7 @@ def test_live_buy_thesis_overrides_new_sell_ranking(monkeypatch):
     assert meta["locked"] is True
     assert meta["direction"] == "BUY"
     assert meta["opposite_execution_blocked"] is True
+    assert meta["ownership_authority"] == "HTF_CORE_HANDOFF"
     assert meta["continuation_authority"] is True
     assert "thesis_owner:BUY:REACTION_CONFIRMED" in buy.notes
 
@@ -129,17 +134,17 @@ def test_no_live_thesis_leaves_normal_selection_unchanged(monkeypatch):
     assert owner is None
     assert analysis.selected_zone_id == "SELL_ZONE"
     assert analysis.execution_policy["active_thesis"]["locked"] is False
+    assert analysis.execution_policy["active_thesis"]["interaction_alone_never_locks"] is True
 
 
-def test_current_snapshot_interaction_locks_owner_before_opposite_selection(tmp_path, monkeypatch):
-    """Regression for v6.5.9 startup ordering: lifecycle must be current before ownership."""
+def test_watch_interaction_does_not_lock_opposite_side_before_execution_handoff(tmp_path, monkeypatch):
+    """A B+/multi-touch WATCH interaction is lifecycle evidence, not execution ownership."""
     path = tmp_path / "thesis_sync.db"
     monkeypatch.setattr(db, "_path", lambda: str(path))
     db.init_db()
 
     buy = _zone("BUY_ZONE", Direction.BUY, 111, Grade.B_PLUS)
     sell = _zone("SELL_ZONE", Direction.SELL, 222, Grade.A_PLUS)
-    # Keep the new SELL map far away while current price is inside the BUY core.
     sell.core_low = 120.0
     sell.core_high = 121.0
     sell.zone_low = 118.0
@@ -159,20 +164,99 @@ def test_current_snapshot_interaction_locks_owner_before_opposite_selection(tmp_
     update_zone_reactions(snap)
     owner = policy.apply_thesis_ownership(analysis, snap)
 
-    assert owner is buy
-    assert analysis.selected_zone_id == "BUY_ZONE"
+    assert owner is None
+    assert analysis.selected_zone_id == "SELL_ZONE"
     meta = analysis.execution_policy["active_thesis"]
-    assert meta["locked"] is True
-    assert meta["direction"] == "BUY"
-    assert meta["status"] == "INTERACTING"
-    assert meta["opposite_execution_blocked"] is True
+    assert meta["locked"] is False
+    assert policy.active_owner_snapshot(snap.sent_at) is None
+
+
+def test_htf_core_handoff_acquires_persistent_owner_then_blocks_opposite_ranking(tmp_path, monkeypatch):
+    path = tmp_path / "thesis_acquire.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    buy = _zone("BUY_ZONE", Direction.BUY, 111, Grade.A_PLUS)
+    sell = _zone("SELL_ZONE", Direction.SELL, 222, Grade.A_PLUS)
+    sell.core_low = 120.0
+    sell.core_high = 121.0
+    sell.zone_low = 118.0
+    sell.zone_high = 123.0
+    snap = _snapshot(100.0)
+    first = Analysis(
+        analysis_id="A_HANDOFF",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.BUY,
+        zones=[buy, sell],
+        selected_zone_id="BUY_ZONE",
+        approved=True,
+        ai_approved=True,
+    )
+
+    register_analysis_zones(first)
+    update_zone_reactions(snap)
+    assert policy.active_owner_snapshot(snap.sent_at) is None
+
+    acquired = policy.acquire_execution_ownership(
+        first, snap, "HTF_CORE_HANDOFF", "BUY_ZONE", anchor_price=100.0
+    )
+    assert acquired is not None
+    assert acquired["ownership_authority"] == "HTF_CORE_HANDOFF"
+    assert int(acquired["ownership_acquired_at"]) == snap.sent_at
+
+    next_analysis = Analysis(
+        analysis_id="A_NEXT",
+        generated_at=10_001,
+        snapshot_at=10_001,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id="SELL_ZONE",
+    )
+    owner_zone = policy.apply_thesis_ownership(next_analysis, snap)
+    assert owner_zone is buy
+    assert next_analysis.selected_zone_id == "BUY_ZONE"
+    assert next_analysis.execution_policy["active_thesis"]["locked"] is True
+
+
+def test_liquidity_reversal_handoff_can_acquire_owner_without_touching_remote_core(tmp_path, monkeypatch):
+    path = tmp_path / "liq_owner.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    sell = _zone("SELL_ZONE", Direction.SELL, 222, Grade.A_PLUS)
+    sell.core_low = 120.0
+    sell.core_high = 121.0
+    sell.zone_low = 118.0
+    sell.zone_high = 123.0
+    sell.original_target1 = 90.0
+    snap = _snapshot(100.0)
+    analysis = Analysis(
+        analysis_id="A_LIQ",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell],
+        selected_zone_id="SELL_ZONE",
+        approved=True,
+    )
+    register_analysis_zones(analysis)
+
+    acquired = policy.acquire_execution_ownership(
+        analysis, snap, "LIQUIDITY_REVERSAL_HANDOFF", "SELL_ZONE", anchor_price=110.0
+    )
+    assert acquired is not None
+    assert acquired["status"] == "REACTION_CONFIRMED"
+    assert int(acquired["core_touched_at"] or 0) == 0
+    assert acquired["ownership_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
+    assert float(acquired["ownership_anchor_price"]) == 110.0
+    assert policy.active_owner_snapshot(snap.sent_at) is not None
 
 
 def test_confirmed_owner_has_separate_broad_and_strict_core_buffers(monkeypatch):
     """Broad refresh must not consume the later strict M1 handoff edge."""
     monkeypatch.setattr(policy, "active_owner_snapshot", lambda now: _owner())
 
-    # Core high=101.00, ATR=2.00. Broad 0.30 ATR buffer=0.60, strict 0.10=0.20.
     broad_only = _snapshot(101.45)
     assert policy.owner_core_interacting(broad_only) is not None
     assert policy.owner_m1_handoff_interacting(broad_only) is None

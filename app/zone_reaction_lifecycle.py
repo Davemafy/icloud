@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from .config import SETTINGS
+from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 from .db import connect
 
-REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V658"
+REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V6520"
 TERMINAL = {"OBJECTIVE_COMPLETE", "INVALIDATED", "INVALIDATED_AFTER_REACTION"}
 
 
@@ -26,9 +27,12 @@ def register_analysis_zones(analysis: Analysis) -> None:
     Before first core interaction, a repeated analysis may refresh geometry/targets.
     Once the core has interacted, the historical geometry and objective ladder are
     frozen so later re-analysis cannot rewrite what the market actually reacted to.
+    Execution ownership is separate and is never acquired merely by registration or
+    interaction.
     """
     if not SETTINGS.paper_only:
         return
+    ensure_execution_ownership_schema()
     with connect() as db:
         for zone in analysis.zones:
             if zone.state != ZoneState.ACTIVE:
@@ -143,9 +147,13 @@ def _favourable_extreme(row: Any, snapshot: MarketSnapshot) -> float:
 
 
 def _mfe(row: Any, best: float) -> float:
+    authority = str(row["ownership_authority"] or "") if "ownership_authority" in row.keys() else ""
+    anchor = float(row["ownership_anchor_price"] or 0.0) if "ownership_anchor_price" in row.keys() else 0.0
+    if authority != "LIQUIDITY_REVERSAL_HANDOFF" or anchor <= 0:
+        anchor = float(row["core_low"] if str(row["direction"]) == Direction.SELL.value else row["core_high"])
     if str(row["direction"]) == Direction.SELL.value:
-        return max(0.0, float(row["core_low"]) - best)
-    return max(0.0, best - float(row["core_high"]))
+        return max(0.0, anchor - best)
+    return max(0.0, best - anchor)
 
 
 def _crossed(direction: str, best: float, target: float) -> bool:
@@ -157,11 +165,15 @@ def _crossed(direction: str, best: float, target: float) -> bool:
 def update_zone_reactions(snapshot: MarketSnapshot) -> None:
     """Advance persisted zone lifecycle from live/closed market evidence.
 
-    A zone can disappear from the current alert map without losing the historical
-    fact that it interacted and produced an institutional reaction.
+    Historical interaction remains independent from execution ownership. A normal
+    WATCH interaction may be recorded and even confirm a reaction without ever
+    gaining the right to block another direction. A liquidity-reversal handoff can
+    own execution without touching the remote context core, so its explicitly
+    acquired/reaction-confirmed lifecycle is still advanced toward objectives.
     """
     if not SETTINGS.paper_only:
         return
+    ensure_execution_ownership_schema()
     now = int(snapshot.sent_at)
     cutoff = now - 7 * 24 * 3600
     with connect() as db:
@@ -188,23 +200,27 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
                 continue
 
             touched_at = int(row["core_touched_at"] or 0)
+            reaction_confirmed_at = int(row["reaction_confirmed_at"] or 0)
+            ownership_acquired_at = int(row["ownership_acquired_at"] or 0)
             if not touched_at and _intersects_core(row, snapshot):
                 touched_at = now
-                status = "INTERACTING"
+                status = "INTERACTING" if not reaction_confirmed_at else status
                 db.execute(
                     "UPDATE zone_reactions SET status=?,core_touched_at=?,last_reason=?,last_seen_at=? WHERE reaction_key=?",
                     (status,now,"TACTICAL_CORE_INTERACTION",now,row["reaction_key"]),
                 )
 
-            if not touched_at:
+            # Normal zone-reaction research starts after core touch. The one
+            # exception is an explicitly acquired liquidity-reversal thesis whose
+            # M15 reaction was already confirmed before the remote core was reached.
+            if not touched_at and not (ownership_acquired_at and reaction_confirmed_at):
                 continue
 
             best = _favourable_extreme(row, snapshot)
             mfe = _mfe(row, best)
             m15_atr = max(float(snapshot.atr_m15 or 0.0), float(snapshot.point or 0.01))
             confirmation_distance = max(0.50 * m15_atr, float(snapshot.point or 0.01) * 100.0)
-            reaction_confirmed_at = int(row["reaction_confirmed_at"] or 0)
-            if not reaction_confirmed_at and mfe >= confirmation_distance:
+            if not reaction_confirmed_at and touched_at and mfe >= confirmation_distance:
                 reaction_confirmed_at = now
                 status = "REACTION_CONFIRMED"
 
@@ -238,7 +254,10 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
                 completed_at = int(row["objective_complete_at"] or 0)
             elif reaction_confirmed_at:
                 status = "REACTION_CONFIRMED"
-                reason = "INSTITUTIONAL_REACTION_CONFIRMED"
+                if str(row["ownership_authority"] or "") == "LIQUIDITY_REVERSAL_HANDOFF" and not touched_at:
+                    reason = "LIQUIDITY_REVERSAL_HANDOFF_REACTION_CONFIRMED"
+                else:
+                    reason = "INSTITUTIONAL_REACTION_CONFIRMED"
                 completed_at = int(row["objective_complete_at"] or 0)
             else:
                 reason = "TACTICAL_CORE_INTERACTION"
@@ -259,6 +278,7 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
 
 
 def lifecycle_summary(limit: int = 20) -> list[dict[str, Any]]:
+    ensure_execution_ownership_schema()
     limit = max(1, min(int(limit), 100))
     with connect() as db:
         rows = db.execute(
@@ -267,8 +287,9 @@ def lifecycle_summary(limit: int = 20) -> list[dict[str, Any]]:
                    direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
                    first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
                    target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
-                   objective_complete_at,invalidated_at,best_price,mfe_price,last_reason
-            FROM zone_reactions ORDER BY COALESCE(reaction_confirmed_at,core_touched_at,first_seen_at) DESC LIMIT ?
+                   objective_complete_at,invalidated_at,best_price,mfe_price,last_reason,
+                   ownership_acquired_at,ownership_authority,ownership_analysis_id,ownership_anchor_price
+            FROM zone_reactions ORDER BY COALESCE(ownership_acquired_at,reaction_confirmed_at,core_touched_at,first_seen_at) DESC LIMIT ?
             """,
             (limit,),
         ).fetchall()
@@ -283,7 +304,9 @@ def attach_lifecycle(analysis: Analysis) -> Analysis:
         "persistence": "SURVIVES_PRIMARY_RESELECTION_AND_ZONE_MAP_REMOVAL",
         "historical_geometry_and_targets_freeze_after_core_interaction": True,
         "zone_validity_independent_of_target_map": True,
-        "reaction_confirmation": "CORE_INTERACTION_THEN_FAVOURABLE_MOVE_AT_LEAST_MAX_0_5_M15_ATR_OR_10_PIPS",
+        "interaction_is_not_execution_ownership": True,
+        "execution_ownership_requires_explicit_handoff": True,
+        "reaction_confirmation": "CORE_INTERACTION_THEN_FAVOURABLE_MOVE_AT_LEAST_MAX_0_5_M15_ATR_OR_10_PIPS_OR_EXPLICIT_LIQUIDITY_REVERSAL_HANDOFF",
         "terminal_states": sorted(TERMINAL),
         "records": records,
     }
