@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from .ai import validate_with_ai
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
+from .dynamic_continuation_zoning import apply_dynamic_continuation_rezone
 from .execution_models import build_execution_overlay, regime_brief
 from .institutional_two_zone import build_prompt_analysis
 from .liquidity_objective_policy import apply_liquidity_objective_policy
@@ -132,8 +133,19 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         raise RuntimeError("No market snapshot available")
     now = int(datetime.now(timezone.utc).timestamp())
 
-    # Single authoritative zoning path: the prompt-driven institutional engine.
+    # Single authoritative base zoning path: the prompt-driven institutional engine.
     a = build_prompt_analysis(s, now)
+    # Preserve the original qualified map as lifecycle/context truth before any
+    # execution-relevance re-ranking. Since v6.5.20, registration/interaction alone
+    # cannot acquire thesis ownership, so this cannot create an execution lock.
+    if SETTINGS.paper_only:
+        register_analysis_zones(a)
+    # PAPER/DEMO ONLY: after a confirmed directional expansion, allow a fresh
+    # displacement/FVG retest with nearby structural liquidity to replace a remote
+    # same-direction primary. Exhausted B+/multi-touch countertrend zones are kept
+    # as lifecycle/context truth but removed from the execution map. An already-
+    # acquired thesis is protected and disables this re-ranking.
+    apply_dynamic_continuation_rezone(a, s)
     # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
     apply_prompt_confirmation_contract(a, s)
     _stamp_prompt_selection_contract(a)
