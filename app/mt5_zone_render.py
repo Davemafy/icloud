@@ -24,11 +24,41 @@ def _int(v: Any) -> str:
         return "0"
 
 
+def _bool01(v: Any) -> str:
+    return "1" if bool(v) else "0"
+
+
 def _readiness(core_method: Any, fallback: Any = "") -> str:
     text = _value(core_method)
     if text:
         return text.split("|", 1)[0]
     return _value(fallback)
+
+
+def _next_objective(thesis: dict[str, Any]) -> float:
+    direction = _value(thesis.get("direction")).upper()
+    try:
+        best = float(thesis.get("best_price") or 0.0)
+    except (TypeError, ValueError):
+        best = 0.0
+
+    for key in ("target1", "target2", "target3"):
+        try:
+            target = float(thesis.get(key) or 0.0)
+        except (TypeError, ValueError):
+            target = 0.0
+        if target <= 0:
+            continue
+        reached = bool(
+            best > 0
+            and (
+                (direction == "SELL" and best <= target)
+                or (direction == "BUY" and best >= target)
+            )
+        )
+        if not reached:
+            return target
+    return 0.0
 
 
 def _secondary_records(policy: dict[str, Any]) -> list[dict[str, Any]]:
@@ -95,13 +125,27 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
 
 
 def mt5_zone_render_text(a: Any) -> str:
-    """Flat render contract for MT5 chart shading.
+    """Flat render contract for MT5 chart shading and execution-ownership labels.
 
-    Visual-only feed: it exposes the already-qualified primary and reserve geometry.
-    It does not create, rank, promote, invalidate, or authorize any zone/trade.
+    Visual-only feed: it exposes the already-qualified primary/reserve geometry
+    plus read-only ownership state. It does not create, rank, promote,
+    invalidate, or authorize any zone/trade.
     """
     if a is None:
-        return "protocol=1\nanalysis_id=\nzone_count=0\nactive_thesis_locked=0\n"
+        return (
+            "protocol=2\n"
+            "analysis_id=\n"
+            "selected_zone_id=\n"
+            "zone_count=0\n"
+            "active_thesis_locked=0\n"
+            "active_thesis_direction=\n"
+            "active_thesis_status=\n"
+            "active_thesis_owner_zone_id=\n"
+            "active_thesis_owner_zone_present=0\n"
+            "active_thesis_opposite_execution_blocked=0\n"
+            "active_thesis_no_chase=0\n"
+            "active_thesis_next_objective=0.00000\n"
+        )
 
     policy = getattr(a, "execution_policy", {}) or {}
     if not isinstance(policy, dict):
@@ -113,6 +157,8 @@ def mt5_zone_render_text(a: Any) -> str:
     thesis_locked = bool(thesis.get("locked", False))
     owner_zone_id = _value(thesis.get("owner_zone_id"))
     owner_direction = _value(thesis.get("direction"))
+    owner_status = _value(thesis.get("status"))
+    selected_zone_id = _value(getattr(a, "selected_zone_id", ""))
 
     records = _primary_records(a, owner_zone_id, thesis_locked)
     primary_ids = {r["id"] for r in records}
@@ -125,13 +171,24 @@ def mt5_zone_render_text(a: Any) -> str:
     records = records[:4]
 
     lines = [
-        "protocol=1",
+        "protocol=2",
         f"analysis_id={_value(getattr(a, 'analysis_id', ''))}",
         f"generated_at={_int(getattr(a, 'generated_at', 0))}",
+        f"selected_zone_id={selected_zone_id}",
         f"zone_count={len(records)}",
-        f"active_thesis_locked={1 if thesis_locked else 0}",
+        f"active_thesis_locked={_bool01(thesis_locked)}",
         f"active_thesis_direction={owner_direction}",
+        f"active_thesis_status={owner_status}",
         f"active_thesis_owner_zone_id={owner_zone_id}",
+        f"active_thesis_owner_zone_present={_bool01(thesis.get('owner_zone_present', bool(owner_zone_id)))}",
+        f"active_thesis_opposite_execution_blocked={_bool01(thesis.get('opposite_execution_blocked', False))}",
+        f"active_thesis_no_chase={_bool01(thesis.get('no_chase', False))}",
+        f"active_thesis_fresh_m1_confirmation_required={_bool01(thesis.get('fresh_m1_confirmation_required', False))}",
+        f"active_thesis_best_price={_num(thesis.get('best_price', 0.0))}",
+        f"active_thesis_target1={_num(thesis.get('target1', 0.0))}",
+        f"active_thesis_target2={_num(thesis.get('target2', 0.0))}",
+        f"active_thesis_target3={_num(thesis.get('target3', 0.0))}",
+        f"active_thesis_next_objective={_num(_next_objective(thesis))}",
     ]
 
     for idx, rec in enumerate(records, start=1):
@@ -150,8 +207,8 @@ def mt5_zone_render_text(a: Any) -> str:
                 f"{p}zone_high={_num(rec.get('zone_high'))}",
                 f"{p}core_low={_num(rec.get('core_low'))}",
                 f"{p}core_high={_num(rec.get('core_high'))}",
-                f"{p}execution_authority={1 if rec.get('execution_authority') else 0}",
-                f"{p}active_thesis={1 if rec.get('active_thesis') else 0}",
+                f"{p}execution_authority={_bool01(rec.get('execution_authority'))}",
+                f"{p}active_thesis={_bool01(rec.get('active_thesis'))}",
             ]
         )
 
