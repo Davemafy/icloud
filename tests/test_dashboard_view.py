@@ -1,7 +1,7 @@
 from app.dashboard_view import compact_dashboard_html
 
 
-def test_execution_contract_panel_is_removed_but_brief_stays():
+def test_execution_contract_panel_is_removed_but_policy_stays_available_read_only():
     html = (
         '<div class="grid" style="margin-top:12px">'
         '<div class="card"><h3>Institutional brief</h3><pre id="brief">Waiting for analysis…</pre></div>'
@@ -20,6 +20,7 @@ def test_execution_contract_panel_is_removed_but_brief_stays():
     assert "Execution contract" not in cleaned
     assert 'id="policy"' not in cleaned
     assert "$('policy')" not in cleaned
+    assert "window.tradeZoneExecutionPolicy=a.execution_policy||{};" in cleaned
 
 
 def test_read_only_map_execution_context_is_injected_without_execution_calls():
@@ -34,10 +35,13 @@ def test_read_only_map_execution_context_is_injected_without_execution_calls():
     cleaned = compact_dashboard_html(html)
 
     assert 'id="journalContext"' in cleaned
+    assert 'id="ownershipState"' in cleaned
     assert "Map / execution ownership" in cleaned
     assert "READ ONLY" in cleaned
     assert 'id="journal-context-readonly-script"' in cleaned
-    assert "No M1-authorized zone is selected" in cleaned
+    assert "EXECUTION OWNER" in cleaned
+    assert "WATCH ONLY • NO M1 AUTHORITY" in cleaned
+    assert "No acquired thesis lock and no M1-authorized zone" in cleaned
     assert "/mt5/plan" not in cleaned
     assert "fetch(" not in cleaned
     assert "WebRequest" not in cleaned
@@ -63,9 +67,21 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert "M1 HANDOFF READY" in cleaned
     assert "SAFETY BLOCKED" in cleaned
     assert "HTF location/source quality only" in cleaned
+    assert "Do not chase the existing move" in cleaned
     assert "Sequence EA still applies its normal sweep" in cleaned
     assert "/mt5/plan" not in cleaned
     assert "OrderSend" not in cleaned
+
+
+def test_freshness_check_is_scoped_to_selected_zone():
+    html = (
+        '<h2>Live trading journal</h2>'
+        "<script>function x(j){const z=j?.zone||{};const labels={fresh_zone:'Fresh zone (0–1 touch)'};}</script>"
+        '</body>'
+    )
+    cleaned = compact_dashboard_html(html)
+    assert "z.zone_id+' freshness (0–1 touch)'" in cleaned
+    assert "Selected-zone freshness (0–1 touch)" in cleaned
 
 
 def test_dashboard_transform_is_idempotent():
@@ -78,6 +94,7 @@ def test_dashboard_transform_is_idempotent():
     twice = compact_dashboard_html(once)
 
     assert twice.count('id="journalContext"') == 1
+    assert twice.count('id="ownershipState"') == 1
     assert twice.count('id="journal-context-readonly-script"') == 1
     assert twice.count('id="htfScore"') == 1
     assert twice.count('id="executionMeta"') == 1
