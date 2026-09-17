@@ -2,7 +2,8 @@
 #define TRADEZONE_ZONE_RENDERER_V1_0_MQH
 
 // Visual-only chart renderer. It never sends orders, changes positions, or alters risk.
-// V659 presentation: muted Primary shading and outline-only Reserve context.
+// V659 presentation: muted Primary shading, outline-only Reserve context, and explicit
+// read-only execution-ownership labels so a visible zone cannot be mistaken for authority.
 #define TZR_PREFIX "AITS_ZONE_"
 #define TZR_MAX_ZONES 4
 
@@ -35,6 +36,16 @@ struct TZR_Zone
 TZR_Zone g_tzrZones[TZR_MAX_ZONES];
 int g_tzrZoneCount=0;
 string g_tzrAnalysisId="";
+string g_tzrSelectedZoneId="";
+bool g_tzrThesisLocked=false;
+string g_tzrThesisDirection="";
+string g_tzrThesisStatus="";
+string g_tzrThesisOwnerZoneId="";
+bool g_tzrThesisOwnerPresent=false;
+bool g_tzrOppositeExecutionBlocked=false;
+bool g_tzrNoChase=false;
+bool g_tzrFreshM1Required=false;
+double g_tzrNextObjective=0.0;
 
 string TZR_KV(string text,string key)
 {
@@ -75,6 +86,16 @@ void TZR_Reset()
    for(int i=0;i<TZR_MAX_ZONES;i++)TZR_ResetOne(i);
    g_tzrZoneCount=0;
    g_tzrAnalysisId="";
+   g_tzrSelectedZoneId="";
+   g_tzrThesisLocked=false;
+   g_tzrThesisDirection="";
+   g_tzrThesisStatus="";
+   g_tzrThesisOwnerZoneId="";
+   g_tzrThesisOwnerPresent=false;
+   g_tzrOppositeExecutionBlocked=false;
+   g_tzrNoChase=false;
+   g_tzrFreshM1Required=false;
+   g_tzrNextObjective=0.0;
 }
 
 bool TZR_ReadFeed()
@@ -84,6 +105,17 @@ bool TZR_ReadFeed()
 
    TZR_Reset();
    g_tzrAnalysisId=TZR_KV(text,"analysis_id");
+   g_tzrSelectedZoneId=TZR_KV(text,"selected_zone_id");
+   g_tzrThesisLocked=(TZR_KV(text,"active_thesis_locked")=="1");
+   g_tzrThesisDirection=TZR_KV(text,"active_thesis_direction");
+   g_tzrThesisStatus=TZR_KV(text,"active_thesis_status");
+   g_tzrThesisOwnerZoneId=TZR_KV(text,"active_thesis_owner_zone_id");
+   g_tzrThesisOwnerPresent=(TZR_KV(text,"active_thesis_owner_zone_present")=="1");
+   g_tzrOppositeExecutionBlocked=(TZR_KV(text,"active_thesis_opposite_execution_blocked")=="1");
+   g_tzrNoChase=(TZR_KV(text,"active_thesis_no_chase")=="1");
+   g_tzrFreshM1Required=(TZR_KV(text,"active_thesis_fresh_m1_confirmation_required")=="1");
+   g_tzrNextObjective=StringToDouble(TZR_KV(text,"active_thesis_next_objective"));
+
    int count=(int)StringToInteger(TZR_KV(text,"zone_count"));
    count=MathMax(0,MathMin(TZR_MAX_ZONES,count));
 
@@ -211,8 +243,16 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
    if(z.grade!="")label+=" | "+z.grade;
    if(z.state!="")label+=" | "+z.state;
    label+=" | T"+IntegerToString(z.touches);
-   if(z.active_thesis)label+=" | ACTIVE THESIS";
-   else if(z.execution_authority)label+=" | EXECUTION";
+   if(z.active_thesis)
+      label+=" | EXECUTION OWNER";
+   else if(reserve)
+      label+=" | CONTEXT ONLY";
+   else if(g_tzrThesisLocked)
+      label+=" | WATCH ONLY | NO M1 AUTHORITY";
+   else if(z.execution_authority)
+      label+=" | EXECUTION";
+   else
+      label+=" | MAP CONTEXT";
    TZR_Label(chart,base+"LBL",left,z.zone_high,label,z.active_thesis?clrGold:core_color);
 }
 
