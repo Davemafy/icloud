@@ -224,7 +224,7 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         "mode": location_mode,
         "core_now": core_now,
         "latched": bool(window),
-        "core_touched_at": int(window.get("core_touched_at") or snapshot.sent_at if core_now else 0),
+        "core_touched_at": int(snapshot.sent_at if core_now else (window.get("core_touched_at") or 0)),
         "expires_at": int(window.get("expires_at") or 0),
         "target1": float(window.get("target1") or selected.original_target1 or 0.0),
         "target1_open": bool(window.get("target1_open", True)),
