@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.7",
+  "release": "6.3.8",
   "repository": "Davemafy/icloud",
-  "ref": "67bf021742006c196914d7d4126dd197ea185d40",
-  "data_bridge_version": "1.35",
+  "ref": "635aefc5b0dcc5ea289248d1efde14afbdabfe4d",
+  "data_bridge_version": "1.36",
   "sequence_ea_version": "3.26",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -52,16 +52,20 @@
     "liquidity_reversal_handoff",
     "stale_thesis_hard_release",
     "paper_ai_outage_advisory_fallback",
-    "liquidity_reversal_reduced_risk"
+    "liquidity_reversal_reduced_risk",
+    "execution_ownership_visualization",
+    "opposite_zone_watch_only_labels",
+    "zone_scoped_journal_checklist",
+    "next_open_thesis_objective_display"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_35_MapStatus.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
       "requires_reload": true,
-      "sha256": "62198d16553c156518a20860e16944b68c4134121d73c48aedbcf2778a5bf9f6"
+      "sha256": "4ee92967ce22664313688536f6433153ac18f5d48a4e2bc8b97fe23e51073a42"
     },
     {
       "role": "sequence_ea",
@@ -87,7 +91,7 @@
       "path": "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh",
       "target": "Include\\TradeZoneCore",
       "target_name": "TradeZone_ZoneRenderer_v1_0.mqh",
-      "sha256": "0e4f5249fec46579ba4e2a086f2e7176827fd48669b10a49f20bb739b6c67917"
+      "sha256": "075d19b0f5b99bfa7ce051f7fcf91a17cc07948f6412e05e9c09ecd9737dfe97"
     },
     {
       "role": "sequence_core",
