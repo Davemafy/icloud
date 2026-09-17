@@ -46,7 +46,16 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis():
             "active_thesis": {
                 "locked": True,
                 "direction": "BUY",
+                "status": "OBJECTIVE_IN_PROGRESS",
                 "owner_zone_id": "BUY_1",
+                "owner_zone_present": True,
+                "opposite_execution_blocked": True,
+                "no_chase": True,
+                "fresh_m1_confirmation_required": True,
+                "best_price": 4305.0,
+                "target1": 4290.0,
+                "target2": 4310.0,
+                "target3": 4330.0,
             },
             "public_zone_map": {
                 "secondary": {
@@ -69,9 +78,14 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis():
     )
 
     d = _kv(mt5_zone_render_text(a))
+    assert d["protocol"] == "2"
     assert d["zone_count"] == "3"
     assert d["active_thesis_locked"] == "1"
     assert d["active_thesis_owner_zone_id"] == "BUY_1"
+    assert d["active_thesis_status"] == "OBJECTIVE_IN_PROGRESS"
+    assert d["active_thesis_opposite_execution_blocked"] == "1"
+    assert d["active_thesis_no_chase"] == "1"
+    assert d["active_thesis_next_objective"] == "4310.00000"
 
     assert d["zone1_id"] == "SELL_1"
     assert d["zone1_role"] == "PRIMARY"
@@ -91,7 +105,33 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis():
     assert d["zone3_core_low"] == "4392.49000"
 
 
+def test_next_objective_uses_best_price_for_sell_progress():
+    sell = _zone("SELL_1", "SELL", 4346.88, 4368.28, 4359.54, 4368.28, "ARMED|PROMPT", "A+", "H4>H1", 100, 0)
+    a = SimpleNamespace(
+        analysis_id="A2",
+        generated_at=300,
+        selected_zone_id="SELL_1",
+        zones=[sell],
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "direction": "SELL",
+                "status": "OBJECTIVE_IN_PROGRESS",
+                "owner_zone_id": "SELL_1",
+                "best_price": 4305.0,
+                "target1": 4341.13,
+                "target2": 4324.68,
+                "target3": 4299.37,
+            }
+        },
+    )
+    d = _kv(mt5_zone_render_text(a))
+    assert d["active_thesis_next_objective"] == "4299.37000"
+
+
 def test_render_feed_empty_without_analysis():
     d = _kv(mt5_zone_render_text(None))
+    assert d["protocol"] == "2"
     assert d["zone_count"] == "0"
     assert d["active_thesis_locked"] == "0"
+    assert d["active_thesis_next_objective"] == "0.00000"
