@@ -1,10 +1,12 @@
+from app import db
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from app.watch_ready import promote_watch_to_m1_ready, watch_zone_ready
+from app.zone_reaction_lifecycle import register_analysis_zones
 
 
-def _snapshot(mid: float = 100.0) -> MarketSnapshot:
+def _snapshot(mid: float = 100.0, ts: int = 1) -> MarketSnapshot:
     return MarketSnapshot(
-        sent_at=1,
+        sent_at=ts,
         bid=mid - 0.1,
         ask=mid + 0.1,
         spread_points=20.0,
@@ -37,11 +39,15 @@ def _zone(
         core_method=f"{readiness}|PRIMARY_TEST",
         location_score=8.0,
         zone_low=95.0,
-        zone_high=101.0,
+        zone_high=105.0,
         touch_count=touches,
         independent_confluence_count=4,
         confluences=["INSTITUTIONAL_DISPLACEMENT", "LIQUIDITY_IN_MARKED_ZONE", required],
         clear_run=8.0,
+        source_ts=777,
+        invalidation_level=105.0 if direction == Direction.SELL else 95.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=90.0 if direction == Direction.SELL else 110.0,
     )
 
 
@@ -100,6 +106,7 @@ def test_promote_sets_selected_zone_and_m1_ready_marker():
     assert a.selected_zone_id == "Z1"
     assert z.core_method.startswith("M1_READY|")
     assert "readiness:M1_READY" in z.notes
+    assert a.execution_policy["execution_window"]["mode"] == "CORE_NOW"
 
 
 def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
@@ -116,6 +123,62 @@ def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
     assert selected is None
     assert a.selected_zone_id == "Z1"
     assert z.core_method.startswith("ARMED|")
+
+
+def test_recent_qualified_core_touch_latches_m1_window_outside_core(tmp_path, monkeypatch):
+    path = tmp_path / "reaction_window.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING", direction=Direction.SELL)
+    a = Analysis(
+        analysis_id="A_WINDOW",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[z],
+        selected_zone_id="Z1",
+    )
+    register_analysis_zones(a)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE zone_reactions SET core_touched_at=?,status='INTERACTING',target1=?,target1_hit_at=0 WHERE reaction_key=?",
+            (1000, 90.0, "SELL|H4>H1|777"),
+        )
+
+    # Price has left the 99.5-100.5 tactical core but TP1 remains meaningfully open.
+    s = _snapshot(97.0, ts=1120)
+    assert watch_zone_ready(z, s) is True
+    selected = promote_watch_to_m1_ready(a, s)
+    assert selected is z
+    assert z.core_method.startswith("M1_READY|REACTION_WINDOW|")
+    window = a.execution_policy["execution_window"]
+    assert window["latched"] is True
+    assert window["micro_may_complete_outside_core"] is True
+    assert window["core_touched_at"] == 1000
+
+
+def test_reaction_window_closes_after_tp1_is_hit(tmp_path, monkeypatch):
+    path = tmp_path / "reaction_window_tp1.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING", direction=Direction.SELL)
+    a = Analysis(
+        analysis_id="A_WINDOW",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[z],
+        selected_zone_id="Z1",
+    )
+    register_analysis_zones(a)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE zone_reactions SET core_touched_at=?,status='OBJECTIVE_IN_PROGRESS',target1=?,target1_hit_at=? WHERE reaction_key=?",
+            (1000, 90.0, 1100, "SELL|H4>H1|777"),
+        )
+    assert watch_zone_ready(z, _snapshot(97.0, ts=1120)) is False
 
 
 def test_confirmed_thesis_can_continue_from_same_core_after_display_downgrade():
