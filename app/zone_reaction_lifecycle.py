@@ -60,15 +60,18 @@ def register_analysis_zones(analysis: Analysis) -> None:
             db.execute(
                 """
                 UPDATE zone_reactions SET
-                    latest_analysis_id=?,latest_zone_id=?,last_seen_at=?,grade=?,
-                    core_low=CASE WHEN core_touched_at=0 THEN ? ELSE core_low END,
-                    core_high=CASE WHEN core_touched_at=0 THEN ? ELSE core_high END,
-                    zone_low=CASE WHEN core_touched_at=0 THEN ? ELSE zone_low END,
-                    zone_high=CASE WHEN core_touched_at=0 THEN ? ELSE zone_high END,
-                    target1=CASE WHEN core_touched_at=0 THEN ? ELSE target1 END,
-                    target2=CASE WHEN core_touched_at=0 THEN ? ELSE target2 END,
-                    target3=CASE WHEN core_touched_at=0 THEN ? ELSE target3 END,
-                    runner=CASE WHEN core_touched_at=0 THEN ? ELSE runner END
+                    latest_analysis_id=?,
+                    latest_zone_id=CASE WHEN ownership_acquired_at=0 THEN ? ELSE latest_zone_id END,
+                    last_seen_at=?,
+                    grade=CASE WHEN ownership_acquired_at=0 THEN ? ELSE grade END,
+                    core_low=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE core_low END,
+                    core_high=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE core_high END,
+                    zone_low=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE zone_low END,
+                    zone_high=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE zone_high END,
+                    target1=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target1 END,
+                    target2=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target2 END,
+                    target3=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target3 END,
+                    runner=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE runner END
                 WHERE reaction_key=?
                 """,
                 (
