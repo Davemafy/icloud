@@ -10,7 +10,7 @@ from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
-EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
+EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
 OWNER_REFRESH_BUFFER_M15_ATR = 0.30
 OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
@@ -61,7 +61,7 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
                    target2_hit_at,target3_hit_at,objective_complete_at,invalidated_at,
                    best_price,mfe_price,last_reason,first_seen_at,last_seen_at,
                    ownership_acquired_at,ownership_authority,ownership_analysis_id,
-                   ownership_anchor_price
+                   ownership_anchor_price,ownership_zone_id,ownership_zone_payload
             FROM zone_reactions
             WHERE first_seen_at>=?
               AND ownership_acquired_at>0
@@ -123,20 +123,89 @@ def owner_m1_handoff_interacting(snapshot: MarketSnapshot) -> dict[str, Any] | N
 
 
 def _matches_owner(zone: Zone, owner: dict[str, Any]) -> bool:
+    """Match only the frozen owner identity/geometry, never a newly re-ranked zone."""
     if zone.state != ZoneState.ACTIVE:
         return False
     if zone.original_direction.value != str(owner.get("direction", "")):
         return False
+
+    ownership_zone_id = str(owner.get("ownership_zone_id") or "")
+    if ownership_zone_id:
+        return zone.zone_id == ownership_zone_id
+
+    # Legacy rows created before the frozen-zone contract may not yet have an
+    # ownership_zone_id. Accept the old id only when geometry still matches the
+    # persisted lifecycle row; source timestamp alone is no longer sufficient.
     latest_zone_id = str(owner.get("latest_zone_id") or "")
     if latest_zone_id and zone.zone_id == latest_zone_id:
         return True
     source_ts = int(owner.get("source_ts") or 0)
     source_tf = str(owner.get("source_tf") or "")
+    tol = 1e-6
     return bool(
         source_ts
         and int(zone.source_ts or 0) == source_ts
         and str(zone.source_tf) == source_tf
+        and abs(float(zone.core_low) - float(owner.get("core_low") or 0.0)) <= tol
+        and abs(float(zone.core_high) - float(owner.get("core_high") or 0.0)) <= tol
+        and abs(float(zone.zone_low) - float(owner.get("zone_low") or 0.0)) <= tol
+        and abs(float(zone.zone_high) - float(owner.get("zone_high") or 0.0)) <= tol
     )
+
+
+def _ownership_zone_snapshot(owner: dict[str, Any]) -> Zone | None:
+    """Restore the exact zone that acquired authority.
+
+    ownership_analysis_id points to the analysis that granted the handoff, so old
+    rows can be backfilled safely even if latest_zone_id was later re-ranked.
+    """
+    payload = str(owner.get("ownership_zone_payload") or "")
+    if payload:
+        try:
+            zone = Zone.model_validate_json(payload)
+            if zone.state == ZoneState.ACTIVE:
+                return zone
+        except Exception:
+            pass
+
+    analysis_id = str(owner.get("ownership_analysis_id") or "")
+    if not analysis_id:
+        return None
+    try:
+        with connect() as db:
+            row = db.execute(
+                "SELECT payload FROM analyses WHERE analysis_id=? ORDER BY ts DESC LIMIT 1",
+                (analysis_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        owning_analysis = Analysis.model_validate_json(str(row["payload"]))
+        wanted = str(owner.get("ownership_zone_id") or "")
+        zone = next(
+            (
+                z for z in owning_analysis.zones
+                if (wanted and z.zone_id == wanted)
+                or (not wanted and z.zone_id == owning_analysis.selected_zone_id)
+            ),
+            None,
+        )
+        if zone is None:
+            return None
+        with connect() as db:
+            db.execute(
+                """
+                UPDATE zone_reactions
+                SET ownership_zone_id=CASE WHEN ownership_zone_id='' THEN ? ELSE ownership_zone_id END,
+                    ownership_zone_payload=CASE WHEN ownership_zone_payload='' THEN ? ELSE ownership_zone_payload END
+                WHERE reaction_key=?
+                """,
+                (zone.zone_id, zone.model_dump_json(), str(owner.get("reaction_key") or "")),
+            )
+        owner["ownership_zone_id"] = zone.zone_id
+        owner["ownership_zone_payload"] = zone.model_dump_json()
+        return zone.model_copy(deep=True)
+    except Exception:
+        return None
 
 
 def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any]:
@@ -150,7 +219,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "reaction_key": str(owner.get("reaction_key") or ""),
         "source_tf": str(owner.get("source_tf") or ""),
         "source_ts": int(owner.get("source_ts") or 0),
-        "owner_zone_id": owner_zone.zone_id if owner_zone is not None else "",
+        "owner_zone_id": str(owner.get("ownership_zone_id") or (owner_zone.zone_id if owner_zone is not None else "")),
         "owner_zone_present": owner_zone is not None,
         "ownership_acquired_at": int(owner.get("ownership_acquired_at") or 0),
         "ownership_authority": str(owner.get("ownership_authority") or ""),
@@ -218,13 +287,15 @@ def acquire_execution_ownership(
                 ownership_authority=CASE WHEN ownership_authority='' THEN ? ELSE ownership_authority END,
                 ownership_analysis_id=CASE WHEN ownership_analysis_id='' THEN ? ELSE ownership_analysis_id END,
                 ownership_anchor_price=CASE WHEN ownership_anchor_price<=0 THEN ? ELSE ownership_anchor_price END,
+                ownership_zone_id=CASE WHEN ownership_zone_id='' THEN ? ELSE ownership_zone_id END,
+                ownership_zone_payload=CASE WHEN ownership_zone_payload='' THEN ? ELSE ownership_zone_payload END,
                 reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
                 status=CASE WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED' ELSE status END,
                 last_reason=?,last_seen_at=?
             WHERE reaction_key=?
             """,
             (
-                now, authority, analysis.analysis_id, anchor,
+                now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
                 1 if liquidity_authority else 0, now,
                 1 if liquidity_authority else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
@@ -267,9 +338,27 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         return None
 
     previous_selected = analysis.selected_zone_id
-    owner_zone = next((z for z in analysis.zones if _matches_owner(z, owner)), None)
     status = str(owner.get("status") or "INTERACTING")
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
+
+    frozen = _ownership_zone_snapshot(owner)
+    owner_zone = frozen if frozen is not None else next((z for z in analysis.zones if _matches_owner(z, owner)), None)
+
+    if owner_zone is not None and frozen is not None:
+        # Replace the newly ranked same-direction display zone with the exact zone
+        # that acquired execution. This keeps the public map at one zone per side
+        # while preventing geometry/id drift from stealing or blocking authority.
+        replaced = False
+        rebuilt: list[Zone] = []
+        for current in analysis.zones:
+            if current.original_direction.value == direction and not replaced:
+                rebuilt.append(owner_zone)
+                replaced = True
+            elif current.original_direction.value != direction:
+                rebuilt.append(current)
+        if not replaced:
+            rebuilt.insert(0, owner_zone)
+        analysis.zones = rebuilt[:2]
 
     policy["active_thesis"] = _owner_meta(owner, owner_zone)
     analysis.execution_policy = policy
@@ -277,12 +366,11 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     if owner_zone is None:
         analysis.selected_zone_id = ""
         analysis.approved = False
-        if "ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP" not in analysis.guards:
-            analysis.guards.append("ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP")
+        if "ACTIVE_THESIS_OWNER_SNAPSHOT_UNAVAILABLE" not in analysis.guards:
+            analysis.guards.append("ACTIVE_THESIS_OWNER_SNAPSHOT_UNAVAILABLE")
         analysis.trader_brief += (
             f" Active acquired thesis lock={direction} ({status}, {owner.get('ownership_authority','')}). "
-            "Its institutional context zone is not currently republished, so opposite-side execution is "
-            "blocked until lifecycle release or safe requalification."
+            "Its frozen ownership-zone snapshot is unavailable, so execution fails closed until lifecycle release."
         )
         return None
 
