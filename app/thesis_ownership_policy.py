@@ -18,7 +18,7 @@ OWNER_MIN_BUFFER_POINTS = 5.0
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
-    been acquired: HTF_CORE_HANDOFF or LIQUIDITY_REVERSAL_HANDOFF. WATCH/B+ or repeatedly mitigated
+    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. WATCH/B+ or repeatedly mitigated
     zones may remain visible and may have lifecycle reactions, but they cannot block the opposite side
     merely because price interacted with them. Once a qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
@@ -254,8 +254,10 @@ def acquire_execution_ownership(
 ) -> dict[str, Any] | None:
     """Persist thesis ownership only after a final approved execution handoff.
 
-    HTF_CORE_HANDOFF is expected to originate from the strict tactical-core M1_READY
-    path. LIQUIDITY_REVERSAL_HANDOFF is already M15-confirmed, so its persisted
+    HTF_CORE_HANDOFF originates from tactical-core M1_READY. HTF_ZONE_SWEEP_HANDOFF
+    originates from a qualified envelope entry plus a proven structural-liquidity raid
+    and reclaim, so the core is not required. LIQUIDITY_REVERSAL_HANDOFF is M15-confirmed,
+    so its persisted
     lifecycle begins as REACTION_CONFIRMED even though the remote context core was
     intentionally not touched. This function never creates a zone or an order.
     """
@@ -270,6 +272,7 @@ def acquire_execution_ownership(
     now = int(snapshot.sent_at)
     anchor = float(anchor_price or snapshot.mid)
     liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
+    zone_sweep_authority = authority == "HTF_ZONE_SWEEP_HANDOFF"
     with connect() as db:
         row = db.execute("SELECT * FROM zone_reactions WHERE reaction_key=?", (key,)).fetchone()
         if row is None:
@@ -277,7 +280,9 @@ def acquire_execution_ownership(
         if int(row["invalidated_at"] or 0) or int(row["objective_complete_at"] or 0):
             return None
         status = str(row["status"] or "ARMED")
-        if status not in ACTIVE_THESIS_STATUSES and not (liquidity_authority and status == "ARMED"):
+        if status not in ACTIVE_THESIS_STATUSES and not (
+            (liquidity_authority or zone_sweep_authority) and status == "ARMED"
+        ):
             return None
 
         db.execute(
@@ -290,7 +295,11 @@ def acquire_execution_ownership(
                 ownership_zone_id=CASE WHEN ownership_zone_id='' THEN ? ELSE ownership_zone_id END,
                 ownership_zone_payload=CASE WHEN ownership_zone_payload='' THEN ? ELSE ownership_zone_payload END,
                 reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
-                status=CASE WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED' ELSE status END,
+                status=CASE
+                    WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED'
+                    WHEN ?=1 AND status='ARMED' THEN 'INTERACTING'
+                    ELSE status
+                END,
                 last_reason=?,last_seen_at=?
             WHERE reaction_key=?
             """,
@@ -298,6 +307,7 @@ def acquire_execution_ownership(
                 now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
                 1 if liquidity_authority else 0, now,
                 1 if liquidity_authority else 0,
+                1 if zone_sweep_authority else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
             ),
         )
