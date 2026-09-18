@@ -6,16 +6,16 @@ from .config import SETTINGS
 from .engine import atr
 from .models import Analysis, Feedback, Grade, MarketSnapshot, Zone, ZoneState
 
-# DEMO/PAPER execution safety contract. The wide HTF envelope is location/sweep
-# context only. Primary M1 authority normally begins at the tactical core. v6.5.19
-# adds a second explicit PAPER authority: a confirmed structural-liquidity reversal
-# handoff. It never promotes the liquidity object into an HTF zone and still requires
-# the Sequence EA's full M1 confirmation/value-entry pattern.
+# DEMO/PAPER execution safety contract. Primary M1 SEARCH authority may begin at
+# the tactical core OR after a qualified outer-envelope interaction proves the
+# attached structural liquidity was swept and reclaimed. Neither is an entry. A
+# confirmed structural-liquidity reversal remains a separate authority. Sequence
+# still requires its M1 confirmation/value-entry pattern before any order.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 CORE_INTERACTION_MIN_POINTS = 5.0
 TARGET_MIN_POINTS = 5.0
 TARGET_SPREAD_MULTIPLIER = 1.50
-EXECUTION_GUARD_CONTRACT = "DUAL_LOCATION_TARGET_DIRECTION_V6519"
+EXECUTION_GUARD_CONTRACT = "ZONE_SWEEP_OR_CORE_TARGET_DIRECTION_V6528"
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 
 
@@ -177,17 +177,38 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     plan_state = str(kv.get("zone_state", zone.state.value)).upper()
     thesis_bplus_override = _confirmed_thesis_bplus_override(analysis, zone, plan_state)
     effective_mode = "DUAL_BRANCH" if thesis_bplus_override else base_mode
-    core_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
+    primary_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
+    window = dict((analysis.execution_policy or {}).get("execution_window") or {})
+    sweep_handoff_ready = bool(
+        primary_handoff_ready
+        and str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
+        and bool(window.get("sweep_confirmed"))
+    )
+    core_handoff_ready = bool(primary_handoff_ready and not sweep_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
-    handoff_ready = bool(core_handoff_ready or liquidity_handoff_ready)
+    handoff_ready = bool(core_handoff_ready or sweep_handoff_ready or liquidity_handoff_ready)
 
-    authority = "HTF_CORE_HANDOFF" if core_handoff_ready else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready else "NONE"
+    authority = (
+        "HTF_ZONE_SWEEP_HANDOFF" if sweep_handoff_ready
+        else "HTF_CORE_HANDOFF" if core_handoff_ready
+        else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready
+        else "NONE"
+    )
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
     kv["execution_authority"] = authority
-    kv["core_interaction_basis"] = "TACTICAL_CORE_ONLY_FOR_PRIMARY"
+    kv["core_interaction_basis"] = (
+        "OUTER_ZONE_PLUS_PROVEN_LIQUIDITY_SWEEP" if sweep_handoff_ready
+        else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
+    )
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
     kv["core_interaction_now"] = "1" if core_now else "0"
     kv["core_handoff_ready"] = "1" if core_handoff_ready else "0"
+    kv["zone_sweep_handoff_ready"] = "1" if sweep_handoff_ready else "0"
+    kv["zone_sweep_confirmed"] = "1" if bool(window.get("sweep_confirmed")) else "0"
+    kv["zone_sweep_ts"] = str(int(window.get("sweep_ts") or 0))
+    kv["zone_sweep_label"] = str(window.get("sweep_label") or "")
+    kv["zone_sweep_price"] = f"{float(window.get('sweep_price') or 0.0):.5f}"
+    kv["core_required_for_authority"] = "0" if sweep_handoff_ready else "1"
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
@@ -261,6 +282,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         if thesis_bplus_override:
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
+        elif sweep_handoff_ready:
+            kv["execution_role"] = "ZONE_SWEEP_PRIMARY"
         elif liquidity_handoff_ready:
             kv["execution_role"] = "LIQUIDITY_REVERSAL_HANDOFF"
     else:
@@ -316,10 +339,23 @@ def normalize_candidate_feedback(
         px = float(details.get("entry_price") or out.price or snapshot.mid)
         core_now = core_is_interacting(zone, snapshot, px)
         cloud_ready = _readiness(zone) == "M1_READY"
-        features["zone_context"] = 1 if core_now else 0
+        window = dict((analysis.execution_policy or {}).get("execution_window") or {})
+        sweep_primary = bool(
+            cloud_ready
+            and str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
+            and bool(window.get("sweep_confirmed"))
+        )
+        features["zone_context"] = 1 if (core_now or sweep_primary) else 0
         features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary) else 0
-        features["interaction_basis"] = "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary else "TACTICAL_CORE_ONLY_FOR_PRIMARY"
+        features["interaction_basis"] = (
+            "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary
+            else "OUTER_ZONE_PLUS_PROVEN_LIQUIDITY_SWEEP" if sweep_primary
+            else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
+        )
         features["core_interaction_buffer"] = round(core_interaction_buffer(snapshot), 5)
+        features["zone_sweep_handoff"] = 1 if sweep_primary else 0
+        features["zone_sweep_ts"] = int(window.get("sweep_ts") or 0)
+        features["zone_sweep_price"] = float(window.get("sweep_price") or 0.0)
         features["liquidity_reversal_handoff"] = 1 if lrh_primary else 0
         if not core_now and not cloud_ready and not lrh_primary:
             reasons = list(details.get("rejection_reasons") or [])
