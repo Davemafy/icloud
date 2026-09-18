@@ -19,20 +19,23 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py
+        run: pytest -q tests/test_watch_ready.py tests/test_sequence_328_source.py
       - name: Python syntax
         run: python -m compileall -q app tests
-      - name: Sequence 3.27 structural checks
+      - name: Sequence 3.28 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_28_AcceptedFlipHandoff_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.27"',
+              '#property version   "3.28"',
               'TZ_BuildEscapePullback',
+              'TZ28_ArmAcceptedFlip',
+              'ACCEPTED_ZONE_FLIP_HANDOFF',
+              'accepted_flip_state.txt',
               'ResearchEscapeRiskMultiplier=0.50',
               'gate_stage',
               'gate_reason',
@@ -42,7 +45,7 @@ jobs:
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.27 release structural checks OK')
+          print('Sequence 3.28 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_28_AcceptedFlipHandoff_Demo.mq5
