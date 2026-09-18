@@ -290,7 +290,7 @@ def test_objective_in_progress_owner_can_rearm_toward_tp2_after_tp1_hit(tmp_path
             (zone.zone_id, zone.model_dump_json(), "SELL|H4>H1|777"),
         )
 
-    snap = _snapshot(mid=98.0, ts=1200)
+    snap = _snapshot(mid=98.0, ts=1200, reclaimed=False)
     ready = promote_watch_to_m1_ready(analysis, snap)
     assert ready is zone
     assert ready.core_method.startswith("M1_READY|")
