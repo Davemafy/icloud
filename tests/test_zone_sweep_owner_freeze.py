@@ -238,3 +238,63 @@ def test_zone_sweep_handoff_can_create_owned_instance_when_base_row_is_terminal(
     assert acquired["status"] == "INTERACTING"
     assert acquired["ownership_zone_id"] == zone.zone_id
     assert acquired["ownership_authority"] == "HTF_ZONE_SWEEP_HANDOFF"
+
+
+def test_objective_in_progress_owner_can_rearm_toward_tp2_after_tp1_hit(tmp_path, monkeypatch):
+    path = tmp_path / "owner_tp2_rearm.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _sell("SELL_TP2_REARM", 104.0, 105.0)
+    zone.original_target1 = 90.0
+    zone.original_target2 = 85.0
+    zone.original_target3 = 80.0
+    analysis = Analysis(
+        analysis_id="A_TP2_REARM",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "owner_zone_id": zone.zone_id,
+                "direction": "SELL",
+                "status": "OBJECTIVE_IN_PROGRESS",
+                "continuation_authority": True,
+            }
+        },
+    )
+    register_analysis_zones(analysis)
+
+    # TP1 is already complete, but TP2/TP3 remain open. A recent core touch must
+    # preserve a continuation reaction window rather than incorrectly blocking on TP1.
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE zone_reactions
+            SET status='OBJECTIVE_IN_PROGRESS',
+                core_touched_at=1140,
+                reaction_confirmed_at=1150,
+                target1=90.0,target2=85.0,target3=80.0,
+                target1_hit_at=1160,target2_hit_at=0,target3_hit_at=0,
+                ownership_acquired_at=1130,
+                ownership_authority='HTF_CORE_HANDOFF',
+                ownership_zone_id=?,
+                ownership_zone_payload=?
+            WHERE reaction_key=?
+            """,
+            (zone.zone_id, zone.model_dump_json(), "SELL|H4>H1|777"),
+        )
+
+    snap = _snapshot(mid=98.0, ts=1200)
+    ready = promote_watch_to_m1_ready(analysis, snap)
+    assert ready is zone
+    assert ready.core_method.startswith("M1_READY|")
+    window = analysis.execution_policy["execution_window"]
+    assert window["mode"] == "LATCHED_AFTER_CORE_TOUCH"
+    assert window["target1"] == 85.0
+    assert window["target1_open"] is True
