@@ -11,6 +11,8 @@ _OWNERSHIP_COLUMNS = {
     "ownership_authority": "TEXT DEFAULT ''",
     "ownership_analysis_id": "TEXT DEFAULT ''",
     "ownership_anchor_price": "REAL DEFAULT 0",
+    "ownership_zone_id": "TEXT DEFAULT ''",
+    "ownership_zone_payload": "TEXT DEFAULT ''",
 }
 
 
