@@ -85,15 +85,31 @@ def _reaction_key(zone: Zone) -> str:
 def _lifecycle_row(zone: Zone) -> dict[str, Any]:
     try:
         with connect() as db:
+            # Prefer the execution-owned instance for this exact frozen zone. A
+            # pre-zone liquidity or proven zone-sweep handoff may own a derived
+            # lifecycle row while the historical base source row is terminal.
             row = db.execute(
                 """
                 SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                        target1,target1_hit_at,objective_complete_at,invalidated_at,
                        last_seen_at,best_price,ownership_authority
-                FROM zone_reactions WHERE reaction_key=?
+                FROM zone_reactions
+                WHERE ownership_acquired_at>0 AND ownership_zone_id=?
+                  AND invalidated_at=0 AND objective_complete_at=0
+                ORDER BY ownership_acquired_at DESC LIMIT 1
                 """,
-                (_reaction_key(zone),),
+                (zone.zone_id,),
             ).fetchone()
+            if row is None:
+                row = db.execute(
+                    """
+                    SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
+                           target1,target1_hit_at,objective_complete_at,invalidated_at,
+                           last_seen_at,best_price,ownership_authority
+                    FROM zone_reactions WHERE reaction_key=?
+                    """,
+                    (_reaction_key(zone),),
+                ).fetchone()
         return dict(row) if row is not None else {}
     except Exception:
         return {}
