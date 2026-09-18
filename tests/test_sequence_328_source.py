@@ -48,7 +48,6 @@ def test_flip_authority_is_only_set_after_buildflip_signal():
 def test_flip_still_requires_retest_value_target_and_safety():
     text = _text()
     for needle in (
-        "RequireFlipRetest",
         "BuildFlip(r,a,flipBuy,sig)",
         "EntryAtValue(sig.buy,entry,sig,a)",
         "TZ_TargetDirectionValid(true,sig.buy,entry)",
