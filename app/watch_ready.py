@@ -364,8 +364,6 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
         current = next((z for z in analysis.zones if z.zone_id == owner_id), None)
         if current is None:
             return None
-        if _readiness(current) == "M1_READY":
-            return current
         if _thesis_continuation_ready(analysis, current, snapshot):
             return _mark_ready(analysis, current, snapshot, thesis_continuation=True)
         if str(thesis.get("status") or "") == "INTERACTING" and watch_zone_ready(current, snapshot):
@@ -374,8 +372,6 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
 
     if analysis.selected_zone_id:
         current = next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
-        if current is not None and _readiness(current) == "M1_READY":
-            return current
         if current is None or not watch_zone_ready(current, snapshot):
             return None
         candidates = [current]
