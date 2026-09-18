@@ -19,22 +19,23 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_owner_mirror.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py
       - name: Python syntax
         run: python -m compileall -q app tests
-      - name: Sequence 3.29 structural checks
+      - name: Sequence 3.30 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_29_ZoneSweepOwnerFreeze_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_30_OwnerMirror_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.29"',
+              '#property version   "3.30"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
+              'MT5_EXECUTION_OWNER_MIRROR_V1',
               'ACCEPTED_ZONE_FLIP_HANDOFF',
               'accepted_flip_state.txt',
               'ResearchEscapeRiskMultiplier=0.50',
@@ -46,7 +47,7 @@ jobs:
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.29 release structural checks OK')
+          print('Sequence 3.30 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_29_ZoneSweepOwnerFreeze_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_30_OwnerMirror_Demo.mq5
