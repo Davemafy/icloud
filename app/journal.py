@@ -7,6 +7,7 @@ import io
 import json
 import time
 import urllib.request
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,6 +16,7 @@ from .db import recent_feedback, latest_heartbeats, latest_snapshot
 from .ml_foundation import ml_status
 
 _STABLE_URL = "https://raw.githubusercontent.com/Davemafy/icloud/main/mt5/stable/manifest.json"
+_LOCAL_STABLE_MANIFEST = Path(__file__).resolve().parent.parent / "mt5" / "stable" / "manifest.json"
 _manifest_cache: dict[str, Any] = {"at": 0.0, "value": None}
 
 
@@ -151,12 +153,30 @@ def performance_summary() -> dict:
 
 
 def _stable_manifest() -> dict:
+    """Return release truth from the deployed repository before using GitHub raw.
+
+    The cloud and mt5/stable/manifest.json are deployed from the same commit. Using
+    the local manifest first avoids short-lived raw.githubusercontent.com/CDN lag
+    where the app version is new but the dashboard still reports the previous
+    desired MT5 package. GitHub raw remains a fallback for unusual deployments that
+    do not include the repository's mt5 tree.
+    """
     now = time.time()
     cached = _manifest_cache.get("value")
     if cached and now - float(_manifest_cache.get("at") or 0.0) < 30:
         return cached
+
     try:
-        req = urllib.request.Request(_STABLE_URL, headers={"User-Agent": "TradeZoneCloud/6.4"})
+        value = json.loads(_LOCAL_STABLE_MANIFEST.read_text(encoding="utf-8"))
+        if isinstance(value, dict) and value.get("sequence_ea_version"):
+            _manifest_cache["at"] = now
+            _manifest_cache["value"] = value
+            return value
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request(_STABLE_URL, headers={"User-Agent": "TradeZoneCloud/6.5"})
         with urllib.request.urlopen(req, timeout=4) as resp:
             value = json.loads(resp.read().decode("utf-8"))
         if isinstance(value, dict):
