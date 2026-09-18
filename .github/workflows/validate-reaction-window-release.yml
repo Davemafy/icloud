@@ -19,7 +19,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_sequence_328_source.py
+        run: pytest -q tests/test_watch_ready.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py
       - name: Python syntax
         run: python -m compileall -q app tests
       - name: Sequence 3.28 structural checks
