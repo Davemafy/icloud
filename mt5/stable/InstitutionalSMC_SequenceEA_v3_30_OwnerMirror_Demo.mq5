@@ -400,6 +400,11 @@ void TZ30_SaveOwnerMirrorFromPlan(string text)
 }
 
 string TZ30_OwnerKV(string key){return TZ_ReadLocalKV("execution_owner_state.txt",key);}
+string TZ30_OwnerNum(string key)
+{
+   string v=TZ30_OwnerKV(key);
+   return v==""?"0":v;
+}
 
 void TZ27_LoadExecutionAuthority(bool force=false)
 {
@@ -476,10 +481,10 @@ void TZ_SendSequenceHeartbeat()
       TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_analysis_id")),TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_zone_id")),TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_direction")),
       TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_source_tf")),(long)StringToInteger(TZ30_OwnerKV("owner_mirror_source_ts")),TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_grade")),
       TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_status")),TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_authority")),(long)StringToInteger(TZ30_OwnerKV("owner_mirror_acquired_at")),
-      TZ30_OwnerKV("owner_mirror_core_low"),TZ30_OwnerKV("owner_mirror_core_high"),TZ30_OwnerKV("owner_mirror_zone_low"),TZ30_OwnerKV("owner_mirror_zone_high"),
-      TZ30_OwnerKV("owner_mirror_target1"),TZ30_OwnerKV("owner_mirror_target2"),TZ30_OwnerKV("owner_mirror_target3"),
+      TZ30_OwnerNum("owner_mirror_core_low"),TZ30_OwnerNum("owner_mirror_core_high"),TZ30_OwnerNum("owner_mirror_zone_low"),TZ30_OwnerNum("owner_mirror_zone_high"),
+      TZ30_OwnerNum("owner_mirror_target1"),TZ30_OwnerNum("owner_mirror_target2"),TZ30_OwnerNum("owner_mirror_target3"),
       (long)StringToInteger(TZ30_OwnerKV("owner_mirror_target1_hit_at")),(long)StringToInteger(TZ30_OwnerKV("owner_mirror_target2_hit_at")),(long)StringToInteger(TZ30_OwnerKV("owner_mirror_target3_hit_at")),
-      (long)StringToInteger(TZ30_OwnerKV("owner_mirror_reaction_confirmed_at")),TZ30_OwnerKV("owner_mirror_best_price"),
+      (long)StringToInteger(TZ30_OwnerKV("owner_mirror_reaction_confirmed_at")),TZ30_OwnerNum("owner_mirror_best_price"),
       TZ_JsonEscape(g_tzGateStage),TZ_JsonEscape(g_tzGateReason),TZ_JsonEscape(g_tzCandidateModel),(long)g_tzGateTs,
       g_primaryEntries,g_reentries,g_flipPrimaryEntries,g_flipReentries,TZ_JsonEscape(updater),TZ_JsonEscape(stable),TZ_JsonEscape(installedBridge),TZ_JsonEscape(installedSequence),
       TZ_JsonEscape(desiredBridge),TZ_JsonEscape(desiredSequence),TZ_JsonEscape(pending),TZ_JsonEscape(updateResult));
