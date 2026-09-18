@@ -1,0 +1,48 @@
+name: validate-reaction-window-release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  focused-release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+      - name: Reaction-window cloud tests
+        run: pytest -q tests/test_watch_ready.py
+      - name: Python syntax
+        run: python -m compileall -q app tests
+      - name: Sequence 3.27 structural checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5')
+          t=p.read_text(encoding='utf-8')
+          for a,b in [('(',')'),('{','}'),('[',']')]:
+              assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
+          required=[
+              '#property version   "3.27"',
+              'TZ_BuildEscapePullback',
+              'ResearchEscapeRiskMultiplier=0.50',
+              'gate_stage',
+              'gate_reason',
+              'SIGNAL_FOUND_WAITING_FOR_PULLBACK',
+              'NO_OPEN_TARGET_BEYOND_ENTRY',
+              'MT5_ORDER_SEND_FAILED',
+          ]
+          for needle in required:
+              assert needle in t,needle
+          print('Sequence 3.27 release structural checks OK')
+          PY
+      - name: SHA256
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5
