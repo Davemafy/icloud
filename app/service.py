@@ -69,7 +69,18 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
     zone_id = ""
     risk_multiplier = 1.0
     if ready_zone is not None and a.selected_zone_id == ready_zone.zone_id:
-        authority = "HTF_CORE_HANDOFF"
+        window = dict((a.execution_policy or {}).get("execution_window") or {})
+        location_mode = str(window.get("mode") or "")
+        sweep_note = any(
+            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
+            or "ZONE_SWEEP_HANDOFF" in str(note)
+            for note in ready_zone.notes
+        )
+        authority = (
+            "HTF_ZONE_SWEEP_HANDOFF"
+            if location_mode == "LATCHED_AFTER_ZONE_SWEEP" or sweep_note
+            else "HTF_CORE_HANDOFF"
+        )
         zone_id = ready_zone.zone_id
     elif bool(liquidity_handoff.get("active")):
         authority = "LIQUIDITY_REVERSAL_HANDOFF"
@@ -173,7 +184,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # block the opposite side. Ordinary WATCH/INTERACTING lifecycle records do not.
     thesis_owner = apply_thesis_ownership(a, s)
 
-    # Authority 1: normal HTF tactical-core handoff.
+    # Authority 1: qualified HTF location handoff. The strict tactical core remains
+    # valid, but a proven structural-liquidity sweep/reclaim inside the outer zone
+    # may now grant M1 SEARCH authority before core touch.
     ready_zone = promote_watch_to_m1_ready(a, s)
 
     # Authority 2: confirmed structural-liquidity reversal before the remote HTF
@@ -202,7 +215,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
             if thesis_owner is not None:
                 a.trader_brief += " AI validation: acquired institutional thesis retained; execution waits for same-direction handoff confirmation."
             else:
-                a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for HTF core or confirmed liquidity-reversal handoff."
+                a.trader_brief += " AI validation: primary prompt zone ARMED; execution waits for tactical core, qualified zone liquidity-sweep handoff, or confirmed liquidity-reversal handoff."
         else:
             a.trader_brief += " AI validation: no executable prompt zone is selected; weaker/context zones may remain visible."
         if risks:
