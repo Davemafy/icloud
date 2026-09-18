@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.9",
+  "release": "6.3.10",
   "repository": "Davemafy/icloud",
-  "ref": "ceb03bda8926654d34f318bbd3aa595646bab930",
+  "ref": "ad434a717a810eb0e48e543bee4702d9f8a1727c",
   "data_bridge_version": "1.36",
-  "sequence_ea_version": "3.27",
+  "sequence_ea_version": "3.28",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -62,7 +62,13 @@
     "micro_completion_outside_htf_core",
     "reduced_risk_escape_pullback",
     "m1_gate_reachability_telemetry",
-    "no_chase_reaction_window_expiry"
+    "no_chase_reaction_window_expiry",
+    "accepted_zone_flip_pre_authority_capture",
+    "accepted_zone_failed_geometry_persistence",
+    "accepted_zone_flip_handoff",
+    "flip_retest_m1_confirmation_before_authority",
+    "flip_candidate_expiry",
+    "flip_gate_reachability_telemetry"
   ],
   "files": [
     {
@@ -75,11 +81,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_27_ReactionWindow_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_28_AcceptedFlipHandoff_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_28_AcceptedFlipHandoff_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_28_AcceptedFlipHandoff_Demo.mq5",
       "requires_reload": true,
-      "sha256": "69735e82bcb12acb1fd5f2c30297d4766f0a8bf6e194565fe2573c2e17d8a80b"
+      "sha256": "a97cc21d92675f9e925adc04e619fd4a2fbe443d24a30f07ee2c91ab05a80f39"
     }
   ],
   "support_files": [
