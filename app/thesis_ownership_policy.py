@@ -245,6 +245,83 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
     }
 
 
+def _handoff_reaction_instance(
+    db,
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+    zone: Zone,
+    authority: str,
+    anchor: float,
+) -> tuple[str, Any] | tuple[str, None]:
+    """Return a live lifecycle row, creating a fresh handoff instance when safe.
+
+    A remote liquidity-reversal or proven outer-zone sweep can legitimately earn
+    execution before the tactical core. If the base source row is historical/
+    terminal (or absent because that source was requalified after its old lifecycle
+    ended), do not let the stale row poison the new deterministic handoff. Preserve
+    the old row and create a new analysis-scoped execution instance instead.
+
+    HTF_CORE_HANDOFF remains strict: it must attach to an existing live lifecycle row.
+    """
+    base_key = _zone_reaction_key(zone)
+    row = db.execute("SELECT * FROM zone_reactions WHERE reaction_key=?", (base_key,)).fetchone()
+    terminal = bool(
+        row is not None
+        and (
+            int(row["invalidated_at"] or 0)
+            or int(row["objective_complete_at"] or 0)
+            or str(row["status"] or "") not in ACTIVE_THESIS_STATUSES | {"ARMED"}
+        )
+    )
+    if row is not None and not terminal:
+        return base_key, row
+
+    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}:
+        return base_key, None
+
+    instance_key = f"{base_key}|OWN|{analysis.analysis_id}"
+    existing = db.execute(
+        "SELECT * FROM zone_reactions WHERE reaction_key=?",
+        (instance_key,),
+    ).fetchone()
+    if existing is not None:
+        return instance_key, existing
+
+    now = int(snapshot.sent_at)
+    liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
+    status = "REACTION_CONFIRMED" if liquidity_authority else "INTERACTING"
+    reaction_confirmed_at = now if liquidity_authority else 0
+    db.execute(
+        """
+        INSERT INTO zone_reactions(
+            reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+            direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+            first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+            target1,target2,target3,runner,target1_hit_at,target2_hit_at,target3_hit_at,
+            objective_complete_at,invalidated_at,best_price,mfe_price,last_reason,
+            ownership_acquired_at,ownership_authority,ownership_analysis_id,ownership_anchor_price,
+            ownership_zone_id,ownership_zone_payload
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            instance_key, analysis.analysis_id, analysis.analysis_id, zone.zone_id, zone.zone_id,
+            zone.original_direction.value, zone.source_tf, int(zone.source_ts or 0),
+            float(zone.core_low), float(zone.core_high), float(zone.zone_low), float(zone.zone_high),
+            zone.grade.value, status, now, now, 0, reaction_confirmed_at,
+            float(zone.original_target1 or 0.0), float(zone.original_target2 or 0.0),
+            float(zone.original_target3 or 0.0), float(zone.original_runner or 0.0),
+            0, 0, 0, 0, 0, float(anchor), 0.0,
+            f"HANDOFF_INSTANCE_CREATED:{authority}",
+            0, "", "", 0.0, "", "",
+        ),
+    )
+    created = db.execute(
+        "SELECT * FROM zone_reactions WHERE reaction_key=?",
+        (instance_key,),
+    ).fetchone()
+    return instance_key, created
+
+
 def acquire_execution_ownership(
     analysis: Analysis,
     snapshot: MarketSnapshot,
@@ -268,13 +345,12 @@ def acquire_execution_ownership(
         return None
 
     ensure_execution_ownership_schema()
-    key = _zone_reaction_key(zone)
     now = int(snapshot.sent_at)
     anchor = float(anchor_price or snapshot.mid)
     liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
     zone_sweep_authority = authority == "HTF_ZONE_SWEEP_HANDOFF"
     with connect() as db:
-        row = db.execute("SELECT * FROM zone_reactions WHERE reaction_key=?", (key,)).fetchone()
+        key, row = _handoff_reaction_instance(db, analysis, snapshot, zone, authority, anchor)
         if row is None:
             return None
         if int(row["invalidated_at"] or 0) or int(row["objective_complete_at"] or 0):
