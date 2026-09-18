@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.11",
+  "release": "6.3.12",
   "repository": "Davemafy/icloud",
-  "ref": "18c8408e50fde2933872bb84dc36d52b5586a991",
+  "ref": "f600d7eba3bd0670eb328afd17fc74da280f245a",
   "data_bridge_version": "1.36",
-  "sequence_ea_version": "3.29",
+  "sequence_ea_version": "3.30",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -74,7 +74,12 @@
     "frozen_execution_owner_zone_id",
     "frozen_execution_owner_geometry",
     "zone_sweep_handoff_no_chase",
-    "owner_rerank_drift_protection"
+    "owner_rerank_drift_protection",
+    "mt5_execution_owner_mirror",
+    "cloud_restart_owner_self_heal",
+    "owner_mirror_24h_fail_closed_recovery",
+    "owner_objective_progress_persisted_to_mt5",
+    "railway_restart_independent_owner_recovery"
   ],
   "files": [
     {
@@ -87,11 +92,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_29_ZoneSweepOwnerFreeze_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_29_ZoneSweepOwnerFreeze_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_29_ZoneSweepOwnerFreeze_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_30_OwnerMirror_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_30_OwnerMirror_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_30_OwnerMirror_Demo.mq5",
       "requires_reload": true,
-      "sha256": "b4eaaf12192c26ea896e05eed43be09bc7a243a903e0443da3bd082c058f0af1"
+      "sha256": "822d5f3c9f7ce7338bcdec8a0fd3fa625e3a015c9b07dd4604206a673ff7b9e6"
     }
   ],
   "support_files": [
