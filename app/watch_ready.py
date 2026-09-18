@@ -7,10 +7,12 @@ from .db import connect
 from .engine import atr, evaluate_zone_state
 from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 
-# Public primary zones stay analysis-only until live price reaches the tactical core.
-# Once an A/A+ zone has genuinely interacted, PAPER execution may keep a temporary
-# reaction window alive while M1 finishes the micro sequence outside the macro box.
-# The window never survives M15 invalidation, TP1 completion, or excessive age.
+# Public primary zones stay analysis-only until either (a) live price reaches the
+# tactical core, or (b) price enters the qualified outer envelope and a closed M15
+# bar proves the attached structural liquidity was raided and reclaimed. The latter
+# deliberately grants M1 SEARCH authority without requiring the core. Neither path
+# is an entry by itself: Sequence must still confirm M1 structure/displacement/value.
+# A temporary reaction window never survives M15 invalidation, TP1 completion, or age.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 MAX_READY_TOUCHES = 1
@@ -19,6 +21,8 @@ READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 EXECUTION_WINDOW_SECONDS = 3 * 60 * 60
 EXECUTION_WINDOW_TARGET_BUFFER_M15_ATR = 0.10
+ZONE_SWEEP_MIN_POINTS = 2.0
+ZONE_SWEEP_LOOKBACK_BARS = 16
 TERMINAL_LIFECYCLE_STATES = {"OBJECTIVE_COMPLETE", "INVALIDATED", "INVALIDATED_AFTER_REACTION"}
 
 
@@ -83,9 +87,9 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
         with connect() as db:
             row = db.execute(
                 """
-                SELECT reaction_key,status,core_touched_at,reaction_confirmed_at,
+                SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                        target1,target1_hit_at,objective_complete_at,invalidated_at,
-                       last_seen_at,best_price
+                       last_seen_at,best_price,ownership_authority
                 FROM zone_reactions WHERE reaction_key=?
                 """,
                 (_reaction_key(zone),),
@@ -93,6 +97,97 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
         return dict(row) if row is not None else {}
     except Exception:
         return {}
+
+
+def _attached_liquidity(zone: Zone) -> tuple[str, float]:
+    for note in zone.notes:
+        text = str(note)
+        if not text.startswith("attached_liquidity:") or "@" not in text:
+            continue
+        try:
+            head, price_text = text.rsplit("@", 1)
+            label = head.split(":", 2)[-1]
+            return label, float(price_text)
+        except (TypeError, ValueError):
+            continue
+    return "", 0.0
+
+
+def _objective_still_open(zone: Zone, snapshot: MarketSnapshot, row: dict[str, Any]) -> tuple[bool, float]:
+    if str(row.get("status") or "") in TERMINAL_LIFECYCLE_STATES:
+        return False, 0.0
+    if int(row.get("invalidated_at") or 0) or int(row.get("objective_complete_at") or 0):
+        return False, 0.0
+    if int(row.get("target1_hit_at") or 0):
+        return False, 0.0
+    target1 = float(row.get("target1") or zone.original_target1 or 0.0)
+    if target1 <= 0:
+        return False, 0.0
+    m15a = _m15_atr(snapshot)
+    gap = max(
+        float(snapshot.point or 0.01) * max(10.0, float(snapshot.spread_points or 0.0) * 1.5),
+        EXECUTION_WINDOW_TARGET_BUFFER_M15_ATR * m15a,
+    )
+    px = float(snapshot.mid)
+    if zone.original_direction.value == "SELL":
+        return px > target1 + gap, target1
+    return px < target1 - gap, target1
+
+
+def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
+    """Prove an outer-envelope liquidity raid without requiring a core touch.
+
+    A SELL handoff requires a closed M15 bar to trade above the attached BSL and
+    close back below it. BUY is the mirror image below SSL. The sweep bar itself
+    must overlap the published envelope. This earns permission to SEARCH M1 only;
+    it never bypasses the Sequence EA's micro confirmation/value-entry rules.
+    """
+    if not _structural_zone_health(zone, snapshot):
+        return {}
+    if zone.grade not in {Grade.A_PLUS, Grade.A} or int(zone.touch_count) > MAX_READY_TOUCHES:
+        return {}
+    label, liquidity_price = _attached_liquidity(zone)
+    if liquidity_price <= 0:
+        return {}
+    row = _lifecycle_row(zone)
+    now = int(snapshot.sent_at)
+    first_seen = int(row.get("first_seen_at") or zone.source_ts or 0)
+    earliest = max(first_seen, now - EXECUTION_WINDOW_SECONDS)
+    point = max(float(snapshot.point or 0.01), 1e-9)
+    min_raid = max(point * ZONE_SWEEP_MIN_POINTS, point * float(snapshot.spread_points or 0.0) * 0.10)
+    bars = list(snapshot.xau_m15)[-ZONE_SWEEP_LOOKBACK_BARS:]
+    for bar in reversed(bars):
+        if int(bar.ts) < earliest:
+            continue
+        envelope_hit = float(bar.high) >= float(zone.zone_low) and float(bar.low) <= float(zone.zone_high)
+        if not envelope_hit:
+            continue
+        if zone.original_direction.value == "SELL":
+            swept = float(bar.high) >= liquidity_price + min_raid and float(bar.close) < liquidity_price
+        else:
+            swept = float(bar.low) <= liquidity_price - min_raid and float(bar.close) > liquidity_price
+        if not swept:
+            continue
+        objective_open, target1 = _objective_still_open(zone, snapshot, row)
+        if not objective_open:
+            return {}
+        return {
+            "active": True,
+            "mode": "LATCHED_AFTER_ZONE_SWEEP",
+            "zone_id": zone.zone_id,
+            "sweep_ts": int(bar.ts),
+            "sweep_label": label,
+            "sweep_price": liquidity_price,
+            "age_seconds": max(0, now - int(bar.ts)),
+            "expires_at": int(bar.ts) + EXECUTION_WINDOW_SECONDS,
+            "target1": target1,
+            "target1_open": True,
+            "macro_location_latched": True,
+            "core_required_for_authority": False,
+            "micro_may_complete_outside_core": True,
+            "no_chase": True,
+        }
+    return {}
 
 
 def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
@@ -113,26 +208,7 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
     age = now - touched_at if touched_at else 10**9
     if touched_at <= 0 or age < 0 or age > EXECUTION_WINDOW_SECONDS:
         return {}
-    if str(row.get("status") or "") in TERMINAL_LIFECYCLE_STATES:
-        return {}
-    if int(row.get("invalidated_at") or 0) or int(row.get("objective_complete_at") or 0):
-        return {}
-    if int(row.get("target1_hit_at") or 0):
-        return {}
-
-    target1 = float(row.get("target1") or zone.original_target1 or 0.0)
-    if target1 <= 0:
-        return {}
-    m15a = _m15_atr(snapshot)
-    gap = max(
-        float(snapshot.point or 0.01) * max(10.0, float(snapshot.spread_points or 0.0) * 1.5),
-        EXECUTION_WINDOW_TARGET_BUFFER_M15_ATR * m15a,
-    )
-    px = float(snapshot.mid)
-    if zone.original_direction.value == "SELL":
-        objective_open = px > target1 + gap
-    else:
-        objective_open = px < target1 - gap
+    objective_open, target1 = _objective_still_open(zone, snapshot, row)
     if not objective_open:
         return {}
 
@@ -172,9 +248,14 @@ def _thesis_continuation_ready(analysis: Analysis, zone: Zone, snapshot: MarketS
         return False
     if zone.grade == Grade.REJECT:
         return False
-    # Continuation remains stricter than the first-entry reaction window: a live
-    # owner must return to its surviving tactical core before another M1 sequence.
-    return _common_zone_health(zone, snapshot)
+    # A frozen owner keeps the location it actually earned. Core-owned theses can
+    # return through the core; zone-sweep-owned theses may remain inside their
+    # latched sweep window while TP1 is still open. Fresh M1 confirmation remains mandatory.
+    return bool(
+        _common_zone_health(zone, snapshot)
+        or _zone_sweep_state(zone, snapshot)
+        or _execution_window_state(zone, snapshot)
+    )
 
 
 def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
@@ -189,6 +270,8 @@ def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
         return False
     if _common_zone_health(zone, snapshot):
         return True
+    if _zone_sweep_state(zone, snapshot):
+        return True
     return bool(_execution_window_state(zone, snapshot))
 
 
@@ -198,9 +281,12 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
     tail = old.split("|", 1)[1] if "|" in old else old
 
     core_now = _core_ready(selected, snapshot)
-    window = {} if core_now else _execution_window_state(selected, snapshot)
-    location_mode = "CORE_NOW" if core_now else str(window.get("mode") or "")
-    if location_mode == "LATCHED_AFTER_CORE_TOUCH":
+    sweep = {} if core_now else _zone_sweep_state(selected, snapshot)
+    window = {} if (core_now or sweep) else _execution_window_state(selected, snapshot)
+    location_mode = "CORE_NOW" if core_now else str((sweep or window).get("mode") or "")
+    if location_mode == "LATCHED_AFTER_ZONE_SWEEP":
+        tail = f"ZONE_SWEEP_HANDOFF|{tail}" if tail else "ZONE_SWEEP_HANDOFF"
+    elif location_mode == "LATCHED_AFTER_CORE_TOUCH":
         tail = f"REACTION_WINDOW|{tail}" if tail else "REACTION_WINDOW"
     if thesis_continuation:
         tail = f"THESIS_CONTINUATION|{tail}" if tail else "THESIS_CONTINUATION"
@@ -219,17 +305,22 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
 
     policy = dict(analysis.execution_policy or {})
     policy["execution_window"] = {
-        "active": bool(core_now or window),
+        "active": bool(core_now or sweep or window),
         "zone_id": selected.zone_id,
         "mode": location_mode,
         "core_now": core_now,
-        "latched": bool(window),
+        "latched": bool(sweep or window),
         "core_touched_at": int(snapshot.sent_at if core_now else (window.get("core_touched_at") or 0)),
-        "expires_at": int(window.get("expires_at") or 0),
-        "target1": float(window.get("target1") or selected.original_target1 or 0.0),
-        "target1_open": bool(window.get("target1_open", True)),
-        "macro_location_latched": bool(window),
-        "micro_may_complete_outside_core": bool(window),
+        "sweep_confirmed": bool(sweep),
+        "sweep_ts": int(sweep.get("sweep_ts") or 0),
+        "sweep_label": str(sweep.get("sweep_label") or ""),
+        "sweep_price": float(sweep.get("sweep_price") or 0.0),
+        "core_required_for_authority": not bool(sweep),
+        "expires_at": int((sweep or window).get("expires_at") or 0),
+        "target1": float((sweep or window).get("target1") or selected.original_target1 or 0.0),
+        "target1_open": bool((sweep or window).get("target1_open", True)),
+        "macro_location_latched": bool(sweep or window),
+        "micro_may_complete_outside_core": bool(sweep or window),
         "no_chase": True,
         "paper_only": True,
     }
@@ -239,6 +330,13 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: active {selected.original_direction.value} thesis "
             "returned to its surviving tactical core. A fresh M1 sequence remains mandatory."
+        )
+    elif sweep:
+        analysis.trader_brief += (
+            f" PAPER M1_READY={selected.zone_id}: price entered the qualified outer envelope and swept "
+            f"{sweep.get('sweep_label') or 'structural liquidity'}@{float(sweep.get('sweep_price') or 0.0):.5f}, "
+            "then closed back through that liquidity. Execution SEARCH authority is granted without requiring "
+            "the tactical core; Sequence still requires fresh M1 structure/displacement/value and no chase."
         )
     elif window:
         analysis.trader_brief += (
