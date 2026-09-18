@@ -179,10 +179,22 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     effective_mode = "DUAL_BRANCH" if thesis_bplus_override else base_mode
     primary_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
     window = dict((analysis.execution_policy or {}).get("execution_window") or {})
+    authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
+    sweep_note = any(
+        str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
+        or "ZONE_SWEEP_HANDOFF" in str(note)
+        for note in zone.notes
+    )
     sweep_handoff_ready = bool(
         primary_handoff_ready
-        and str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
-        and bool(window.get("sweep_confirmed"))
+        and (
+            (
+                str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
+                and bool(window.get("sweep_confirmed"))
+            )
+            or str(authority_meta.get("authority") or "") == "HTF_ZONE_SWEEP_HANDOFF"
+            or sweep_note
+        )
     )
     core_handoff_ready = bool(primary_handoff_ready and not sweep_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
@@ -340,10 +352,22 @@ def normalize_candidate_feedback(
         core_now = core_is_interacting(zone, snapshot, px)
         cloud_ready = _readiness(zone) == "M1_READY"
         window = dict((analysis.execution_policy or {}).get("execution_window") or {})
+        authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
+        sweep_note = any(
+            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
+            or "ZONE_SWEEP_HANDOFF" in str(note)
+            for note in zone.notes
+        )
         sweep_primary = bool(
             cloud_ready
-            and str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
-            and bool(window.get("sweep_confirmed"))
+            and (
+                (
+                    str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
+                    and bool(window.get("sweep_confirmed"))
+                )
+                or str(authority_meta.get("authority") or "") == "HTF_ZONE_SWEEP_HANDOFF"
+                or sweep_note
+            )
         )
         features["zone_context"] = 1 if (core_now or sweep_primary) else 0
         features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary) else 0
