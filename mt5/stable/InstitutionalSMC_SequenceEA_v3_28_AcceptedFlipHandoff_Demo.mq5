@@ -227,6 +227,8 @@ string TZ28_DiagnoseFlipStage(MqlRates &r[],double a,bool buy)
 
 void TZ28_EvaluateAcceptedFlip()
 {
+   // Accepted invalidation is observation-only until the post-failure M1 pattern earns a handoff.
+   g_tzExecutionAuthority="NONE";
    if(!TZ28_FlipSafetyGuards())return;
    Plan livePlan=g_plan;bool liveFlipCandidate=g_flipCandidate;datetime liveAccepted=g_flipAcceptedAt;
    g_plan=g_tzFlipPlan;g_flipCandidate=true;g_flipAcceptedAt=g_tzFlipAcceptedAt;
