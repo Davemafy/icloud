@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import SETTINGS
 from .dashboard_view import compact_dashboard_html
+from .execution_owner_mirror import owner_plan_text, recover_owner_from_sequence_heartbeat
 from .db import init_db, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
@@ -79,7 +80,8 @@ def market_snapshot(s: MarketSnapshot):
 @app.post("/mt5/heartbeat", dependencies=[Depends(require_api_key)])
 def heartbeat(h: Heartbeat):
     save_heartbeat(h)
-    return {"ok": True}
+    restored = recover_owner_from_sequence_heartbeat(h)
+    return {"ok": True, "owner_mirror_restored": restored}
 
 
 @app.post("/mt5/feedback", dependencies=[Depends(require_api_key)])
@@ -132,6 +134,7 @@ def mt5_plan():
     if a is None:
         return PlainTextResponse("protocol=6\nea_mode=NO_TRADE\nreason=NO_ANALYSIS\n", status_code=200)
     text = _append_multimodel_plan(active_plan_text(a, s), a)
+    text += owner_plan_text(int(datetime.now(timezone.utc).timestamp()))
     if s:
         now = int(datetime.now(timezone.utc).timestamp())
         age = now - s.sent_at
