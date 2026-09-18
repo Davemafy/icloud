@@ -12,7 +12,9 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 # bar proves the attached structural liquidity was raided and reclaimed. The latter
 # deliberately grants M1 SEARCH authority without requiring the core. Neither path
 # is an entry by itself: Sequence must still confirm M1 structure/displacement/value.
-# A temporary reaction window never survives M15 invalidation, TP1 completion, or age.
+# A temporary reaction window never survives M15 invalidation, deepest-objective completion,
+# or age. After TP1, an OBJECTIVE_IN_PROGRESS thesis may re-arm from its frozen owner
+# location toward the next still-open objective.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 MAX_READY_TOUCHES = 1
@@ -91,8 +93,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
             row = db.execute(
                 """
                 SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
-                       target1,target1_hit_at,objective_complete_at,invalidated_at,
-                       last_seen_at,best_price,ownership_authority
+                       target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
+                       objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
                 FROM zone_reactions
                 WHERE ownership_acquired_at>0 AND ownership_zone_id=?
                   AND invalidated_at=0 AND objective_complete_at=0
@@ -104,8 +106,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
                 row = db.execute(
                     """
                     SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
-                           target1,target1_hit_at,objective_complete_at,invalidated_at,
-                           last_seen_at,best_price,ownership_authority
+                           target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
+                           objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
                     FROM zone_reactions WHERE reaction_key=?
                     """,
                     (_reaction_key(zone),),
@@ -130,15 +132,28 @@ def _attached_liquidity(zone: Zone) -> tuple[str, float]:
 
 
 def _objective_still_open(zone: Zone, snapshot: MarketSnapshot, row: dict[str, Any]) -> tuple[bool, float]:
+    """Return the next still-open thesis objective, not only TP1.
+
+    Once TP1 has been reached the thesis may remain OBJECTIVE_IN_PROGRESS and a
+    fresh re-entry from the frozen owner location can legitimately target TP2/TP3.
+    The old implementation hard-stopped all reaction windows after TP1, which made
+    continuation ownership impossible despite the dashboard correctly showing a
+    later open objective.
+    """
     if str(row.get("status") or "") in TERMINAL_LIFECYCLE_STATES:
         return False, 0.0
     if int(row.get("invalidated_at") or 0) or int(row.get("objective_complete_at") or 0):
         return False, 0.0
-    if int(row.get("target1_hit_at") or 0):
+
+    targets = [
+        (float(row.get("target1") or zone.original_target1 or 0.0), int(row.get("target1_hit_at") or 0)),
+        (float(row.get("target2") or zone.original_target2 or 0.0), int(row.get("target2_hit_at") or 0)),
+        (float(row.get("target3") or zone.original_target3 or 0.0), int(row.get("target3_hit_at") or 0)),
+    ]
+    next_target = next((price for price, hit_at in targets if price > 0 and not hit_at), 0.0)
+    if next_target <= 0:
         return False, 0.0
-    target1 = float(row.get("target1") or zone.original_target1 or 0.0)
-    if target1 <= 0:
-        return False, 0.0
+
     m15a = _m15_atr(snapshot)
     gap = max(
         float(snapshot.point or 0.01) * max(10.0, float(snapshot.spread_points or 0.0) * 1.5),
@@ -146,8 +161,8 @@ def _objective_still_open(zone: Zone, snapshot: MarketSnapshot, row: dict[str, A
     )
     px = float(snapshot.mid)
     if zone.original_direction.value == "SELL":
-        return px > target1 + gap, target1
-    return px < target1 - gap, target1
+        return px > next_target + gap, next_target
+    return px < next_target - gap, next_target
 
 
 def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
