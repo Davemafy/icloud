@@ -149,3 +149,92 @@ def test_acquired_owner_keeps_original_id_and_geometry_after_rerank(tmp_path, mo
     assert owner_zone.core_high == 105.0
     assert second.selected_zone_id == "SELL_ORIGINAL"
     assert second.execution_policy["active_thesis"]["owner_zone_id"] == "SELL_ORIGINAL"
+
+
+def test_liquidity_reversal_handoff_recovers_from_terminal_base_lifecycle(tmp_path, monkeypatch):
+    path = tmp_path / "terminal_base_requal.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    snap = _snapshot()
+    zone = _sell("SELL_REQUAL", 104.0, 105.0)
+    analysis = Analysis(
+        analysis_id="A_REQUAL",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+
+    # Simulate a historical lifecycle instance for the same institutional source
+    # having already terminated before the current analysis requalified the zone.
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE zone_reactions
+            SET status='OBJECTIVE_COMPLETE', objective_complete_at=900,
+                last_reason='OLD_INSTANCE_COMPLETE'
+            WHERE reaction_key=?
+            """,
+            ("SELL|H4>H1|777",),
+        )
+
+    acquired = acquire_execution_ownership(
+        analysis, snap, "LIQUIDITY_REVERSAL_HANDOFF", zone.zone_id, anchor_price=102.0
+    )
+    assert acquired is not None
+    assert acquired["reaction_key"].startswith("SELL|H4>H1|777|OWN|A_REQUAL")
+    assert acquired["status"] == "REACTION_CONFIRMED"
+    assert acquired["ownership_zone_id"] == zone.zone_id
+    assert acquired["ownership_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
+
+    # The old terminal research record is preserved rather than silently reset.
+    with db.connect() as conn:
+        old = conn.execute(
+            "SELECT status,objective_complete_at FROM zone_reactions WHERE reaction_key=?",
+            ("SELL|H4>H1|777",),
+        ).fetchone()
+    assert old["status"] == "OBJECTIVE_COMPLETE"
+    assert int(old["objective_complete_at"]) == 900
+
+
+def test_zone_sweep_handoff_can_create_owned_instance_when_base_row_is_terminal(tmp_path, monkeypatch):
+    path = tmp_path / "terminal_sweep_requal.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    snap = _snapshot()
+    zone = _sell("SELL_SWEEP_REQUAL", 104.0, 105.0)
+    analysis = Analysis(
+        analysis_id="A_SWEEP_REQUAL",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE zone_reactions
+            SET status='INVALIDATED', invalidated_at=800, last_reason='OLD_INSTANCE_INVALIDATED'
+            WHERE reaction_key=?
+            """,
+            ("SELL|H4>H1|777",),
+        )
+
+    acquired = acquire_execution_ownership(
+        analysis, snap, "HTF_ZONE_SWEEP_HANDOFF", zone.zone_id, anchor_price=102.0
+    )
+    assert acquired is not None
+    assert acquired["reaction_key"].startswith("SELL|H4>H1|777|OWN|A_SWEEP_REQUAL")
+    assert acquired["status"] == "INTERACTING"
+    assert acquired["ownership_zone_id"] == zone.zone_id
+    assert acquired["ownership_authority"] == "HTF_ZONE_SWEEP_HANDOFF"
