@@ -219,3 +219,63 @@ def test_exact_zone_payload_survives_owner_mirror_recovery(tmp_path, monkeypatch
     assert "LIQUIDITY_IN_MARKED_ZONE" in restored.confluences
     assert "BSL_IN_MARKED_ZONE" in restored.confluences
     assert restored.notes == zone.notes
+
+
+def test_mirror_recovery_refuses_cloud_terminal_tombstone(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "_path", lambda: str(tmp_path / "mirror_tombstone.db"))
+    db.init_db()
+    save_snapshot(_snapshot())
+    ensure_execution_ownership_schema()
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO zone_reactions(
+                reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+                direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+                first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+                target1,target2,target3,runner,target1_hit_at,target2_hit_at,target3_hit_at,
+                objective_complete_at,invalidated_at,best_price,mfe_price,last_reason,
+                ownership_acquired_at,ownership_authority,ownership_analysis_id,ownership_anchor_price,
+                ownership_zone_id,ownership_zone_payload
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "SELL|H4>H1|777|DONE","A1","A1","Z1","Z1","SELL","H4>H1",777,
+                104.0,105.0,95.0,106.0,"A+","OBJECTIVE_COMPLETE",
+                1000,1950,1100,1150,90.0,85.0,80.0,0.0,1200,1300,1400,
+                1950,0,79.0,25.0,"DEEPEST_LIQUIDITY_OBJECTIVE_REACHED",
+                1500,"HTF_CORE_HANDOFF","A1",104.5,"Z1",""
+            ),
+        )
+
+    h = Heartbeat(
+        ts=2000,
+        ea="InstitutionalSMC_SequenceEA",
+        version="3.31",
+        symbol="XAUUSD",
+        details={
+            "paper_only": True,
+            "owner_mirror_contract": OWNER_MIRROR_CONTRACT,
+            "owner_mirror_active": True,
+            "owner_mirror_saved_at": 1990,
+            "owner_mirror_analysis_id": "A1",
+            "owner_mirror_zone_id": "Z1",
+            "owner_mirror_direction": "SELL",
+            "owner_mirror_source_tf": "H4>H1",
+            "owner_mirror_source_ts": 777,
+            "owner_mirror_grade": "A+",
+            "owner_mirror_status": "OBJECTIVE_IN_PROGRESS",
+            "owner_mirror_authority": "HTF_CORE_HANDOFF",
+            "owner_mirror_acquired_at": 1500,
+            "owner_mirror_core_low": 104.0,
+            "owner_mirror_core_high": 105.0,
+            "owner_mirror_zone_low": 95.0,
+            "owner_mirror_zone_high": 106.0,
+            "owner_mirror_target1": 90.0,
+            "owner_mirror_target2": 85.0,
+            "owner_mirror_target3": 80.0,
+            "owner_mirror_best_price": 88.0,
+        },
+    )
+    assert recover_owner_from_sequence_heartbeat(h) is False
+    assert active_owner_snapshot(2000) is None
