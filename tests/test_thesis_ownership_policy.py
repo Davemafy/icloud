@@ -214,7 +214,10 @@ def test_htf_core_handoff_acquires_persistent_owner_then_blocks_opposite_ranking
         selected_zone_id="SELL_ZONE",
     )
     owner_zone = policy.apply_thesis_ownership(next_analysis, snap)
-    assert owner_zone is buy
+    assert owner_zone is not None
+    assert owner_zone.zone_id == buy.zone_id
+    assert owner_zone.core_low == buy.core_low
+    assert owner_zone.core_high == buy.core_high
     assert next_analysis.selected_zone_id == "BUY_ZONE"
     assert next_analysis.execution_policy["active_thesis"]["locked"] is True
 
