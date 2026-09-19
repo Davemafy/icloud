@@ -333,8 +333,17 @@ def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> G
     return Grade.B_PLUS
 
 
+def _dxy(snapshot: MarketSnapshot) -> Direction:
+    """Compatibility seam for deterministic DXY context.
+
+    Tests and research overrides can patch this helper without changing how DXY is
+    interpreted. DXY remains supporting context only and never manufactures a zone.
+    """
+    return prompt_dxy_direction(snapshot)
+
+
 def _dxy_support(direction: Direction, snapshot: MarketSnapshot) -> str:
-    dxy = prompt_dxy_direction(snapshot)
+    dxy = _dxy(snapshot)
     if dxy == Direction.NEUTRAL:
         return "NEUTRAL"
     if (direction == Direction.SELL and dxy == Direction.BUY) or (direction == Direction.BUY and dxy == Direction.SELL):
