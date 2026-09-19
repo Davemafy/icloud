@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from .db import connect, latest_snapshot, audit
@@ -48,6 +49,9 @@ def owner_plan_text(now: int) -> str:
         "owner_mirror_target3_hit_at": str(int(owner.get("target3_hit_at") or 0)),
         "owner_mirror_reaction_confirmed_at": str(int(owner.get("reaction_confirmed_at") or 0)),
         "owner_mirror_best_price": str(float(owner.get("best_price") or 0.0)),
+        "owner_mirror_zone_payload_b64": base64.urlsafe_b64encode(
+            str(owner.get("ownership_zone_payload") or "").encode("utf-8")
+        ).decode("ascii").rstrip("="),
     }
     return "".join(f"{k}={v}\n" for k, v in fields.items())
 
@@ -122,31 +126,57 @@ def recover_owner_from_sequence_heartbeat(h: Heartbeat) -> bool:
             if direction == "BUY" and float(last.close) < zone_low:
                 return False
 
-    zone = Zone(
-        zone_id=zone_id,
-        original_direction=Direction(direction),
-        flip_direction=Direction(direction).opposite(),
-        setup_type="CONTINUATION",
-        source_tf=str(d.get("owner_mirror_source_tf") or "H4>H1"),
-        grade=Grade(str(d.get("owner_mirror_grade") or "A")),
-        state=ZoneState.ACTIVE,
-        core_low=core_low,
-        core_high=core_high,
-        core_method="PERSISTED_OWNER_MIRROR",
-        location_score=0.0,
-        zone_low=zone_low,
-        zone_high=zone_high,
-        touch_count=1,
-        independent_confluence_count=2,
-        confluences=["PERSISTED_EXECUTION_OWNER", "MT5_OWNER_MIRROR_RECOVERY"],
-        source_ts=_i(d.get("owner_mirror_source_ts")),
-        invalidation_level=zone_high if direction == "SELL" else zone_low,
-        invalidation_rule="M15_ACCEPTED_INVALIDATION",
-        original_target1=target1,
-        original_target2=target2,
-        original_target3=target3,
-        notes=["recovered_from_mt5_owner_mirror"],
-    )
+    zone: Zone | None = None
+    encoded = str(d.get("owner_mirror_zone_payload_b64") or "")
+    if encoded:
+        try:
+            padded = encoded + "=" * (-len(encoded) % 4)
+            restored = Zone.model_validate_json(
+                base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+            )
+            geometry_ok = bool(
+                restored.zone_id == zone_id
+                and restored.original_direction.value == direction
+                and abs(float(restored.core_low) - core_low) <= 1e-6
+                and abs(float(restored.core_high) - core_high) <= 1e-6
+                and abs(float(restored.zone_low) - zone_low) <= 1e-6
+                and abs(float(restored.zone_high) - zone_high) <= 1e-6
+                and restored.state == ZoneState.ACTIVE
+            )
+            if geometry_ok:
+                zone = restored.model_copy(deep=True)
+        except Exception:
+            zone = None
+
+    if zone is None:
+        # Legacy v3.30 mirrors did not carry the exact frozen zone payload. Restore
+        # ownership identity safely, but keep the minimal legacy snapshot unable to
+        # re-arm structural execution until a fresh qualified handoff occurs.
+        zone = Zone(
+            zone_id=zone_id,
+            original_direction=Direction(direction),
+            flip_direction=Direction(direction).opposite(),
+            setup_type="CONTINUATION",
+            source_tf=str(d.get("owner_mirror_source_tf") or "H4>H1"),
+            grade=Grade(str(d.get("owner_mirror_grade") or "A")),
+            state=ZoneState.ACTIVE,
+            core_low=core_low,
+            core_high=core_high,
+            core_method="PERSISTED_OWNER_MIRROR_LEGACY",
+            location_score=0.0,
+            zone_low=zone_low,
+            zone_high=zone_high,
+            touch_count=1,
+            independent_confluence_count=2,
+            confluences=["PERSISTED_EXECUTION_OWNER", "MT5_OWNER_MIRROR_RECOVERY"],
+            source_ts=_i(d.get("owner_mirror_source_ts")),
+            invalidation_level=zone_high if direction == "SELL" else zone_low,
+            invalidation_rule="M15_ACCEPTED_INVALIDATION",
+            original_target1=target1,
+            original_target2=target2,
+            original_target3=target3,
+            notes=["recovered_from_mt5_owner_mirror_legacy_nonexecuting"],
+        )
 
     ensure_execution_ownership_schema()
     key = f"{direction}|{zone.source_tf}|{zone.source_ts}|MIRROR|{zone_id}"
