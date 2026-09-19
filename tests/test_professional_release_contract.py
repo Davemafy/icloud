@@ -11,17 +11,17 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.33"
-    assert manifest["release"] == "6.3.14"
+    assert SETTINGS.app_version == "6.5.34"
+    assert manifest["release"] == "6.3.15"
     assert manifest["data_bridge_version"] == "1.36"
-    assert manifest["sequence_ea_version"] == "3.32"
+    assert manifest["sequence_ea_version"] == "3.33"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert digest == seq["sha256"] == "8e7db9a4e44e65068c9af5b95fe461585fe1809c0a72840f9b802e0ffd30fbfa"
+    assert digest == seq["sha256"] == "9dba86a03f424273b632c347289aff4570a5a8e649be0694715968f9d9321fd9"
 
     required = {
         "outer_zone_liquidity_sweep_execution_authority",
@@ -34,5 +34,9 @@ def test_professional_release_contract_is_self_consistent():
         "zone_sweep_objective_progress_from_handoff_anchor",
         "paper_ai_no_provider_fallback",
         "execution_pipeline_integration_gate",
+        "safety_block_preserves_owner_mirror",
+        "spread_guard_suspends_orders_not_thesis",
+        "safety_hold_dashboard_semantics",
+        "owner_mirror_updates_before_live_block",
     }
     assert required.issubset(set(manifest["channel_features"]))
