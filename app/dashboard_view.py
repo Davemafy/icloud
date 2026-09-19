@@ -245,18 +245,22 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       state='NO M1 SELECTION';
       cls='warn';
       meta='No execution zone is selected. Sequence EA execution remains unavailable.';
-    }else if(!m1){
-      state='WAITING FOR LOCATION';
-      cls='warn';
-      meta=checklist+(
-        ownerMatch
-          ? 'The active thesis owns execution, but a fresh same-direction M1 handoff is still NO. Do not chase the existing move.'
-          : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
-      );
     }else if(!live){
       state='SAFETY BLOCKED';
       cls='bad';
-      meta=checklist+'M1 handoff is ready, but live spread/snapshot safety is blocking execution.';
+      meta=checklist+(
+        ownerMatch
+          ? 'The active thesis is preserved, but live spread/snapshot safety is blocking execution. This is not a location failure.'
+          : 'Live spread/snapshot safety is blocking execution before any M1 entry can be used.'
+      );
+    }else if(!m1){
+      state='WAITING FOR M1 CONFIRMATION';
+      cls='warn';
+      meta=checklist+(
+        ownerMatch
+          ? 'The active thesis owns execution. Waiting only for a fresh same-direction M1 confirmation; do not chase.'
+          : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
+      );
     }else{
       state='M1 HANDOFF READY';
       cls='ok';
@@ -276,6 +280,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         seqGate.textContent='OFFLINE';
         seqGate.className='kpi bad';
         seqMeta.textContent='No fresh Sequence heartbeat. Execution cannot be trusted until telemetry returns.';
+      }else if(seqMismatch && seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:')){
+        seqGate.textContent='SAFETY HOLD';
+        seqGate.className='kpi bad';
+        seqMeta.textContent='Cloud thesis authority is preserved, but Sequence execution authority is intentionally suspended by '+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
