@@ -65,9 +65,11 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert 'id="htfScore"' in cleaned
     assert "Execution readiness" in cleaned
     assert 'id="executionMeta"' in cleaned
-    assert "WAITING FOR LOCATION" in cleaned
+    assert "WAITING FOR M1 CONFIRMATION" in cleaned
     assert "M1 HANDOFF READY" in cleaned
     assert "SAFETY BLOCKED" in cleaned
+    assert "SAFETY HOLD" in cleaned
+    assert "This is not a location failure." in cleaned
     assert "HTF location/source quality only" in cleaned
     assert "Do not chase the existing move" in cleaned
     assert "Sequence EA still applies its normal sweep" in cleaned
