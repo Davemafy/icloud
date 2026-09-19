@@ -152,7 +152,7 @@ def _favourable_extreme(row: Any, snapshot: MarketSnapshot) -> float:
 def _mfe(row: Any, best: float) -> float:
     authority = str(row["ownership_authority"] or "") if "ownership_authority" in row.keys() else ""
     anchor = float(row["ownership_anchor_price"] or 0.0) if "ownership_anchor_price" in row.keys() else 0.0
-    if authority != "LIQUIDITY_REVERSAL_HANDOFF" or anchor <= 0:
+    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"} or anchor <= 0:
         anchor = float(row["core_low"] if str(row["direction"]) == Direction.SELL.value else row["core_high"])
     if str(row["direction"]) == Direction.SELL.value:
         return max(0.0, anchor - best)
@@ -170,9 +170,10 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
 
     Historical interaction remains independent from execution ownership. A normal
     WATCH interaction may be recorded and even confirm a reaction without ever
-    gaining the right to block another direction. A liquidity-reversal handoff can
-    own execution without touching the remote context core, so its explicitly
-    acquired/reaction-confirmed lifecycle is still advanced toward objectives.
+    gaining the right to block another direction. Liquidity-reversal and proven
+    outer-zone sweep handoffs can own execution without touching the tactical core,
+    so their explicitly acquired/reaction-confirmed lifecycle is still advanced
+    toward objectives from the actual ownership anchor.
     """
     if not SETTINGS.paper_only:
         return
@@ -213,9 +214,9 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
                     (status,now,"TACTICAL_CORE_INTERACTION",now,row["reaction_key"]),
                 )
 
-            # Normal zone-reaction research starts after core touch. The one
-            # exception is an explicitly acquired liquidity-reversal thesis whose
-            # M15 reaction was already confirmed before the remote core was reached.
+            # Normal zone-reaction research starts after core touch. Explicit
+            # liquidity-reversal or zone-sweep handoffs are already M15-confirmed
+            # and may advance from their ownership anchor without touching the core.
             if not touched_at and not (ownership_acquired_at and reaction_confirmed_at):
                 continue
 
