@@ -358,9 +358,11 @@ def test_paper_ai_fallback_preserves_core_execution_handoff(monkeypatch):
 def test_paper_ai_fallback_preserves_zone_sweep_handoff(monkeypatch):
     from app import execution_safety as safety
 
-    monkeypatch.setattr(safety.SETTINGS, "paper_only", True)
-    monkeypatch.setattr(safety.SETTINGS, "ai_enabled", True)
-    monkeypatch.setattr(safety.SETTINGS, "require_ai_for_execution", True)
+    monkeypatch.setattr(
+        safety,
+        "SETTINGS",
+        replace(safety.SETTINGS, paper_only=True, ai_enabled=True, require_ai_for_execution=True),
+    )
     zone = _sell_zone("M1_READY")
     zone.original_target1 = 4280.0
     zone.original_target2 = 4270.0
