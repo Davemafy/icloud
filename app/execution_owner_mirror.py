@@ -70,6 +70,40 @@ def _i(v: Any) -> int:
         return 0
 
 
+def _terminal_owner_tombstone(details: dict[str, Any]) -> bool:
+    """Refuse to resurrect an owner that the surviving cloud DB already released."""
+    zone_id = str(details.get("owner_mirror_zone_id") or "")
+    direction = str(details.get("owner_mirror_direction") or "")
+    source_tf = str(details.get("owner_mirror_source_tf") or "")
+    source_ts = _i(details.get("owner_mirror_source_ts"))
+    acquired_at = _i(details.get("owner_mirror_acquired_at"))
+    if not zone_id or direction not in {"BUY", "SELL"}:
+        return False
+    try:
+        with connect() as db:
+            row = db.execute(
+                """
+                SELECT reaction_key,status,invalidated_at,objective_complete_at,ownership_acquired_at
+                FROM zone_reactions
+                WHERE ownership_acquired_at>=?
+                  AND (
+                    ownership_zone_id=?
+                    OR (direction=? AND source_tf=? AND source_ts=?)
+                  )
+                  AND (
+                    invalidated_at>0 OR objective_complete_at>0
+                    OR status IN ('INVALIDATED_BEFORE_REACTION','INVALIDATED_AFTER_REACTION','OBJECTIVE_COMPLETE')
+                  )
+                ORDER BY ownership_acquired_at DESC,last_seen_at DESC
+                LIMIT 1
+                """,
+                (acquired_at, zone_id, direction, source_tf, source_ts),
+            ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
 def recover_owner_from_sequence_heartbeat(h: Heartbeat) -> bool:
     """Self-heal cloud ownership from the MT5-local owner mirror after cloud restarts.
 
@@ -88,6 +122,9 @@ def recover_owner_from_sequence_heartbeat(h: Heartbeat) -> bool:
     if saved_at <= 0 or h.ts - saved_at > OWNER_MIRROR_TTL_SECONDS:
         return False
     if active_owner_snapshot(h.ts) is not None:
+        return False
+    if _terminal_owner_tombstone(d):
+        audit(h.ts, "execution_owner.mirror_recovery_blocked", "reason=TERMINAL_OWNER_TOMBSTONE")
         return False
 
     direction = str(d.get("owner_mirror_direction") or "")
