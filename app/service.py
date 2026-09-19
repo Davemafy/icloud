@@ -138,6 +138,33 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
     return authority, owner
 
 
+def _activate_paper_ai_fallback(a: Analysis, authority: str, reason: str) -> bool:
+    """Keep deterministic execution research alive only when the AI layer is unavailable.
+
+    This never converts an explicit AI rejection into approval and is disabled outside
+    PAPER mode. Deterministic handoff, MT5 M1 structure/value, spread/news/risk and
+    target-direction guards remain mandatory.
+    """
+    if not SETTINGS.paper_only or authority == "NONE" or not a.selected_zone_id:
+        return False
+    a.approved = True
+    a.ai_approved = False
+    policy = dict(a.execution_policy or {})
+    policy["paper_ai_fallback"] = {
+        "active": True,
+        "reason": str(reason or "AI_PROVIDER_UNAVAILABLE"),
+        "authority": authority,
+        "real_money_allowed": False,
+    }
+    a.execution_policy = policy
+    if "AI_PROVIDER_UNAVAILABLE_ADVISORY_PAPER_ONLY" not in a.guards:
+        a.guards.append("AI_PROVIDER_UNAVAILABLE_ADVISORY_PAPER_ONLY")
+    note = " AI provider unavailable; PAPER deterministic execution authority remains active for research only."
+    if note.strip() not in str(a.trader_brief or ""):
+        a.trader_brief += note
+    return True
+
+
 async def run_analysis(reason: str = "MANUAL") -> Analysis:
     s = latest_snapshot()
     if s is None:
@@ -221,9 +248,21 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         if risks:
             a.guards.extend([f"AI:{x}" for x in risks])
 
-        if selected and not execution_selected:
+        paper_ai_fallback = bool(
+            execution_selected
+            and not ok
+            and SETTINGS.paper_only
+            and (
+                str(provider).upper() == "NONE"
+                or "AI_PROVIDER_UNAVAILABLE" in {str(x) for x in risks}
+            )
+        )
+        if paper_ai_fallback:
+            _activate_paper_ai_fallback(a, authority, "AI_PROVIDER_UNAVAILABLE")
+        elif selected and not execution_selected:
             a.approved = False
         elif SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and execution_selected and not ok:
+            # A real provider's explicit rejection remains fail-closed.
             a.approved = False
 
         audit(
@@ -241,20 +280,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         a.ai_approved = False
         execution_selected = bool(authority != "NONE" and a.selected_zone_id)
         if execution_selected and SETTINGS.paper_only:
-            # PAPER research must not become structurally deadlocked by an external
-            # AI-provider outage. Deterministic handoff + MT5 M1 sequence remain the
-            # authority; all spread/news/snapshot/risk/target guards remain intact.
-            a.approved = True
-            policy = dict(a.execution_policy or {})
-            policy["paper_ai_fallback"] = {
-                "active": True,
-                "reason": "AI_PROVIDER_UNAVAILABLE",
-                "authority": authority,
-                "real_money_allowed": False,
-            }
-            a.execution_policy = policy
-            a.guards.append("AI_PROVIDER_UNAVAILABLE_ADVISORY_PAPER_ONLY")
-            a.trader_brief += " AI provider unavailable; PAPER deterministic execution authority remains active for research only."
+            _activate_paper_ai_fallback(a, authority, f"{type(exc).__name__}:{exc}")
         elif a.selected_zone_id:
             a.approved = False
             a.guards.append("AI_PROVIDER_UNAVAILABLE")
