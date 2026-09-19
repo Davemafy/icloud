@@ -140,6 +140,63 @@ def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state:
     )
 
 
+def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
+    """Allow deterministic PAPER authority to survive an external AI outage."""
+    if not SETTINGS.paper_only or not bool(analysis.approved):
+        return False
+    if zone.grade not in {Grade.A_PLUS, Grade.A} or zone.state != ZoneState.ACTIVE:
+        return False
+    fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
+    if not bool(fallback.get("active")):
+        return False
+    return str(fallback.get("authority") or "") in {
+        "HTF_CORE_HANDOFF",
+        "HTF_ZONE_SWEEP_HANDOFF",
+        "LIQUIDITY_REVERSAL_HANDOFF",
+    }
+
+
+def _owner_progress_open_targets(analysis: Analysis, zone: Zone) -> tuple[list[float], dict[str, Any]]:
+    """Return only still-open owner objectives after TP progress."""
+    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    is_owner = bool(
+        meta.get("locked")
+        and str(meta.get("owner_zone_id") or "") == zone.zone_id
+        and str(meta.get("direction") or "") == zone.original_direction.value
+    )
+    raw = [
+        float(zone.original_target1 or 0.0),
+        float(zone.original_target2 or 0.0),
+        float(zone.original_target3 or 0.0),
+    ]
+    if not is_owner:
+        values = [v for v in raw if v > 0]
+        if float(zone.original_runner or 0.0) > 0:
+            values.append(float(zone.original_runner))
+        return values, meta
+
+    best = float(meta.get("best_price") or 0.0)
+    direction = zone.original_direction.value
+    out: list[float] = []
+    for idx, target in enumerate(raw, start=1):
+        if target <= 0:
+            continue
+        hit_at = int(meta.get(f"target{idx}_hit_at") or 0)
+        crossed = bool(
+            best > 0
+            and (
+                (direction == "SELL" and best <= target)
+                or (direction == "BUY" and best >= target)
+            )
+        )
+        if not hit_at and not crossed:
+            out.append(target)
+    runner = float(zone.original_runner or 0.0)
+    if runner > 0:
+        out.append(runner)
+    return out, meta
+
+
 def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict[str, Any]]:
     if not SETTINGS.paper_only or not bool(analysis.approved):
         return False, {}
@@ -176,7 +233,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     cloud_ready = readiness == "M1_READY"
     plan_state = str(kv.get("zone_state", zone.state.value)).upper()
     thesis_bplus_override = _confirmed_thesis_bplus_override(analysis, zone, plan_state)
-    effective_mode = "DUAL_BRANCH" if thesis_bplus_override else base_mode
+    paper_ai_fallback = _paper_ai_fallback_allows(analysis, zone)
+    effective_mode = "DUAL_BRANCH" if (thesis_bplus_override or paper_ai_fallback) else base_mode
     primary_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
     window = dict((analysis.execution_policy or {}).get("execution_window") or {})
     authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
@@ -222,8 +280,18 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["zone_sweep_price"] = f"{float(window.get('sweep_price') or 0.0):.5f}"
     kv["core_required_for_authority"] = "0" if sweep_handoff_ready else "1"
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
+    kv["paper_ai_fallback_active"] = "1" if paper_ai_fallback else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
+
+    handoff_ts = 0
+    if sweep_handoff_ready:
+        handoff_ts = int(window.get("sweep_ts") or 0)
+    elif core_handoff_ready:
+        handoff_ts = int(window.get("core_touched_at") or analysis.snapshot_at or analysis.generated_at or 0)
+    elif liquidity_handoff_ready:
+        handoff_ts = int(lrh.get("displacement_ts") or lrh.get("sweep_ts") or 0)
+    kv["execution_handoff_ts"] = str(handoff_ts)
 
     if liquidity_handoff_ready:
         kv["liquidity_reversal_direction"] = str(lrh.get("direction") or "")
@@ -236,12 +304,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         kv["liquidity_object_promoted_to_zone"] = "0"
 
     point_gap = max(float(snapshot.point) * CORE_INTERACTION_MIN_POINTS, 1e-9)
-    original_values = [
-        float(zone.original_target1),
-        float(zone.original_target2),
-        float(zone.original_target3),
-        float(zone.original_runner),
-    ]
+    original_values, owner_meta = _owner_progress_open_targets(analysis, zone)
     original_reference = float(zone.core_high) if zone.original_direction.value == "BUY" else float(zone.core_low)
     original_valid, original_removed = _filter_targets(
         zone.original_direction.value,
@@ -261,6 +324,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     _pack_targets(kv, "original", exported_original)
     kv["original_targets_removed_wrong_side"] = str(original_removed)
     kv["live_targets_removed_wrong_side"] = str(live_removed)
+    kv["owner_target_progress_applied"] = "1" if bool(owner_meta.get("locked")) and str(owner_meta.get("owner_zone_id") or "") == zone.zone_id else "0"
+    kv["next_open_target"] = f"{float(exported_original[0] if exported_original else 0.0):.5f}"
     kv["original_target_direction_valid"] = "1" if original_valid else "0"
     kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
 
