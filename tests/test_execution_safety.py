@@ -318,3 +318,109 @@ def test_reentry_does_not_require_return_to_original_core_but_still_requires_val
     assert "CORE_NOT_REACHED" not in out.details["rejection_reasons"]
     assert "TARGET_DIRECTION_INVALID" not in out.details["rejection_reasons"]
     assert out.details["eligible"] is True
+
+
+def test_paper_ai_fallback_preserves_core_execution_handoff(monkeypatch):
+    from app import execution_safety as safety
+
+    monkeypatch.setattr(safety.SETTINGS, "paper_only", True)
+    monkeypatch.setattr(safety.SETTINGS, "ai_enabled", True)
+    monkeypatch.setattr(safety.SETTINGS, "require_ai_for_execution", True)
+    zone = _sell_zone("M1_READY")
+    zone.original_target1 = 4280.0
+    zone.original_target2 = 4270.0
+    zone.original_target3 = 4260.0
+    a = _analysis(zone)
+    a.ai_approved = False
+    a.approved = True
+    a.execution_policy = {
+        "paper_ai_fallback": {"active": True, "authority": "HTF_CORE_HANDOFF"},
+        "execution_window": {"mode": "CORE_NOW", "core_touched_at": 1234},
+    }
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "original_direction=SELL\n"
+        "original_target1=4280.00000\n"
+        "original_target2=4270.00000\n"
+        "original_target3=4260.00000\n"
+    )
+    out = _kv(guard_plan_text(raw, a, _snapshot(4306.5)))
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
+    assert out["paper_ai_fallback_active"] == "1"
+    assert out["execution_handoff_ts"] == "1234"
+
+
+def test_paper_ai_fallback_preserves_zone_sweep_handoff(monkeypatch):
+    from app import execution_safety as safety
+
+    monkeypatch.setattr(safety.SETTINGS, "paper_only", True)
+    monkeypatch.setattr(safety.SETTINGS, "ai_enabled", True)
+    monkeypatch.setattr(safety.SETTINGS, "require_ai_for_execution", True)
+    zone = _sell_zone("M1_READY")
+    zone.original_target1 = 4280.0
+    zone.original_target2 = 4270.0
+    a = _analysis(zone)
+    a.ai_approved = False
+    a.approved = True
+    a.execution_policy = {
+        "paper_ai_fallback": {"active": True, "authority": "HTF_ZONE_SWEEP_HANDOFF"},
+        "execution_window": {
+            "active": True,
+            "mode": "LATCHED_AFTER_ZONE_SWEEP",
+            "sweep_confirmed": True,
+            "sweep_ts": 2222,
+        },
+    }
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "original_direction=SELL\n"
+        "original_target1=4280.00000\n"
+        "original_target2=4270.00000\n"
+    )
+    out = _kv(guard_plan_text(raw, a, _snapshot(4290.0)))
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "HTF_ZONE_SWEEP_HANDOFF"
+    assert out["zone_sweep_handoff_ready"] == "1"
+    assert out["execution_handoff_ts"] == "2222"
+
+
+def test_owner_target_progress_shifts_tp2_into_exported_target1():
+    zone = _sell_zone("M1_READY")
+    zone.original_target1 = 4351.33
+    zone.original_target2 = 4341.13
+    zone.original_target3 = 4319.88
+    zone.core_low = 4392.19
+    zone.core_high = 4398.19
+    zone.zone_low = 4386.86
+    zone.zone_high = 4407.49
+    a = _analysis(zone)
+    a.execution_policy = {
+        "active_thesis": {
+            "locked": True,
+            "owner_zone_id": zone.zone_id,
+            "direction": "SELL",
+            "status": "OBJECTIVE_IN_PROGRESS",
+            "target1_hit_at": 100,
+            "target2_hit_at": 0,
+            "target3_hit_at": 0,
+            "best_price": 4348.0,
+        },
+        "execution_window": {"mode": "CORE_NOW", "core_touched_at": 200},
+    }
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "zone_state=ACTIVE\n"
+        "original_direction=SELL\n"
+        "original_target1=4351.33000\n"
+        "original_target2=4341.13000\n"
+        "original_target3=4319.88000\n"
+    )
+    out = _kv(guard_plan_text(raw, a, _snapshot(4394.0, spread_points=16.0)))
+    assert out["owner_target_progress_applied"] == "1"
+    assert float(out["original_target1"]) == 4341.13
+    assert float(out["original_target2"]) == 4319.88
+    assert float(out["original_target3"]) == 0.0
+    assert float(out["next_open_target"]) == 4341.13
