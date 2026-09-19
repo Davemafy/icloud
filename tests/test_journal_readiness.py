@@ -66,5 +66,6 @@ def test_active_analysis_uses_newest_analysis_not_stale_ai_approved(monkeypatch)
         return "LATEST"
 
     monkeypatch.setattr(service, "latest_analysis", fake_latest_analysis)
+    monkeypatch.setattr(service, "attach_lifecycle", lambda analysis: analysis)
     assert service.active_analysis() == "LATEST"
     assert calls == [False]
