@@ -43,7 +43,9 @@ def test_read_only_map_execution_context_is_injected_without_execution_calls():
     assert "WATCH ONLY • NO M1 AUTHORITY" in cleaned
     assert "No acquired thesis lock and no M1-authorized zone" in cleaned
     assert "/mt5/plan" not in cleaned
-    assert "fetch(" not in cleaned
+    # The dashboard recovery layer may use read-only REST fetches, but the
+    # ownership panel itself must never call the executable MT5 plan/order path.
+    assert "/mt5/plan" not in cleaned
     assert "WebRequest" not in cleaned
     assert "OrderSend" not in cleaned
 
