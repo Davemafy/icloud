@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import SETTINGS
 from .dashboard_view import compact_dashboard_html
 from .execution_owner_mirror import owner_plan_text, recover_owner_from_sequence_heartbeat
-from .db import init_db, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
+from .db import init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
@@ -229,6 +229,46 @@ def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     return "PLANNED"
 
 
+def _sequence_debug_snapshot() -> dict:
+    now = int(datetime.now(timezone.utc).timestamp())
+    rows = latest_heartbeats(30)
+    hb = next((x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"), None)
+    if hb is None:
+        return {
+            "online": False,
+            "version": "",
+            "authority": "NONE",
+            "gate_stage": "OFFLINE",
+            "gate_reason": "NO_SEQUENCE_HEARTBEAT",
+            "candidate_model": "NONE",
+            "gate_age_seconds": None,
+        }
+    payload = hb.get("payload") if isinstance(hb.get("payload"), dict) else {}
+    details = dict(payload.get("details") or {}) if isinstance(payload, dict) else {}
+    gate_ts = int(details.get("gate_ts") or 0)
+    return {
+        "online": now - int(hb.get("ts") or 0) <= 45,
+        "version": str(hb.get("version") or ""),
+        "authority": str(details.get("execution_authority") or "NONE"),
+        "gate_stage": str(details.get("gate_stage") or "UNKNOWN"),
+        "gate_reason": str(details.get("gate_reason") or ""),
+        "candidate_model": str(details.get("candidate_model") or "NONE"),
+        "last_execution_model": str(details.get("last_execution_model") or ""),
+        "gate_ts": gate_ts,
+        "gate_age_seconds": max(0, now - gate_ts) if gate_ts else None,
+        "plan_valid": bool(details.get("plan_valid")),
+        "analysis_id": str(details.get("analysis_id") or ""),
+        "zone_id": str(details.get("zone_id") or ""),
+        "primary_entries": int(details.get("primary_entries") or 0),
+        "reentries": int(details.get("reentries") or 0),
+        "flip_primary_entries": int(details.get("flip_primary_entries") or 0),
+        "flip_reentries": int(details.get("flip_reentries") or 0),
+        "owner_mirror_active": bool(details.get("owner_mirror_active")),
+        "owner_mirror_zone_id": str(details.get("owner_mirror_zone_id") or ""),
+        "execution_handoff_ts": int(details.get("execution_handoff_ts") or 0),
+    }
+
+
 def _journal_snapshot():
     a = active_analysis()
     s = latest_snapshot()
@@ -298,6 +338,16 @@ def _journal_snapshot():
         ),
     }
     score = sum(1 for v in checks.values() if v)
+    sequence_debug = _sequence_debug_snapshot()
+    cloud_authority = str(
+        dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE"
+    ) if a else "NONE"
+    sequence_debug["cloud_authority"] = cloud_authority
+    sequence_debug["authority_mismatch"] = bool(
+        cloud_authority != "NONE"
+        and sequence_debug.get("online")
+        and str(sequence_debug.get("authority") or "NONE") == "NONE"
+    )
 
     return {
         "paper_only": SETTINGS.paper_only,
@@ -319,6 +369,7 @@ def _journal_snapshot():
         "readiness_score": f"{score}/{len(checks)}",
         "status": _event_status(current_events, z.state.value if z else "", readiness),
         "events": current_events,
+        "sequence_debug": sequence_debug,
     }
 
 
