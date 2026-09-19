@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.13",
+  "release": "6.3.14",
   "repository": "Davemafy/icloud",
-  "ref": "815ea8e72245db7e7c976509330a86340cc1ecd5",
+  "ref": "5967730e18bfb342a9c29720031425faceab8c93",
   "data_bridge_version": "1.36",
-  "sequence_ea_version": "3.31",
+  "sequence_ea_version": "3.32",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -86,7 +86,14 @@
     "exact_frozen_owner_payload_mirror",
     "owner_target_progression_to_next_open_objective",
     "stable_owner_key_across_reanalysis",
-    "sequence_execution_gate_dashboard"
+    "sequence_execution_gate_dashboard",
+    "release_safe_owner_mirror_tombstone",
+    "cloud_terminal_owner_resurrection_block",
+    "zone_sweep_reaction_confirmed_without_core",
+    "zone_sweep_objective_progress_from_handoff_anchor",
+    "paper_ai_no_provider_fallback",
+    "execution_pipeline_integration_gate",
+    "current_sequence_full_ci"
   ],
   "files": [
     {
@@ -99,11 +106,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_31_ExecutionPipeline_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_31_ExecutionPipeline_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_31_ExecutionPipeline_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5",
       "requires_reload": true,
-      "sha256": "6d0f9ad1d581771fa73a626f758023cddc474fcf87d98c0b5d4b6a4d40f7d1bc"
+      "sha256": "8e7db9a4e44e65068c9af5b95fe461585fe1809c0a72840f9b802e0ffd30fbfa"
     }
   ],
   "support_files": [
