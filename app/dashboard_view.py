@@ -258,7 +258,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls='warn';
       meta=checklist+(
         ownerMatch
-          ? 'The active thesis owns execution. Waiting only for a fresh same-direction M1 confirmation; do not chase.'
+          ? 'The active thesis owns execution. Waiting only for a fresh same-direction M1 confirmation. Do not chase the existing move.'
           : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
       );
     }else{
