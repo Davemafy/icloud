@@ -29,15 +29,16 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5')
           text=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
-          assert '#property version   "3.32"' in text
+          assert '#property version   "3.33"' in text
           required=[
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'TZ31_RefreshCloudState',
+              'Persist/release the owner mirror even while execution is safety-blocked.',
               'TZ31_BuildPostHandoffContinuation',
               'HTF_ZONE_SWEEP_HANDOFF',
               'LIQUIDITY_REVERSAL_HANDOFF',
@@ -53,7 +54,7 @@ jobs:
           ]
           for needle in required:
               assert needle in text, needle
-          print('Sequence 3.32 MQL structural checks OK')
+          print('Sequence 3.33 MQL structural checks OK')
           PY
       - name: Stable EA SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5
