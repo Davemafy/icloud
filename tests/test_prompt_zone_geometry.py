@@ -76,7 +76,7 @@ def test_buy_geometry_reserves_sweep_room_inside_envelope():
     assert low <= level.price <= high
 
 
-def test_liquidity_too_far_for_300_point_contract_is_not_selected():
+def test_liquidity_too_far_for_source_tf_professional_contract_is_not_selected():
     s = _snapshot()
     c = PromptCandidate(
         direction=Direction.SELL,
@@ -94,6 +94,6 @@ def test_liquidity_too_far_for_300_point_contract_is_not_selected():
     )
     core_low, core_high = _normalize_core(c, s)
     levels = [
-        LiquidityLevel(label="D1_BSL", price=103.0, side="ABOVE", source_tf="D1", distance=3.0)
+        LiquidityLevel(label="D1_BSL", price=125.0, side="ABOVE", source_tf="D1", distance=25.0)
     ]
     assert _select_liquidity(c, core_low, core_high, levels, s) is None
