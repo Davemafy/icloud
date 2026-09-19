@@ -1,3 +1,4 @@
+from dataclasses import replace
 from app.execution_safety import guard_plan_text, normalize_candidate_feedback
 from app.models import Analysis, Direction, Feedback, Grade, MarketSnapshot, Zone, ZoneState
 
@@ -323,9 +324,11 @@ def test_reentry_does_not_require_return_to_original_core_but_still_requires_val
 def test_paper_ai_fallback_preserves_core_execution_handoff(monkeypatch):
     from app import execution_safety as safety
 
-    monkeypatch.setattr(safety.SETTINGS, "paper_only", True)
-    monkeypatch.setattr(safety.SETTINGS, "ai_enabled", True)
-    monkeypatch.setattr(safety.SETTINGS, "require_ai_for_execution", True)
+    monkeypatch.setattr(
+        safety,
+        "SETTINGS",
+        replace(safety.SETTINGS, paper_only=True, ai_enabled=True, require_ai_for_execution=True),
+    )
     zone = _sell_zone("M1_READY")
     zone.original_target1 = 4280.0
     zone.original_target2 = 4270.0
