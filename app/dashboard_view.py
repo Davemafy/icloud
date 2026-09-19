@@ -283,7 +283,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(seqMismatch && seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:')){
         seqGate.textContent='SAFETY HOLD';
         seqGate.className='kpi bad';
-        seqMeta.textContent='Cloud thesis authority is preserved, but Sequence execution authority is intentionally suspended by '+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'.';
+        seqMeta.textContent=(ownerMatch
+          ? 'Cloud thesis owner is preserved, but Sequence execution authority is intentionally suspended by '
+          : 'Cloud handoff exists, but no acquired thesis owner is currently locked; Sequence execution authority is suspended by '
+        )+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
