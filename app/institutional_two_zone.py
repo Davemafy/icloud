@@ -657,7 +657,11 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
         guards.append(f"SPREAD_HIGH:{snapshot.spread_points:.1f}")
     if now - snapshot.sent_at > SETTINGS.max_snapshot_age_seconds:
         guards.append("SNAPSHOT_STALE")
-    hard_block = "NO_COMPLETE_HISTORY_CONTEXT" in guards or "SNAPSHOT_STALE" in guards or any(x.startswith("SPREAD_HIGH:") for x in guards)
+    # Spread is an execution-time safety hold, not a reason to erase a valid
+    # institutional thesis. Keep it visible in guards and let /mt5/plan live_block
+    # suspend orders. Structural analysis/ownership may still be acquired so the
+    # thesis survives until spread normalizes.
+    hard_block = "NO_COMPLETE_HISTORY_CONTEXT" in guards or "SNAPSHOT_STALE" in guards
     usd_news = [{"ts": int(n.ts), "title": str(n.title), "impact": str(n.impact)} for n in snapshot.news if str(n.currency).upper() == "USD"]
 
     analysis = Analysis(
