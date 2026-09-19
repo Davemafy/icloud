@@ -2,8 +2,9 @@ from app import db
 from app.models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from app.service import _stamp_execution_authority
 from app.thesis_ownership_policy import acquire_execution_ownership, apply_thesis_ownership
+import app.thesis_ownership_policy as policy
 from app.watch_ready import promote_watch_to_m1_ready, watch_zone_ready
-from app.zone_reaction_lifecycle import register_analysis_zones
+from app.zone_reaction_lifecycle import register_analysis_zones, update_zone_reactions
 
 
 def _snapshot(mid: float = 98.0, ts: int = 1200, reclaimed: bool = True) -> MarketSnapshot:
@@ -235,7 +236,8 @@ def test_zone_sweep_handoff_can_create_owned_instance_when_base_row_is_terminal(
     )
     assert acquired is not None
     assert acquired["reaction_key"].startswith("SELL|H4>H1|777|OWN|A_SWEEP_REQUAL")
-    assert acquired["status"] == "INTERACTING"
+    assert acquired["status"] == "REACTION_CONFIRMED"
+    assert int(acquired["reaction_confirmed_at"] or 0) == snap.sent_at
     assert acquired["ownership_zone_id"] == zone.zone_id
     assert acquired["ownership_authority"] == "HTF_ZONE_SWEEP_HANDOFF"
 
@@ -298,3 +300,41 @@ def test_objective_in_progress_owner_can_rearm_toward_tp2_after_tp1_hit(tmp_path
     assert window["mode"] == "LATCHED_AFTER_CORE_TOUCH"
     assert window["target1"] == 85.0
     assert window["target1_open"] is True
+
+
+def test_zone_sweep_owner_progresses_objectives_without_core_touch(tmp_path, monkeypatch):
+    path = tmp_path / "zone_sweep_progress.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _sell("SELL_SWEEP_PROGRESS", 104.0, 105.0)
+    zone.original_target1 = 97.0
+    zone.original_target2 = 94.0
+    zone.original_target3 = 90.0
+    first_snap = _snapshot(mid=100.0, ts=1200)
+    analysis = Analysis(
+        analysis_id="A_SWEEP_PROGRESS",
+        generated_at=1200,
+        snapshot_at=1200,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+
+    acquired = acquire_execution_ownership(
+        analysis, first_snap, "HTF_ZONE_SWEEP_HANDOFF", zone.zone_id, anchor_price=100.0
+    )
+    assert acquired is not None
+    assert int(acquired["core_touched_at"] or 0) == 0
+    assert acquired["status"] == "REACTION_CONFIRMED"
+
+    progress = _snapshot(mid=96.5, ts=1260, reclaimed=False)
+    update_zone_reactions(progress)
+    owner = policy.active_owner_snapshot(progress.sent_at)
+    assert owner is not None
+    assert int(owner["core_touched_at"] or 0) == 0
+    assert int(owner["target1_hit_at"] or 0) == progress.sent_at
+    assert owner["status"] == "OBJECTIVE_IN_PROGRESS"
