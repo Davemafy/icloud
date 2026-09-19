@@ -1,3 +1,5 @@
+import base64
+
 from app import db
 from app.db import save_snapshot
 from app.execution_owner_mirror import (
@@ -6,7 +8,7 @@ from app.execution_owner_mirror import (
     recover_owner_from_sequence_heartbeat,
 )
 from app.execution_ownership_migration import ensure_execution_ownership_schema
-from app.models import Bar, Heartbeat, MarketSnapshot
+from app.models import Bar, Direction, Grade, Heartbeat, MarketSnapshot, Zone, ZoneState
 from app.thesis_ownership_policy import active_owner_snapshot
 
 
@@ -140,3 +142,80 @@ def test_mirror_recovery_refuses_completed_deepest_objective(tmp_path, monkeypat
     )
     assert recover_owner_from_sequence_heartbeat(h) is False
     assert active_owner_snapshot(2000) is None
+
+
+
+def test_exact_zone_payload_survives_owner_mirror_recovery(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "_path", lambda: str(tmp_path / "mirror_exact.db"))
+    db.init_db()
+    save_snapshot(_snapshot())
+
+    zone = Zone(
+        zone_id="PZ_EXACT",
+        original_direction=Direction.SELL,
+        flip_direction=Direction.BUY,
+        setup_type="CONTINUATION",
+        source_tf="H4>H1",
+        grade=Grade.A_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=104.0,
+        core_high=105.0,
+        core_method="M1_READY|ZONE_SWEEP_HANDOFF|PROMPT",
+        location_score=9.0,
+        zone_low=95.0,
+        zone_high=106.0,
+        touch_count=1,
+        independent_confluence_count=7,
+        confluences=[
+            "LIQUIDITY_IN_MARKED_ZONE",
+            "BSL_IN_MARKED_ZONE",
+            "INSTITUTIONAL_DISPLACEMENT",
+        ],
+        source_ts=777,
+        invalidation_level=106.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=90.0,
+        original_target2=85.0,
+        original_target3=80.0,
+        clear_run=12.0,
+        notes=["attached_liquidity:BSL:H1_BSL@102.00000"],
+    )
+    encoded = base64.urlsafe_b64encode(zone.model_dump_json().encode()).decode().rstrip("=")
+    h = Heartbeat(
+        ts=2000,
+        ea="InstitutionalSMC_SequenceEA",
+        version="3.31",
+        symbol="XAUUSD",
+        details={
+            "paper_only": True,
+            "owner_mirror_contract": OWNER_MIRROR_CONTRACT,
+            "owner_mirror_active": True,
+            "owner_mirror_saved_at": 1900,
+            "owner_mirror_analysis_id": "A_EXACT",
+            "owner_mirror_zone_id": zone.zone_id,
+            "owner_mirror_direction": "SELL",
+            "owner_mirror_source_tf": "H4>H1",
+            "owner_mirror_source_ts": 777,
+            "owner_mirror_grade": "A+",
+            "owner_mirror_status": "REACTION_CONFIRMED",
+            "owner_mirror_authority": "HTF_ZONE_SWEEP_HANDOFF",
+            "owner_mirror_acquired_at": 1800,
+            "owner_mirror_core_low": 104.0,
+            "owner_mirror_core_high": 105.0,
+            "owner_mirror_zone_low": 95.0,
+            "owner_mirror_zone_high": 106.0,
+            "owner_mirror_target1": 90.0,
+            "owner_mirror_target2": 85.0,
+            "owner_mirror_target3": 80.0,
+            "owner_mirror_zone_payload_b64": encoded,
+        },
+    )
+    assert recover_owner_from_sequence_heartbeat(h) is True
+    owner = active_owner_snapshot(2000)
+    restored = Zone.model_validate_json(owner["ownership_zone_payload"])
+    assert restored.zone_id == zone.zone_id
+    assert restored.clear_run == 12.0
+    assert restored.independent_confluence_count == 7
+    assert "LIQUIDITY_IN_MARKED_ZONE" in restored.confluences
+    assert "BSL_IN_MARKED_ZONE" in restored.confluences
+    assert restored.notes == zone.notes
