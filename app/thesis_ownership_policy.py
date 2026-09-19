@@ -293,9 +293,9 @@ def _handoff_reaction_instance(
         return instance_key, existing
 
     now = int(snapshot.sent_at)
-    liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
-    status = "REACTION_CONFIRMED" if liquidity_authority else "INTERACTING"
-    reaction_confirmed_at = now if liquidity_authority else 0
+    preconfirmed_authority = authority in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}
+    status = "REACTION_CONFIRMED" if preconfirmed_authority else "INTERACTING"
+    reaction_confirmed_at = now if preconfirmed_authority else 0
     db.execute(
         """
         INSERT INTO zone_reactions(
@@ -338,10 +338,9 @@ def acquire_execution_ownership(
 
     HTF_CORE_HANDOFF originates from tactical-core M1_READY. HTF_ZONE_SWEEP_HANDOFF
     originates from a qualified envelope entry plus a proven structural-liquidity raid
-    and reclaim, so the core is not required. LIQUIDITY_REVERSAL_HANDOFF is M15-confirmed,
-    so its persisted
-    lifecycle begins as REACTION_CONFIRMED even though the remote context core was
-    intentionally not touched. This function never creates a zone or an order.
+    and M15 reclaim, so its lifecycle is already REACTION_CONFIRMED without a core touch.
+    LIQUIDITY_REVERSAL_HANDOFF is likewise M15-confirmed before the remote context core.
+    This function never creates a zone or an order.
     """
     if not SETTINGS.paper_only or authority not in EXECUTION_AUTHORITIES:
         return None
@@ -378,7 +377,6 @@ def acquire_execution_ownership(
                 reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
                 status=CASE
                     WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED'
-                    WHEN ?=1 AND status='ARMED' THEN 'INTERACTING'
                     ELSE status
                 END,
                 last_reason=?,last_seen_at=?
@@ -386,9 +384,8 @@ def acquire_execution_ownership(
             """,
             (
                 now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
-                1 if liquidity_authority else 0, now,
-                1 if liquidity_authority else 0,
-                1 if zone_sweep_authority else 0,
+                1 if (liquidity_authority or zone_sweep_authority) else 0, now,
+                1 if (liquidity_authority or zone_sweep_authority) else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
             ),
         )
