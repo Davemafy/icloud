@@ -19,24 +19,25 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
       - name: Python syntax
         run: python -m compileall -q app tests
-      - name: Sequence 3.32 structural checks
+      - name: Sequence 3.33 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.32"',
+              '#property version   "3.33"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
               'MT5_EXECUTION_OWNER_MIRROR_V1',
               'TZ31_RefreshCloudState',
+              'Persist/release the owner mirror even while execution is safety-blocked.',
               'TZ31_BuildPostHandoffContinuation',
               'owner_mirror_zone_payload_b64',
               'FileDelete("TradeZone\\\\execution_owner_state.txt")',
@@ -51,7 +52,7 @@ jobs:
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.32 release structural checks OK')
+          print('Sequence 3.33 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_32_ReleaseSafeOwner_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5
