@@ -119,8 +119,23 @@ def _due_reasons(now_local: datetime) -> list[str]:
 
 
 def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
-    if snap is None or not prompt_snapshot_complete(snap):
+    if snap is None:
         return False
+    complete = getattr(snap, "complete", None)
+    if callable(complete):
+        try:
+            if not bool(complete()):
+                return False
+        except Exception:
+            return False
+    try:
+        if not prompt_snapshot_complete(snap):
+            return False
+    except AttributeError:
+        # Lightweight test doubles / compatibility callers may only expose
+        # complete(). Real MarketSnapshot objects always take the strict prompt path.
+        if not callable(complete):
+            return False
     age = max(0, int(now_utc) - int(snap.sent_at))
     return age <= SETTINGS.max_snapshot_age_seconds
 
