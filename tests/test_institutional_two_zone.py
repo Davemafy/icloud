@@ -63,7 +63,7 @@ def _patch_common(monkeypatch, candidate, touches=0):
     monkeypatch.setattr(policy, "_dxy", lambda snapshot: Direction.NEUTRAL)
 
 
-def test_sell_zone_requires_bsl_physically_inside_exact_source_candle(monkeypatch):
+def test_sell_zone_keeps_bsl_inside_professional_source_tf_envelope(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate)
     analysis = _analysis([
@@ -74,8 +74,12 @@ def test_sell_zone_requires_bsl_physically_inside_exact_source_candle(monkeypatc
 
     assert len(zones) == 1
     zone = zones[0]
-    assert zone.zone_low == 100.0
-    assert zone.zone_high == 110.0
+    # Professional H4 geometry may expand beyond the raw source candle so the
+    # structural BSL and the required 50-pip distal raid room both fit inside.
+    assert zone.zone_low == 95.0
+    assert zone.zone_high == 113.0
+    assert zone.zone_low <= 108.0 <= zone.zone_high
+    assert zone.zone_high - 108.0 >= 5.0
     assert "LIQUIDITY_IN_MARKED_ZONE" in zone.confluences
     assert "BSL_IN_MARKED_ZONE" in zone.confluences
     assert analysis.execution_policy["public_zone_map"]["map_count"] == 1
