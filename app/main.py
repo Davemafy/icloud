@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,24 +22,24 @@ from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
 
-app = FastAPI(title=SETTINGS.app_name, version=SETTINGS.app_version)
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    init_db()
+    task = asyncio.create_task(scheduler_loop(run_analysis))
+    application.state.scheduler_task = task
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title=SETTINGS.app_name, version=SETTINGS.app_version, lifespan=_lifespan)
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
 if STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
-
-
-@app.on_event("startup")
-async def _startup():
-    init_db()
-    app.state.scheduler_task = asyncio.create_task(scheduler_loop(run_analysis))
-
-
-@app.on_event("shutdown")
-async def _shutdown():
-    t = getattr(app.state, "scheduler_task", None)
-    if t:
-        t.cancel()
 
 
 @app.get("/", response_class=HTMLResponse)
