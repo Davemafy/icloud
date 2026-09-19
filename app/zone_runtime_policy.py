@@ -216,12 +216,12 @@ def _market_side_rejection(direction: Direction, low: float, high: float, mid: f
     if direction == Direction.BUY and lo > price:
         return (
             "BUY_ZONE_ABOVE_CURRENT_PRICE",
-            "BUY alert zone is completely above current price. The prompt requires BUY demand below price or current price already interacting with the zone.",
+            "BUY alert zone is completely above current price. The prompt requires BUY demand below current price or current price already interacting with the zone.",
         )
     if direction == Direction.SELL and hi < price:
         return (
             "SELL_ZONE_BELOW_CURRENT_PRICE",
-            "SELL alert zone is completely below current price. The prompt requires SELL supply above price or current price already interacting with the zone.",
+            "SELL alert zone is completely below current price. The prompt requires SELL supply above current price or current price already interacting with the zone.",
         )
     return "", ""
 
