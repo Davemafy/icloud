@@ -53,6 +53,11 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
     ensure_execution_ownership_schema()
     cutoff = int(now) - 7 * 24 * 3600
     with connect() as db:
+        table = db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='zone_reactions'"
+        ).fetchone()
+        if table is None:
+            return None
         rows = db.execute(
             """
             SELECT reaction_key,latest_zone_id,direction,source_tf,source_ts,status,
@@ -454,6 +459,8 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         analysis.approved = False
         if "ACTIVE_THESIS_OWNER_SNAPSHOT_UNAVAILABLE" not in analysis.guards:
             analysis.guards.append("ACTIVE_THESIS_OWNER_SNAPSHOT_UNAVAILABLE")
+        if "ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP" not in analysis.guards:
+            analysis.guards.append("ACTIVE_THESIS_OWNER_NOT_IN_CURRENT_MAP")
         analysis.trader_brief += (
             f" Active acquired thesis lock={direction} ({status}, {owner.get('ownership_authority','')}). "
             "Its frozen ownership-zone snapshot is unavailable, so execution fails closed until lifecycle release."
