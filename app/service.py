@@ -101,7 +101,11 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
 
 
 def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: dict) -> tuple[str, dict | None]:
-    """Persist thesis lock only after the handoff survives all current cloud gates."""
+    """Persist thesis lock after structural/approval handoff gates.
+
+    Execution-time safety holds such as spread still block MT5 orders, but they do
+    not erase a valid institutional thesis or prevent its ownership from persisting.
+    """
     if authority == "NONE" or not bool(a.approved):
         return authority, None
 
@@ -287,8 +291,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         else:
             a.trader_brief += " AI validation unavailable; prompt zones remain analysis-only locations."
 
-    # Final ownership acquisition occurs only after deterministic handoff plus the
-    # current cloud approval path (or the explicit PAPER-only AI outage fallback).
+    # Final ownership acquisition occurs after deterministic handoff plus structural
+    # approval (or the explicit PAPER-only AI outage fallback). Execution-time safety
+    # such as spread is enforced in /mt5/plan and must not erase the thesis lock.
     authority, ownership_row = _acquire_final_ownership(a, s, authority, liquidity_handoff)
 
     # save_analysis re-registers idempotently; the pre-registration above is only
