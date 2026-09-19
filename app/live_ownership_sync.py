@@ -24,8 +24,38 @@ _ORIGINAL_ZONE_RENDER_TEXT: Callable[..., str] | None = None
 _ORIGINAL_DASHBOARD_HTML: Callable[[str], str] | None = None
 
 
+def _frozen_owner_zone(owner: dict[str, Any]) -> Any | None:
+    payload = str(owner.get("ownership_zone_payload") or "")
+    if not payload:
+        return None
+    try:
+        from .models import Zone, ZoneState
+
+        zone = Zone.model_validate_json(payload)
+        owner_id = str(owner.get("ownership_zone_id") or "")
+        if owner_id and zone.zone_id != owner_id:
+            return None
+        if zone.state != ZoneState.ACTIVE:
+            return None
+        if zone.original_direction.value != str(owner.get("direction") or ""):
+            return None
+        return zone
+    except Exception:
+        return None
+
+
 def _find_owner_zone(analysis: Any, owner: dict[str, Any]) -> Any | None:
+    """Resolve the frozen owner; never remap an explicit owner id by source alone."""
     zones = list(getattr(analysis, "zones", []) or [])
+    owner_id = str(owner.get("ownership_zone_id") or "")
+    if owner_id:
+        exact = next((z for z in zones if str(getattr(z, "zone_id", "")) == owner_id), None)
+        if exact is not None:
+            return exact
+        return _frozen_owner_zone(owner)
+
+    # Legacy ownership created before frozen owner ids may use the last known id,
+    # then source identity as a compatibility fallback.
     latest_id = str(owner.get("latest_zone_id") or "")
     if latest_id:
         exact = next((z for z in zones if str(getattr(z, "zone_id", "")) == latest_id), None)
@@ -88,6 +118,31 @@ def sync_analysis_live_ownership(analysis: Any, now: int | None = None) -> Any:
         return analysis
 
     owner_zone = _find_owner_zone(analysis, owner)
+    if owner_zone is not None:
+        owner_id = str(owner.get("ownership_zone_id") or getattr(owner_zone, "zone_id", "") or "")
+        zones = list(getattr(analysis, "zones", []) or [])
+        present = any(str(getattr(z, "zone_id", "")) == owner_id for z in zones)
+        if owner_id and not present:
+            direction = str(owner.get("direction") or "")
+            rebuilt = []
+            inserted = False
+            for current in zones:
+                current_dir = getattr(
+                    getattr(current, "original_direction", None),
+                    "value",
+                    getattr(current, "original_direction", ""),
+                )
+                if not inserted and str(current_dir) == direction:
+                    rebuilt.append(owner_zone.model_copy(deep=True) if hasattr(owner_zone, "model_copy") else owner_zone)
+                    inserted = True
+                else:
+                    rebuilt.append(current)
+            if not inserted:
+                rebuilt.insert(0, owner_zone.model_copy(deep=True) if hasattr(owner_zone, "model_copy") else owner_zone)
+            analysis.zones = rebuilt[:2]
+        if owner_id:
+            analysis.selected_zone_id = owner_id
+
     meta = _owner_meta(owner, owner_zone)
     meta.update(
         {
