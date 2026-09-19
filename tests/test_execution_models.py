@@ -28,7 +28,7 @@ def test_regime_classifier_returns_supported_regime():
 
 def test_overlay_keeps_orderflow_disabled_without_centralized_feed():
     s=_snapshot()
-    z=Zone(zone_id="Z1",original_direction=Direction.BUY,flip_direction=Direction.SELL,setup_type="CONTINUATION",source_tf="D1>H4>H1",grade=Grade.A,state="ACTIVE",core_low=s.mid-2,core_high=s.mid-1,core_method="TEST",location_score=8,zone_low=s.mid-3,zone_high=s.mid-0.5,invalidation_level=s.mid-3.1)
+    z=Zone(zone_id="Z1",original_direction=Direction.BUY,flip_direction=Direction.SELL,setup_type="CONTINUATION",source_tf="D1>H4>H1",grade=Grade.A,state="ACTIVE",core_low=s.mid-2,core_high=s.mid-1,core_method="TEST",location_score=8,zone_low=s.mid-3,zone_high=s.mid-0.5,invalidation_level=s.mid-3.1,invalidation_rule="M15 accepted invalidation")
     a=Analysis(analysis_id="A1",generated_at=s.sent_at,snapshot_at=s.sent_at,zones=[z],selected_zone_id="Z1")
     o=build_execution_overlay(s,a,"TEST")
     assert o["rules"]["htf_location_remains_authority"] is True
