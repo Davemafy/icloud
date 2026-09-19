@@ -35,6 +35,9 @@ _READINESS_SPLIT = (
     '<div class="muted" id="htfMeta">Location quality only — not entry readiness.</div></div>'
     '<div class="card"><h3>Execution readiness</h3><div class="kpi" id="jScore">WAITING</div>'
     '<div class="muted" id="executionMeta">M1 handoff controls entry timing.</div></div>'
+    '<div class="card"><h3>Sequence execution gate <span class="pill paper">LIVE DEBUG</span></h3>'
+    '<div class="kpi" id="sequenceGate">WAITING</div>'
+    '<div class="muted" id="sequenceGateMeta">Waiting for Sequence heartbeat telemetry.</div></div>'
 )
 _JOURNAL_CONTEXT_SCRIPT = r'''
 <script id="journal-context-readonly-script">
@@ -204,6 +207,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const htfMeta=document.getElementById('htfMeta');
     const exec=document.getElementById('jScore');
     const execMeta=document.getElementById('executionMeta');
+    const seqGate=document.getElementById('sequenceGate');
+    const seqMeta=document.getElementById('sequenceGateMeta');
     if(!htf || !htfMeta || !exec || !execMeta)return;
 
     const j=journalState();
@@ -256,6 +261,44 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       state='M1 HANDOFF READY';
       cls='ok';
       meta=checklist+'Location has reached M1 handoff. Sequence EA still applies its normal sweep → MSS/BOS → displacement → value/retrace sequence plus all unchanged execution gates.';
+    }
+
+    const seq=j?.sequence_debug||{};
+    const seqAuthority=String(seq.authority||'NONE');
+    const seqStage=String(seq.gate_stage||'UNKNOWN');
+    const seqReason=String(seq.gate_reason||'');
+    const seqModel=String(seq.candidate_model||'NONE');
+    const seqOnline=seq.online===true;
+    const seqMismatch=seq.authority_mismatch===true;
+
+    if(seqGate && seqMeta){
+      if(!seqOnline){
+        seqGate.textContent='OFFLINE';
+        seqGate.className='kpi bad';
+        seqMeta.textContent='No fresh Sequence heartbeat. Execution cannot be trusted until telemetry returns.';
+      }else if(seqMismatch){
+        seqGate.textContent='AUTHORITY MISMATCH';
+        seqGate.className='kpi bad';
+        seqMeta.textContent='Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority=NONE. Gate '+seqStage+' • '+seqReason;
+      }else if(seqStage==='ORDER_SENT'){
+        seqGate.textContent='ORDER SENT';
+        seqGate.className='kpi ok';
+        seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.';
+      }else if(seqAuthority!=='NONE'){
+        seqGate.textContent=seqStage.replaceAll('_',' ');
+        seqGate.className='kpi '+(seqStage==='VALUE_PD_ARRAY'||seqStage==='VALUE'?'blue':'warn');
+        seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+'.';
+      }else{
+        seqGate.textContent=seqStage.replaceAll('_',' ');
+        seqGate.className='kpi warn';
+        seqMeta.textContent='No Sequence execution authority. '+(seqReason||'Waiting for a cloud handoff.') ;
+      }
+    }
+
+    if(seqOnline && seqAuthority!=='NONE' && !seqMismatch && !m1){
+      state='M1 SEARCH ACTIVE';
+      cls='blue';
+      meta=checklist+'Macro execution authority is live. Sequence is currently at '+seqStage.replaceAll('_',' ')+'; this is not the same as waiting for HTF location.';
     }
 
     if(exec.textContent!==state)exec.textContent=state;
