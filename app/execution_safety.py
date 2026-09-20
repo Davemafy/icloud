@@ -475,6 +475,11 @@ def normalize_candidate_feedback(
         and str(lrh.get("context_zone_id") or "") == zone.zone_id
         and str(lrh.get("direction") or "") == candidate_direction
     )
+    owner_continuation_ready, owner_authority, owner_meta = _active_owner_continuation(analysis, zone)
+    owner_primary = bool(
+        owner_continuation_ready
+        and str(owner_meta.get("direction") or "") == candidate_direction
+    )
 
     if not is_flip and role == "PRIMARY":
         px = float(details.get("entry_price") or out.price or snapshot.mid)
@@ -498,10 +503,13 @@ def normalize_candidate_feedback(
                 or sweep_note
             )
         )
-        features["zone_context"] = 1 if (core_now or sweep_primary) else 0
-        features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary) else 0
+        features["zone_context"] = 1 if (core_now or sweep_primary or owner_primary) else 0
+        features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary or owner_primary) else 0
+        features["owner_continuation"] = 1 if owner_primary else 0
+        features["owner_continuation_authority"] = owner_authority if owner_primary else "NONE"
         features["interaction_basis"] = (
-            "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary
+            "PERSISTED_THESIS_OWNER" if owner_primary
+            else "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary
             else "OUTER_ZONE_PLUS_PROVEN_LIQUIDITY_SWEEP" if sweep_primary
             else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
         )
@@ -510,7 +518,7 @@ def normalize_candidate_feedback(
         features["zone_sweep_ts"] = int(window.get("sweep_ts") or 0)
         features["zone_sweep_price"] = float(window.get("sweep_price") or 0.0)
         features["liquidity_reversal_handoff"] = 1 if lrh_primary else 0
-        if not core_now and not cloud_ready and not lrh_primary:
+        if not core_now and not cloud_ready and not lrh_primary and not owner_primary:
             reasons = list(details.get("rejection_reasons") or [])
             if "CORE_NOT_REACHED" not in reasons:
                 reasons.append("CORE_NOT_REACHED")
