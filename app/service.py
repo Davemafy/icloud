@@ -141,7 +141,7 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
     Execution-time safety holds such as spread still block MT5 orders, but they do
     not erase a valid institutional thesis or prevent its ownership from persisting.
     """
-    if authority == "NONE" or not bool(a.approved):
+    if authority == "NONE":
         return authority, None
 
     policy = dict(a.execution_policy or {})
@@ -160,6 +160,9 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         policy["execution_authority"] = auth_meta
         a.execution_policy = policy
         return authority, thesis
+
+    if not bool(a.approved):
+        return authority, None
 
     anchor = (
         float(liquidity_handoff.get("liquidity_price") or s.mid)
