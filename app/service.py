@@ -65,11 +65,44 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
 
 
 def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict) -> str:
+    """Resolve current execution authority without discarding a live owner handoff.
+
+    Once a thesis has acquired deterministic authority, later re-analysis must not
+    downgrade it to WATCH_ONLY merely because price has left the original HTF
+    location. The owner remains sticky until lifecycle release; Sequence still
+    requires a fresh same-direction M1 structure/displacement/value pattern and
+    therefore cannot chase price.
+    """
     authority = "NONE"
     zone_id = ""
     risk_multiplier = 1.0
-    if ready_zone is not None and a.selected_zone_id == ready_zone.zone_id:
-        window = dict((a.execution_policy or {}).get("execution_window") or {})
+    policy = dict(a.execution_policy or {})
+    thesis = dict(policy.get("active_thesis") or {})
+    owner_authority = str(thesis.get("ownership_authority") or "")
+    owner_zone_id = str(thesis.get("owner_zone_id") or "")
+    owner_live = bool(
+        thesis.get("locked")
+        and thesis.get("objective_open", True)
+        and thesis.get("continuation_authority")
+        and owner_authority in {
+            "HTF_CORE_HANDOFF",
+            "HTF_ZONE_SWEEP_HANDOFF",
+            "LIQUIDITY_REVERSAL_HANDOFF",
+        }
+        and owner_zone_id
+        and owner_zone_id == str(a.selected_zone_id or "")
+    )
+
+    if owner_live:
+        authority = owner_authority
+        zone_id = owner_zone_id
+        risk_multiplier = (
+            0.50 if authority == "LIQUIDITY_REVERSAL_HANDOFF"
+            else 0.65 if authority == "HTF_ZONE_SWEEP_HANDOFF"
+            else 1.0
+        )
+    elif ready_zone is not None and a.selected_zone_id == ready_zone.zone_id:
+        window = dict(policy.get("execution_window") or {})
         location_mode = str(window.get("mode") or "")
         sweep_note = any(
             str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
@@ -82,19 +115,21 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
             else "HTF_CORE_HANDOFF"
         )
         zone_id = ready_zone.zone_id
+        risk_multiplier = 0.65 if authority == "HTF_ZONE_SWEEP_HANDOFF" else 1.0
     elif bool(liquidity_handoff.get("active")):
         authority = "LIQUIDITY_REVERSAL_HANDOFF"
         zone_id = str(liquidity_handoff.get("context_zone_id") or "")
         risk_multiplier = float(liquidity_handoff.get("risk_multiplier") or 0.50)
 
-    policy = dict(a.execution_policy or {})
     policy["execution_authority"] = {
         "authority": authority,
         "zone_id": zone_id,
         "risk_multiplier": risk_multiplier,
         "paper_only": True,
         "full_m1_sequence_required": authority != "NONE",
-        "ownership_acquired": False,
+        "ownership_acquired": owner_live,
+        "owner_continuation": owner_live,
+        "ownership_acquired_at": int(thesis.get("ownership_acquired_at") or 0) if owner_live else 0,
     }
     a.execution_policy = policy
     return authority
@@ -112,6 +147,20 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
     policy = dict(a.execution_policy or {})
     auth_meta = dict(policy.get("execution_authority") or {})
     zone_id = str(auth_meta.get("zone_id") or a.selected_zone_id or "")
+    thesis = dict(policy.get("active_thesis") or {})
+    if bool(
+        thesis.get("locked")
+        and str(thesis.get("owner_zone_id") or "") == zone_id
+        and str(thesis.get("ownership_authority") or "") == authority
+        and thesis.get("objective_open", True)
+    ):
+        auth_meta["ownership_acquired"] = True
+        auth_meta["owner_continuation"] = True
+        auth_meta["ownership_acquired_at"] = int(thesis.get("ownership_acquired_at") or 0)
+        policy["execution_authority"] = auth_meta
+        a.execution_policy = policy
+        return authority, thesis
+
     anchor = (
         float(liquidity_handoff.get("liquidity_price") or s.mid)
         if authority == "LIQUIDITY_REVERSAL_HANDOFF"
