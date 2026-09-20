@@ -156,6 +156,41 @@ def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
     }
 
 
+def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, str, dict[str, Any]]:
+    """Return the sticky authority already earned by a live thesis owner.
+
+    Macro authority is historical once acquired. Leaving the original HTF core or
+    envelope must not turn the plan back into WATCH_ONLY while the owner is still
+    nonterminal. Sequence remains responsible for fresh M1 BOS/displacement/value
+    and no-chase entry timing.
+    """
+    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    authority = str(meta.get("ownership_authority") or "")
+    if not SETTINGS.paper_only or not bool(analysis.approved):
+        return False, authority, meta
+    if zone.state != ZoneState.ACTIVE or zone.grade == Grade.REJECT:
+        return False, authority, meta
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
+        if not bool(fallback.get("active")):
+            return False, authority, meta
+    ready = bool(
+        meta.get("locked")
+        and meta.get("continuation_authority")
+        and str(meta.get("status") or "") in THESIS_CONTINUATION_STATUSES
+        and str(meta.get("owner_zone_id") or "") == zone.zone_id
+        and str(meta.get("direction") or "") == zone.original_direction.value
+        and bool(meta.get("owner_zone_present", True))
+        and bool(meta.get("objective_open", True))
+        and authority in {
+            "HTF_CORE_HANDOFF",
+            "HTF_ZONE_SWEEP_HANDOFF",
+            "LIQUIDITY_REVERSAL_HANDOFF",
+        }
+    )
+    return ready, authority, meta
+
+
 def _owner_progress_open_targets(analysis: Analysis, zone: Zone) -> tuple[list[float], dict[str, Any]]:
     """Return only still-open owner objectives after TP progress."""
     meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
@@ -234,7 +269,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     plan_state = str(kv.get("zone_state", zone.state.value)).upper()
     thesis_bplus_override = _confirmed_thesis_bplus_override(analysis, zone, plan_state)
     paper_ai_fallback = _paper_ai_fallback_allows(analysis, zone)
-    effective_mode = "DUAL_BRANCH" if (thesis_bplus_override or paper_ai_fallback) else base_mode
+    owner_continuation_ready, owner_authority, owner_continuation_meta = _active_owner_continuation(analysis, zone)
+    effective_mode = "DUAL_BRANCH" if (owner_continuation_ready or thesis_bplus_override or paper_ai_fallback) else base_mode
     primary_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
     window = dict((analysis.execution_policy or {}).get("execution_window") or {})
     authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
@@ -256,10 +292,11 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     )
     core_handoff_ready = bool(primary_handoff_ready and not sweep_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
-    handoff_ready = bool(core_handoff_ready or sweep_handoff_ready or liquidity_handoff_ready)
+    handoff_ready = bool(owner_continuation_ready or core_handoff_ready or sweep_handoff_ready or liquidity_handoff_ready)
 
     authority = (
-        "HTF_ZONE_SWEEP_HANDOFF" if sweep_handoff_ready
+        owner_authority if owner_continuation_ready
+        else "HTF_ZONE_SWEEP_HANDOFF" if sweep_handoff_ready
         else "HTF_CORE_HANDOFF" if core_handoff_ready
         else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready
         else "NONE"
@@ -273,19 +310,34 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
     kv["core_interaction_now"] = "1" if core_now else "0"
     kv["core_handoff_ready"] = "1" if core_handoff_ready else "0"
+    kv["owner_continuation_ready"] = "1" if owner_continuation_ready else "0"
+    kv["owner_continuation_authority"] = owner_authority if owner_continuation_ready else "NONE"
     kv["zone_sweep_handoff_ready"] = "1" if sweep_handoff_ready else "0"
     kv["zone_sweep_confirmed"] = "1" if bool(window.get("sweep_confirmed")) else "0"
     kv["zone_sweep_ts"] = str(int(window.get("sweep_ts") or 0))
     kv["zone_sweep_label"] = str(window.get("sweep_label") or "")
     kv["zone_sweep_price"] = f"{float(window.get('sweep_price') or 0.0):.5f}"
-    kv["core_required_for_authority"] = "0" if sweep_handoff_ready else "1"
+    kv["core_required_for_authority"] = (
+        "0"
+        if sweep_handoff_ready
+        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"})
+        else "1"
+    )
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
     kv["paper_ai_fallback_active"] = "1" if paper_ai_fallback else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
 
     handoff_ts = 0
-    if sweep_handoff_ready:
+    if owner_continuation_ready:
+        handoff_ts = int(
+            owner_continuation_meta.get("reaction_confirmed_at")
+            or owner_continuation_meta.get("ownership_acquired_at")
+            or analysis.snapshot_at
+            or analysis.generated_at
+            or 0
+        )
+    elif sweep_handoff_ready:
         handoff_ts = int(window.get("sweep_ts") or 0)
     elif core_handoff_ready:
         handoff_ts = int(window.get("core_touched_at") or analysis.snapshot_at or analysis.generated_at or 0)
@@ -293,7 +345,16 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         handoff_ts = int(lrh.get("displacement_ts") or lrh.get("sweep_ts") or 0)
     kv["execution_handoff_ts"] = str(handoff_ts)
 
-    if liquidity_handoff_ready:
+    if owner_continuation_ready and owner_authority == "LIQUIDITY_REVERSAL_HANDOFF":
+        kv["liquidity_reversal_direction"] = str(owner_continuation_meta.get("direction") or zone.original_direction.value)
+        kv["liquidity_reversal_label"] = "PERSISTED_THESIS_OWNER"
+        kv["liquidity_reversal_source_tf"] = str(owner_continuation_meta.get("source_tf") or zone.source_tf)
+        kv["liquidity_reversal_price"] = f"{float(owner_continuation_meta.get('ownership_anchor_price') or 0.0):.5f}"
+        kv["liquidity_reversal_sweep_ts"] = "0"
+        kv["liquidity_reversal_displacement_ts"] = str(handoff_ts)
+        kv["liquidity_reversal_risk_multiplier"] = "0.50"
+        kv["liquidity_object_promoted_to_zone"] = "0"
+    elif liquidity_handoff_ready:
         kv["liquidity_reversal_direction"] = str(lrh.get("direction") or "")
         kv["liquidity_reversal_label"] = str(lrh.get("liquidity_label") or "")
         kv["liquidity_reversal_source_tf"] = str(lrh.get("liquidity_source_tf") or "")
@@ -356,7 +417,10 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
 
     if handoff_ready and original_valid and live_valid:
         kv["ea_mode"] = "DUAL_BRANCH"
-        if thesis_bplus_override:
+        if owner_continuation_ready:
+            kv["setup_type"] = "CONTINUATION"
+            kv["execution_role"] = "THESIS_CONTINUATION"
+        elif thesis_bplus_override:
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
         elif sweep_handoff_ready:
