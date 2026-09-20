@@ -166,18 +166,14 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
     """
     meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
     authority = str(meta.get("ownership_authority") or "")
-    if not SETTINGS.paper_only:
+    if not SETTINGS.paper_only or not bool(analysis.approved):
         return False, authority, meta
     if zone.state != ZoneState.ACTIVE or zone.grade == Grade.REJECT:
         return False, authority, meta
-
-    # Ownership was acquired only after the original deterministic/approval gates.
-    # Do not make that historical macro authority depend on a later analysis being
-    # marked WATCH_ONLY. A genuine current execution-level AI rejection may suspend
-    # orders without deleting the owner.
-    ai_gate = dict((analysis.execution_policy or {}).get("ai_execution_gate") or {})
-    if bool(ai_gate.get("explicit_rejection")):
-        return False, authority, meta
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
+        if not bool(fallback.get("active")):
+            return False, authority, meta
     ready = bool(
         meta.get("locked")
         and meta.get("continuation_authority")
