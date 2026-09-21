@@ -19,7 +19,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_journal_provenance.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_journal_provenance.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
       - name: Python syntax
         run: python -m compileall -q app tests
       - name: DataBridge 1.42 structural checks
@@ -60,16 +60,16 @@ jobs:
           PY
           sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5
           sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
-      - name: Sequence 3.34 structural checks
+      - name: Sequence 3.35 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.34"',
+              '#property version   "3.35"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
@@ -90,10 +90,15 @@ jobs:
               'TZ34_InitialRiskDistance',
               'HistorySelectByPosition(positionId)',
               'RunnerTrailStartR',
+              'TZ35_ReentryEntryReady',
+              'WAITING_FOR_CLOSED_M1_VALUE_REACTION',
+              'PD_ARRAY_ACCEPTED_INVALIDATION',
+              'REENTRY_LIMIT_REACHED',
+              'ENTRY_DECISION',
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.34 release structural checks OK')
+          print('Sequence 3.35 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5

@@ -267,7 +267,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     }else{
       state='M1 HANDOFF ACTIVE';
       cls='blue';
-      meta=checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace and all unchanged execution gates.';
+      meta=checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace. Re-entries additionally require a closed M1 same-direction reaction from value before any order.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -311,8 +311,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.';
       }else if(seqAuthority!=='NONE'){
         const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
-        seqGate.textContent=valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ');
-        seqGate.className='kpi '+(valueWait?'blue':'warn');
+        const reactionWait=seqStage==='REENTRY_CONFIRMATION';
+        const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ')));
+        seqGate.className='kpi '+(limitReached?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
       }else{
         seqGate.textContent=seqStage.replaceAll('_',' ');
@@ -331,12 +333,22 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       meta=checklist+'Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
     }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
       const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+      const reactionWait=seqStage==='REENTRY_CONFIRMATION';
+      const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
       const forming=['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
       const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
       if(seqStage==='ORDER_SENT'){
         state='ORDER SENT';
         cls='ok';
         meta=checklist+'Sequence has completed its entry gates and sent the paper order.';
+      }else if(limitReached){
+        state='THESIS ENTRY LIMIT REACHED';
+        cls='warn';
+        meta=checklist+'The configured re-entry allowance for this acquired thesis is exhausted. No further same-thesis entry is permitted unless a new thesis is legitimately acquired.';
+      }else if(reactionWait){
+        state='WAITING FOR M1 VALUE REACTION';
+        cls='blue';
+        meta=checklist+'Price has produced/approached execution value, but re-entry now requires a CLOSED M1 same-direction rejection/micro-break from that OTE/PD overlap. Entry permission: NO.';
       }else if(valueWait){
         state='WAITING FOR VALUE / RETRACE';
         cls='blue';

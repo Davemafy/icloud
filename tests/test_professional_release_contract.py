@@ -11,10 +11,10 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.43"
-    assert manifest["release"] == "6.3.22"
+    assert SETTINGS.app_version == "6.5.44"
+    assert manifest["release"] == "6.3.23"
     assert manifest["data_bridge_version"] == "1.42"
-    assert manifest["sequence_ea_version"] == "3.34"
+    assert manifest["sequence_ea_version"] == "3.35"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5"
@@ -30,11 +30,11 @@ def test_professional_release_contract_is_self_consistent():
     assert bridge_core_digest == bridge_core["sha256"] == "990cc537380baa9df89551a882a31a124a3177693d694be367ff521526a8d8e9"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert digest == seq["sha256"] == "79378339b39ab6af268eb4e71f42d4ca1a2b33d988b5a488b8a7afa956c6565d"
+    assert digest == seq["sha256"] == "84c8764d7db289d3547e8d9864d3e209a2640e98a57e1b71099a231d4adee491"
 
     required = {
         "outer_zone_liquidity_sweep_execution_authority",
@@ -70,5 +70,10 @@ def test_professional_release_contract_is_self_consistent():
         "journal_history_metadata_provenance",
         "mql5_tester_guard_compile_fix",
         "installer_compile_diagnostics",
+        "reentry_value_requires_closed_m1_reaction",
+        "reentry_pd_array_accepted_invalidation_guard",
+        "reentry_signal_freshness_guard",
+        "reentry_limit_terminal_gate",
+        "entry_decision_audit_telemetry",
     }
     assert required.issubset(set(manifest["channel_features"]))

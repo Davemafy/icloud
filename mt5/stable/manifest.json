@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.22",
+  "release": "6.3.23",
   "repository": "Davemafy/icloud",
-  "ref": "242520e05c919623a82b40954ae89e2c1ab6ce9c",
+  "ref": "fb31f7fd41b4d37c84d497ddf5ca9b417d091744",
   "data_bridge_version": "1.42",
-  "sequence_ea_version": "3.34",
+  "sequence_ea_version": "3.35",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -116,7 +116,12 @@
     "journal_position_metadata_persistence",
     "journal_history_metadata_provenance",
     "mql5_tester_guard_compile_fix",
-    "installer_compile_diagnostics"
+    "installer_compile_diagnostics",
+    "reentry_value_requires_closed_m1_reaction",
+    "reentry_pd_array_accepted_invalidation_guard",
+    "reentry_signal_freshness_guard",
+    "reentry_limit_terminal_gate",
+    "entry_decision_audit_telemetry"
   ],
   "files": [
     {
@@ -129,11 +134,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
       "requires_reload": true,
-      "sha256": "79378339b39ab6af268eb4e71f42d4ca1a2b33d988b5a488b8a7afa956c6565d"
+      "sha256": "84c8764d7db289d3547e8d9864d3e209a2640e98a57e1b71099a231d4adee491"
     }
   ],
   "support_files": [

@@ -118,3 +118,31 @@ def test_fresh_sequence_open_position_overrides_closed_sibling_event():
         },
     )
     assert status == "IN TRADE"
+
+
+def test_sequence_reentry_confirmation_has_explicit_wait_state():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "REENTRY_CONFIRMATION",
+            "gate_reason": "WAITING_FOR_CLOSED_M1_VALUE_REACTION",
+            "open_positions": 0,
+        },
+    )
+    assert status == "WAITING FOR M1 VALUE REACTION"
+
+
+def test_sequence_reentry_limit_is_terminal_for_same_thesis():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "THESIS",
+            "gate_reason": "REENTRY_LIMIT_REACHED",
+            "open_positions": 0,
+        },
+    )
+    assert status == "THESIS ENTRY LIMIT REACHED"
