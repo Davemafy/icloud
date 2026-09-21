@@ -241,10 +241,10 @@ void MarkPositions()
          "\"entry_price\":%.5f,\"current_sl\":%.5f,\"tp\":%.5f,\"floating_profit\":%.2f,"
          "\"event_provenance\":\"LIVE_MT5\",\"metadata_source\":\"%s\","
          "\"execution_bridge_version\":\"%s\",\"execution_sequence_version\":\"%s\","
-         "\"execution_cloud_version\":\"%s\",\"comment\":\"%s\"}",
+         "\"execution_cloud_version\":\"%s\",\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",
          JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),
          dir,JsonEscape(grade),(long)pid,vol,open,sl,tp,profit,metadataSource,
-         JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),JsonEscape(comment)
+         JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(comment)
       );
       SendJournal("POSITION_MARK",mark,aid,zid,d);
    }
@@ -314,11 +314,11 @@ void BackfillJournalHistory(bool force=false)
             "\"event_provenance\":\"MT5_HISTORY_RECOVERY\",\"metadata_source\":\"%s\","
             "\"execution_bridge_version\":\"%s\",\"execution_sequence_version\":\"%s\",\"execution_cloud_version\":\"%s\","
             "\"recovery_bridge_version\":\"%s\",\"recovery_sequence_version\":\"%s\",\"recovery_cloud_version\":\"%s\","
-            "\"comment\":\"%s\"}",
+            "\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",
             JsonEscape(EventUidDeal("ENTRY_OPENED",deal)),JsonEscape(canonical),JsonEscape(campaign),JsonEscape(setup),
             JsonEscape(tag),dir,JsonEscape(grade),(long)pid,(long)deal,vol,metadataSource,
             JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),
-            TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(recoverySeq),JsonEscape(g_cloudVersion),JsonEscape(comment)
+            TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(recoverySeq),JsonEscape(g_cloudVersion),TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(recoverySeq),JsonEscape(comment)
          );
          if(SendJournalAt(eventTs,"ENTRY_OPENED",price,aid,zid,d))g_lastBackfillEvents++;
          continue;
@@ -334,11 +334,11 @@ void BackfillJournalHistory(bool force=false)
          "\"net_profit\":%.2f,\"recovered_from_mt5_history\":true,\"event_provenance\":\"MT5_HISTORY_RECOVERY\","
          "\"metadata_source\":\"%s\",\"execution_bridge_version\":\"%s\",\"execution_sequence_version\":\"%s\","
          "\"execution_cloud_version\":\"%s\",\"recovery_bridge_version\":\"%s\","
-         "\"recovery_sequence_version\":\"%s\",\"recovery_cloud_version\":\"%s\",\"comment\":\"%s\"}",
+         "\"recovery_sequence_version\":\"%s\",\"recovery_cloud_version\":\"%s\",\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",
          JsonEscape(EventUidDeal(ev,deal)),JsonEscape(canonical),JsonEscape(campaign),JsonEscape(setup),JsonEscape(tag),
          JsonEscape(grade),(long)pid,(long)deal,vol,net,metadataSource,
          JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),TZ_JOURNAL_BRIDGE_VERSION,
-         JsonEscape(recoverySeq),JsonEscape(g_cloudVersion),JsonEscape(comment)
+         JsonEscape(recoverySeq),JsonEscape(g_cloudVersion),TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(recoverySeq),JsonEscape(comment)
       );
       if(SendJournalAt(eventTs,ev,price,aid,zid,d))g_lastBackfillEvents++;
 
@@ -387,10 +387,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
          "\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,"
          "\"event_provenance\":\"LIVE_MT5\",\"metadata_source\":\"LIVE_ENTRY_CONTEXT\","
          "\"execution_bridge_version\":\"%s\",\"execution_sequence_version\":\"%s\",\"execution_cloud_version\":\"%s\","
-         "\"comment\":\"%s\"}",
+         "\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",
          JsonEscape(EventUidDeal("ENTRY_OPENED",deal)),JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),
          JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,(long)deal,vol,
-         TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(execSeq),JsonEscape(g_cloudVersion),JsonEscape(comment)
+         TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(execSeq),JsonEscape(g_cloudVersion),TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(execSeq),JsonEscape(comment)
       );
       SendJournal("ENTRY_OPENED",price,aid,zid,d);
       return;
@@ -412,10 +412,10 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
       "\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,"
       "\"event_provenance\":\"LIVE_MT5\",\"metadata_source\":\"%s\","
       "\"execution_bridge_version\":\"%s\",\"execution_sequence_version\":\"%s\",\"execution_cloud_version\":\"%s\","
-      "\"comment\":\"%s\"}",
+      "\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",
       JsonEscape(EventUidDeal(ev,deal)),JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),
       JsonEscape(SetupName(tag)),JsonEscape(tag),JsonEscape(grade),(long)pid,(long)deal,vol,net,metadataSource,
-      JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),JsonEscape(comment)
+      JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(execCloud),JsonEscape(execBridge),JsonEscape(execSeq),JsonEscape(comment)
    );
    SendJournal(ev,price,aid,zid,d);
 
