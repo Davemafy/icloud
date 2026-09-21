@@ -66,7 +66,7 @@ _AUDIT_SCRIPT = r'''
       'Confluences '+conf.length+': '+(conf.length?conf.join(', '):'none reported')+'.',
       'DXY relationship: '+dxy+'.',
       'Last requalified: '+fmtAge(j?.generated_at)+'.',
-      'Position History counts only ENTRY/position/exit lifecycle events; ML_CANDIDATE remains research telemetry. Performance groups multi-leg MT5 positions into conservative execution groups.'
+      'Position History counts only ENTRY/position/exit lifecycle events; ML_CANDIDATE remains research telemetry and is not a trade. Performance groups multi-leg MT5 positions into conservative execution groups.'
     ];
     out.textContent=bits.join(' ');
   }
