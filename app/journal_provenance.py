@@ -113,7 +113,20 @@ def _position_key(row: dict, details: dict, setup: str) -> str:
     )
 
 
-def _apply_versions(group: dict, details: dict, recovered: bool) -> None:
+def _trusted_execution_context(event: str, details: dict, recovered: bool) -> bool:
+    """Whether this event can describe the ORIGINAL execution context.
+
+    Current POSITION_MARK telemetry may legitimately describe the current owner,
+    cloud and runtime after a reload. It must not be retroactively promoted into
+    original entry provenance.
+    """
+    source = _clean(details.get("metadata_source")).upper()
+    if source in {"LIVE_ENTRY_CONTEXT", "LOCAL_POSITION_METADATA"}:
+        return True
+    return event == "ENTRY_OPENED" and not recovered
+
+
+def _apply_versions(group: dict, details: dict, recovered: bool, event: str) -> None:
     if recovered:
         rb = _clean(details.get("recovery_bridge_version") or details.get("bridge_version"))
         rs = _clean(details.get("recovery_sequence_version") or details.get("sequence_version"))
@@ -127,6 +140,10 @@ def _apply_versions(group: dict, details: dict, recovered: bool) -> None:
         if rb or rs or rc:
             group["recovery_version_provenance"] = "MT5_HISTORY_REPLAY"
 
+    if not _trusted_execution_context(event, details, recovered):
+        return
+
+    if recovered:
         eb = _clean(details.get("execution_bridge_version"))
         es = _clean(details.get("execution_sequence_version"))
         ec = _clean(details.get("execution_cloud_version"))
@@ -135,15 +152,19 @@ def _apply_versions(group: dict, details: dict, recovered: bool) -> None:
         es = _clean(details.get("execution_sequence_version") or details.get("sequence_version"))
         ec = _clean(details.get("execution_cloud_version") or details.get("cloud_version"))
 
-    if eb:
+    wrote = False
+    if eb and not _clean(group.get("execution_bridge_version")):
         group["execution_bridge_version"] = eb
-    if es:
+        wrote = True
+    if es and not _clean(group.get("execution_sequence_version")):
         group["execution_sequence_version"] = es
-    if ec:
+        wrote = True
+    if ec and not _clean(group.get("execution_cloud_version")):
         group["execution_cloud_version"] = ec
-    if eb or es or ec:
+        wrote = True
+    if wrote and _clean(group.get("execution_version_provenance")) in {"", "UNAVAILABLE"}:
         group["execution_version_provenance"] = (
-            _clean(details.get("metadata_source")) or ("LOCAL_POSITION_METADATA" if recovered else "LIVE_EVENT")
+            _clean(details.get("metadata_source")) or ("LOCAL_POSITION_METADATA" if recovered else "LIVE_ENTRY")
         )
 
 
@@ -176,6 +197,7 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
 
         details = base_journal.parse_details(row.get("details"))
         recovered = bool(details.get("recovered_from_mt5_history"))
+        trusted_context = _trusted_execution_context(event, details, recovered)
         setup, setup_source, setup_rank = _setup_candidate(details)
         position_id = details.get("position_id")
         raw_trade_id = _clean(details.get("trade_id"))
@@ -193,23 +215,23 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
                 "trade_id": raw_trade_id or key,
                 "campaign_id": (
                     campaign
-                    if _meaningful_campaign(campaign)
+                    if trusted_context and _meaningful_campaign(campaign)
                     else raw_trade_id
-                    if _meaningful_campaign(raw_trade_id)
+                    if trusted_context and _meaningful_campaign(raw_trade_id)
                     else ""
                 ),
                 "execution_id": "",
                 "execution_group_provenance": "",
                 "display_id": "",
                 "position_id": position_id,
-                "analysis_id": _clean(row.get("analysis_id")),
-                "zone_id": _clean(row.get("zone_id")),
+                "analysis_id": _clean(row.get("analysis_id")) if trusted_context else ("MT5_HISTORY" if recovered else ""),
+                "zone_id": _clean(row.get("zone_id")) if trusted_context else "",
                 "setup": setup,
                 "setup_provenance": setup_source,
-                "grade": _clean(details.get("grade")),
+                "grade": _clean(details.get("grade")) if trusted_context else "",
                 "grade_provenance": (
                     _clean(details.get("metadata_source")) or ("MT5_HISTORY" if recovered else "LIVE_EVENT")
-                ) if _clean(details.get("grade")) else "UNAVAILABLE",
+                ) if trusted_context and _clean(details.get("grade")) else "UNAVAILABLE",
                 "direction": _clean(details.get("direction")),
                 "status": "OPEN" if event == "POSITION_MARK" else "PLANNED",
                 "entry_ts": None,
@@ -250,7 +272,7 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
             group["_setup_rank"] = setup_rank
 
         candidate_grade = _clean(details.get("grade"))
-        if candidate_grade and (
+        if trusted_context and candidate_grade and (
             not _known_grade(group.get("grade"))
             or _clean(details.get("metadata_source")) == "LOCAL_POSITION_METADATA"
         ):
@@ -260,15 +282,15 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
             )
 
         candidate_analysis = _clean(row.get("analysis_id"))
-        if _placeholder_analysis(group.get("analysis_id")) and not _placeholder_analysis(candidate_analysis):
+        if trusted_context and _placeholder_analysis(group.get("analysis_id")) and not _placeholder_analysis(candidate_analysis):
             group["analysis_id"] = candidate_analysis
         candidate_zone = _clean(row.get("zone_id"))
-        if _placeholder_zone(group.get("zone_id")) and not _placeholder_zone(candidate_zone):
+        if trusted_context and _placeholder_zone(group.get("zone_id")) and not _placeholder_zone(candidate_zone):
             group["zone_id"] = candidate_zone
 
-        if _meaningful_campaign(campaign) and not _meaningful_campaign(group.get("campaign_id")):
+        if trusted_context and _meaningful_campaign(campaign) and not _meaningful_campaign(group.get("campaign_id")):
             group["campaign_id"] = campaign
-        elif _meaningful_campaign(raw_trade_id) and not _meaningful_campaign(group.get("campaign_id")):
+        elif trusted_context and _meaningful_campaign(raw_trade_id) and not _meaningful_campaign(group.get("campaign_id")):
             group["campaign_id"] = raw_trade_id
 
         if raw_trade_id and raw_trade_id.upper().startswith("MT5POS|"):
@@ -283,7 +305,7 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
         if position_id not in (None, "", 0, "0"):
             group["position_id"] = position_id
 
-        _apply_versions(group, details, recovered)
+        _apply_versions(group, details, recovered, event)
 
         if event == "ENTRY_OPENED":
             if group["status"] != "CLOSED":
@@ -390,8 +412,6 @@ def _annotate_execution_groups(positions: list[dict]) -> list[dict]:
         direction = _clean(row.get("direction"))
         candidate = None
         for bucket in reversed(buckets):
-            if bucket["provenance"] == "EXACT_CAMPAIGN":
-                continue
             if direction != bucket["direction"]:
                 continue
             if abs(entry_ts - int(bucket["anchor_ts"])) > 2:
@@ -415,11 +435,16 @@ def _annotate_execution_groups(positions: list[dict]) -> list[dict]:
             }
             buckets.append(candidate)
         else:
-            candidate["provenance"] = "RECONSTRUCTED_ENTRY_BURST"
+            candidate["provenance"] = (
+                "CAMPAIGN_ASSISTED_BURST"
+                if candidate["provenance"] == "EXACT_CAMPAIGN"
+                else "RECONSTRUCTED_ENTRY_BURST"
+            )
         candidate["rows"].append(row)
 
     for bucket in buckets:
         rows = bucket["rows"]
+        campaign_values = {_clean(r.get("campaign_id")) for r in rows if _meaningful_campaign(r.get("campaign_id"))}
         setup_values = {_clean(r.get("setup")) for r in rows if _known_setup(r.get("setup"))}
         grade_values = {_clean(r.get("grade")) for r in rows if _known_grade(r.get("grade"))}
         analysis_values = {_clean(r.get("analysis_id")) for r in rows if not _placeholder_analysis(r.get("analysis_id"))}
@@ -432,6 +457,8 @@ def _annotate_execution_groups(positions: list[dict]) -> list[dict]:
         for row in rows:
             row["execution_id"] = bucket["key"]
             row["execution_group_provenance"] = bucket["provenance"]
+            if not _meaningful_campaign(row.get("campaign_id")) and len(campaign_values) == 1:
+                row["campaign_id"] = next(iter(campaign_values))
             if not _known_setup(row.get("setup")) and len(setup_values) == 1:
                 row["setup"] = next(iter(setup_values))
                 row["setup_provenance"] = "EXECUTION_GROUP_INHERITANCE"

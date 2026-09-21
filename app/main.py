@@ -258,17 +258,22 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     or already being managed.
     """
     status = str(base_status or "WAITING")
+    seq = sequence_debug or {}
+    online = bool(seq.get("online"))
+    open_positions = int(seq.get("open_positions") or 0)
+
+    # Fresh Sequence truth is authoritative for an actively managed campaign.
+    # A closed sibling leg must not make the whole journal read CLOSED while
+    # another MT5 position is still open.
+    if online and open_positions > 0:
+        return "IN TRADE"
+
     terminal = {"CLOSED", "MANAGING", "IN TRADE", "FLIP CANDIDATE"}
     if status in terminal:
         return status
 
-    seq = sequence_debug or {}
-    if not bool(seq.get("online")):
+    if not online:
         return "SEQUENCE OFFLINE" if status == "M1 READY" else status
-
-    open_positions = int(seq.get("open_positions") or 0)
-    if open_positions > 0:
-        return "IN TRADE"
 
     authority = str(seq.get("authority") or "NONE")
     stage = str(seq.get("gate_stage") or "UNKNOWN").upper()

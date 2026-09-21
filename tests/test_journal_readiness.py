@@ -104,3 +104,17 @@ def test_active_analysis_uses_newest_analysis_not_stale_ai_approved(monkeypatch)
     monkeypatch.setattr(service, "attach_lifecycle", lambda analysis: analysis)
     assert service.active_analysis() == "LATEST"
     assert calls == [False]
+
+
+def test_fresh_sequence_open_position_overrides_closed_sibling_event():
+    status = _sequence_reconciled_status(
+        "CLOSED",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "BOOT",
+            "gate_reason": "READY",
+            "open_positions": 1,
+        },
+    )
+    assert status == "IN TRADE"
