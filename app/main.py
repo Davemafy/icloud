@@ -87,8 +87,28 @@ def heartbeat(h: Heartbeat):
 
 @app.post("/mt5/feedback", dependencies=[Depends(require_api_key)])
 def feedback(f: Feedback):
+    # Stamp the cloud runtime that actually ingested this lifecycle event. Do not
+    # reinterpret MT5-history recovery runtime versions as original execution
+    # versions; provenance stays explicit in the stored payload.
+    event = str(f.event or "").upper()
+    if event in {"ENTRY_OPENED", "POSITION_MARK", "POSITION_EXIT", "TP_HIT", "SL_HIT", "TRADE_CLOSED"}:
+        raw = f.details
+        if isinstance(raw, dict):
+            details = dict(raw)
+        else:
+            try:
+                parsed = json.loads(str(raw or ""))
+                details = parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                details = {}
+        if details.get("recovered_from_mt5_history"):
+            details.setdefault("recovery_cloud_version", SETTINGS.app_version)
+        else:
+            details.setdefault("execution_cloud_version", SETTINGS.app_version)
+        details.setdefault("cloud_ingest_version", SETTINGS.app_version)
+        f = f.model_copy(update={"details": details})
     save_feedback(f)
-    return {"ok": True, "journal_event": True, "journal_sync": "v3"}
+    return {"ok": True, "journal_event": True, "journal_sync": "v4_provenance"}
 
 
 def _append_multimodel_plan(text: str, a) -> str:
