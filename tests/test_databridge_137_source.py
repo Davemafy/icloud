@@ -17,7 +17,7 @@ def test_v137_reports_current_bridge_and_sequence_runtime_truth():
 
     assert 'JournalSequenceVersion()' in core
     assert 'RuntimeStateValue("sequence_state.txt","version")' in core
-    assert '"bridge_version":\"%s\"' in core
+    assert r'\"bridge_version\":\"%s\"' in core
     assert "TZ_JOURNAL_BRIDGE_VERSION" in core
     assert "JsonEscape(JournalSequenceVersion())" in core
 
