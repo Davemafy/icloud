@@ -403,14 +403,18 @@ def install_clinical_review_hardening() -> None:
 
     from . import dashboard_view
     from . import journal
+    from . import journal_provenance
 
     original_component_status = journal.component_status
     original_system_status = journal.system_status
     original_dashboard = dashboard_view.compact_dashboard_html
 
-    journal.build_trades = _build_trades_factory(journal)
-    journal.performance_summary = _performance_summary_factory(journal)
-    journal.export_csv_text = _export_csv_factory(journal)
+    # Journal provenance/aggregation is centralized in journal_provenance. The
+    # legacy factories above remain for backward-readable source history only.
+    journal.build_trades = journal_provenance.build_trades
+    journal.build_execution_groups = journal_provenance.build_execution_groups
+    journal.performance_summary = journal_provenance.performance_summary
+    journal.export_csv_text = journal_provenance.export_csv_text
     journal.component_status = _component_status_factory(original_component_status)
     journal.system_status = _system_status_factory(original_system_status)
     dashboard_view.compact_dashboard_html = _dashboard_factory(original_dashboard)
