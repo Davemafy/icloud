@@ -2,7 +2,7 @@ name: validate
 
 on:
   push:
-    branches: [main, fix/overlay-truth-6540]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -60,6 +60,4 @@ jobs:
           print('Sequence 3.34 MQL structural checks OK')
           PY
       - name: Stable EA SHA256
-        run: |
-          sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5
