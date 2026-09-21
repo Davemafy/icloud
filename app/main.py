@@ -272,6 +272,50 @@ def _sequence_debug_snapshot() -> dict:
     }
 
 
+def _journal_target_progress(a, z) -> dict:
+    if a is None or z is None:
+        return {"next_open": None, "remaining": [], "completed": []}
+
+    targets = [
+        float(z.original_target1 or 0.0),
+        float(z.original_target2 or 0.0),
+        float(z.original_target3 or 0.0),
+    ]
+    targets = [x for x in targets if x > 0]
+    meta = dict((a.execution_policy or {}).get("active_thesis") or {})
+    is_owner = bool(
+        meta.get("locked")
+        and str(meta.get("owner_zone_id") or "") == z.zone_id
+        and str(meta.get("direction") or "") == z.original_direction.value
+    )
+    if not is_owner:
+        return {
+            "next_open": targets[0] if targets else None,
+            "remaining": targets,
+            "completed": [],
+        }
+
+    best = float(meta.get("best_price") or 0.0)
+    remaining: list[float] = []
+    completed: list[float] = []
+    for idx, target in enumerate(targets, start=1):
+        hit_at = int(meta.get(f"target{idx}_hit_at") or 0)
+        crossed = bool(
+            best > 0
+            and (
+                (z.original_direction.value == "SELL" and best <= target)
+                or (z.original_direction.value == "BUY" and best >= target)
+            )
+        )
+        (completed if hit_at or crossed else remaining).append(target)
+
+    return {
+        "next_open": remaining[0] if remaining else None,
+        "remaining": remaining,
+        "completed": completed,
+    }
+
+
 def _journal_snapshot():
     a = active_analysis()
     s = latest_snapshot()
@@ -341,6 +385,7 @@ def _journal_snapshot():
         ),
     }
     score = sum(1 for v in checks.values() if v)
+    target_progress = _journal_target_progress(a, z)
     sequence_debug = _sequence_debug_snapshot()
     cloud_authority = str(
         dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE"
@@ -358,6 +403,10 @@ def _journal_snapshot():
         "generated_at": a.generated_at if a else None,
         "overall_bias": a.overall_bias.value if a else "NEUTRAL",
         "primary_liquidity": a.primary_liquidity if a else "",
+        "primary_liquidity_context": a.primary_liquidity if a else "",
+        "next_open_thesis_objective": target_progress["next_open"],
+        "remaining_thesis_targets": target_progress["remaining"],
+        "completed_thesis_targets": target_progress["completed"],
         "trader_brief": a.trader_brief if a else "",
         "execution_policy": a.execution_policy if a else {},
         "zone": zone,

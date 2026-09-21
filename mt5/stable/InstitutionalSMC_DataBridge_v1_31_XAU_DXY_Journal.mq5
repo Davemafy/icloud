@@ -24,6 +24,10 @@ input bool EnableJournalSync=true;
 input ulong SequenceMagicNumber=5632001;
 input string SequenceEaVersion="3.21"; // legacy fallback only; live journal reads TradeZone\\sequence_state.txt
 input int JournalMarkEverySeconds=60;
+input bool EnableJournalHistoryBackfill=true;
+input int JournalBackfillDays=14;
+input int JournalBackfillEverySeconds=900;
+input int JournalBackfillMaxDeals=2000;
 
 string RuntimeStateValue(string fileName,string key)
 {
@@ -45,6 +49,8 @@ string JournalSequenceVersion()
 
 string g_analysisId="",g_zoneId="",g_grade="";
 datetime g_lastMark=0;
+datetime g_lastJournalBackfill=0;
+int g_lastBackfillEvents=0;
 ulong g_posId[];
 string g_posTag[],g_posAnalysis[],g_posZone[];
 
@@ -138,9 +144,16 @@ int EnsureTrack(ulong pid,string tag,string aid,string zid)
    int i=TrackIndex(pid);if(i>=0)return i;int n=ArraySize(g_posId);ArrayResize(g_posId,n+1);ArrayResize(g_posTag,n+1);ArrayResize(g_posAnalysis,n+1);ArrayResize(g_posZone,n+1);g_posId[n]=pid;g_posTag[n]=tag;g_posAnalysis[n]=aid;g_posZone[n]=zid;return n;
 }
 string TradeId(string aid,string zid,string tag){if(aid=="")aid="NO_ANALYSIS";if(zid=="")zid="NO_ZONE";return aid+"|"+zid+"|"+tag;}
+string CanonicalTradeId(ulong pid){return "MT5POS|"+StringFormat("%I64d",(long)AccountInfoInteger(ACCOUNT_LOGIN))+"|"+StringFormat("%I64d",(long)pid);}
+string EventUidDeal(string event,ulong deal){return event+"|DEAL|"+StringFormat("%I64d",(long)deal);}
+string EventUidPosition(string event,ulong pid){return event+"|POSITION|"+StringFormat("%I64d",(long)pid);}
+bool SendJournalAt(datetime eventTs,string event,double price,string aid,string zid,string details)
+{
+   if(!EnableJournalSync)return false;string body=StringFormat("{\"ts\":%I64d,\"event\":\"%s\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",(long)eventTs,JsonEscape(event),JsonEscape(aid),JsonEscape(zid),price,details);string r;return Post("/mt5/feedback",body,r);
+}
 bool SendJournal(string event,double price,string aid,string zid,string details)
 {
-   if(!EnableJournalSync)return false;string body=StringFormat("{\"ts\":%I64d,\"event\":\"%s\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",(long)TimeTradeServer(),JsonEscape(event),JsonEscape(aid),JsonEscape(zid),price,details);string r;return Post("/mt5/feedback",body,r);
+   return SendJournalAt(TimeTradeServer(),event,price,aid,zid,details);
 }
 bool AnyOpenTracked(string aid,string zid,string tag)
 {
@@ -149,18 +162,76 @@ bool AnyOpenTracked(string aid,string zid,string tag)
 void MarkPositions()
 {
    if(!EnableJournalSync)return;datetime now=TimeTradeServer();if(now-g_lastMark<JournalMarkEverySeconds)return;g_lastMark=now;MqlTick tk;if(!SymbolInfoTick(XauSymbol,tk))return;
-   for(int i=PositionsTotal()-1;i>=0;i--){ulong ticket=PositionGetTicket(i);if(!ticket)continue;if(PositionGetString(POSITION_SYMBOL)!=XauSymbol||(ulong)PositionGetInteger(POSITION_MAGIC)!=SequenceMagicNumber)continue;ulong pid=(ulong)PositionGetInteger(POSITION_IDENTIFIER);string comment=PositionGetString(POSITION_COMMENT),tag=SetupTag(comment);int k=TrackIndex(pid);if(k<0)k=EnsureTrack(pid,tag,g_analysisId,g_zoneId);string aid=g_posAnalysis[k],zid=g_posZone[k];double open=PositionGetDouble(POSITION_PRICE_OPEN),sl=PositionGetDouble(POSITION_SL),tp=PositionGetDouble(POSITION_TP),vol=PositionGetDouble(POSITION_VOLUME),profit=PositionGetDouble(POSITION_PROFIT);ENUM_POSITION_TYPE pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);string dir=pt==POSITION_TYPE_BUY?"BUY":"SELL";double mark=pt==POSITION_TYPE_BUY?tk.bid:tk.ask;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"volume\":%.4f,\"entry_price\":%.5f,\"current_sl\":%.5f,\"tp\":%.5f,\"floating_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,vol,open,sl,tp,profit,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("POSITION_MARK",mark,aid,zid,d);}
+   for(int i=PositionsTotal()-1;i>=0;i--){ulong ticket=PositionGetTicket(i);if(!ticket)continue;if(PositionGetString(POSITION_SYMBOL)!=XauSymbol||(ulong)PositionGetInteger(POSITION_MAGIC)!=SequenceMagicNumber)continue;ulong pid=(ulong)PositionGetInteger(POSITION_IDENTIFIER);string comment=PositionGetString(POSITION_COMMENT),tag=SetupTag(comment);int k=TrackIndex(pid);if(k<0)k=EnsureTrack(pid,tag,g_analysisId,g_zoneId);string aid=g_posAnalysis[k],zid=g_posZone[k];double open=PositionGetDouble(POSITION_PRICE_OPEN),sl=PositionGetDouble(POSITION_SL),tp=PositionGetDouble(POSITION_TP),vol=PositionGetDouble(POSITION_VOLUME),profit=PositionGetDouble(POSITION_PROFIT);ENUM_POSITION_TYPE pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);string dir=pt==POSITION_TYPE_BUY?"BUY":"SELL";double mark=pt==POSITION_TYPE_BUY?tk.bid:tk.ask;string d=StringFormat("{\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"volume\":%.4f,\"entry_price\":%.5f,\"current_sl\":%.5f,\"tp\":%.5f,\"floating_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,vol,open,sl,tp,profit,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("POSITION_MARK",mark,aid,zid,d);}
 }
+
+bool SequencePositionIdentifierOpen(ulong pid)
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);if(!ticket)continue;
+      if(PositionGetString(POSITION_SYMBOL)!=XauSymbol)continue;
+      if((ulong)PositionGetInteger(POSITION_MAGIC)!=SequenceMagicNumber)continue;
+      if((ulong)PositionGetInteger(POSITION_IDENTIFIER)==pid)return true;
+   }
+   return false;
+}
+void BackfillJournalHistory(bool force=false)
+{
+   if(!EnableJournalSync||!EnableJournalHistoryBackfill)return;
+   datetime now=TimeTradeServer();
+   if(!force && g_lastJournalBackfill>0 && now-g_lastJournalBackfill<MathMax(60,JournalBackfillEverySeconds))return;
+   g_lastJournalBackfill=now;g_lastBackfillEvents=0;
+   datetime from=now-(datetime)(MathMax(1,JournalBackfillDays)*86400);
+   if(!HistorySelect(from,now))return;
+   int total=HistoryDealsTotal(),inspected=0,maxDeals=MathMax(100,JournalBackfillMaxDeals);
+   for(int i=total-1;i>=0 && inspected<maxDeals;i--)
+   {
+      ulong deal=HistoryDealGetTicket(i);if(!deal)continue;
+      if((ulong)HistoryDealGetInteger(deal,DEAL_MAGIC)!=SequenceMagicNumber)continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=XauSymbol)continue;
+      inspected++;
+      ulong pid=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);
+      if(!pid)continue;
+      ENUM_DEAL_ENTRY entry=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);
+      ENUM_DEAL_REASON reason=(ENUM_DEAL_REASON)HistoryDealGetInteger(deal,DEAL_REASON);
+      ENUM_DEAL_TYPE dtype=(ENUM_DEAL_TYPE)HistoryDealGetInteger(deal,DEAL_TYPE);
+      datetime eventTs=(datetime)HistoryDealGetInteger(deal,DEAL_TIME);
+      string comment=HistoryDealGetString(deal,DEAL_COMMENT),tag=SetupTag(comment);
+      string aid="MT5_HISTORY",zid="";
+      int k=TrackIndex(pid);if(k>=0){aid=g_posAnalysis[k];zid=g_posZone[k];tag=g_posTag[k];}
+      double price=HistoryDealGetDouble(deal,DEAL_PRICE),vol=HistoryDealGetDouble(deal,DEAL_VOLUME);
+      double profit=HistoryDealGetDouble(deal,DEAL_PROFIT),commission=HistoryDealGetDouble(deal,DEAL_COMMISSION),swap=HistoryDealGetDouble(deal,DEAL_SWAP);
+      string canonical=CanonicalTradeId(pid),campaign=TradeId(aid,zid,tag),setup=SetupName(tag);
+      if(entry==DEAL_ENTRY_IN)
+      {
+         string dir=dtype==DEAL_TYPE_BUY?"BUY":"SELL";
+         string d=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"recovered_from_mt5_history\":true,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(EventUidDeal("ENTRY_OPENED",deal)),JsonEscape(canonical),JsonEscape(campaign),JsonEscape(setup),JsonEscape(tag),dir,(long)pid,(long)deal,vol,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));
+         if(SendJournalAt(eventTs,"ENTRY_OPENED",price,aid,zid,d))g_lastBackfillEvents++;
+         continue;
+      }
+      string ev="POSITION_EXIT";if(reason==DEAL_REASON_TP)ev="TP_HIT";else if(reason==DEAL_REASON_SL)ev="SL_HIT";
+      double net=profit+commission+swap;
+      string d=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,\"recovered_from_mt5_history\":true,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(EventUidDeal(ev,deal)),JsonEscape(canonical),JsonEscape(campaign),JsonEscape(setup),JsonEscape(tag),(long)pid,(long)deal,vol,net,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));
+      if(SendJournalAt(eventTs,ev,price,aid,zid,d))g_lastBackfillEvents++;
+      if(!SequencePositionIdentifierOpen(pid))
+      {
+         string closed=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"recovered_from_mt5_history\":true,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\"}",JsonEscape(EventUidPosition("TRADE_CLOSED",pid)),JsonEscape(canonical),JsonEscape(campaign),JsonEscape(setup),JsonEscape(tag),(long)pid,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()));
+         if(SendJournalAt(eventTs,"TRADE_CLOSED",price,aid,zid,closed))g_lastBackfillEvents++;
+      }
+   }
+}
+
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
 {
    if(!EnableJournalSync||trans.type!=TRADE_TRANSACTION_DEAL_ADD||trans.deal==0)return;ulong deal=trans.deal;if(!HistoryDealSelect(deal))return;if((ulong)HistoryDealGetInteger(deal,DEAL_MAGIC)!=SequenceMagicNumber)return;if(HistoryDealGetString(deal,DEAL_SYMBOL)!=XauSymbol)return;
    ENUM_DEAL_ENTRY entry=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);ENUM_DEAL_REASON reason=(ENUM_DEAL_REASON)HistoryDealGetInteger(deal,DEAL_REASON);ulong pid=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);string comment=HistoryDealGetString(deal,DEAL_COMMENT),tag=SetupTag(comment),aid=g_analysisId,zid=g_zoneId;double price=HistoryDealGetDouble(deal,DEAL_PRICE),vol=HistoryDealGetDouble(deal,DEAL_VOLUME),profit=HistoryDealGetDouble(deal,DEAL_PROFIT),commission=HistoryDealGetDouble(deal,DEAL_COMMISSION),swap=HistoryDealGetDouble(deal,DEAL_SWAP);
-   int k=TrackIndex(pid);if(entry==DEAL_ENTRY_IN){k=EnsureTrack(pid,tag,aid,zid);string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),JsonEscape(g_grade),(long)pid,(long)deal,vol,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("ENTRY_OPENED",price,aid,zid,d);return;}
-   if(k>=0){aid=g_posAnalysis[k];zid=g_posZone[k];tag=g_posTag[k];}string ev="POSITION_EXIT";if(reason==DEAL_REASON_TP)ev="TP_HIT";else if(reason==DEAL_REASON_SL)ev="SL_HIT";double net=profit+commission+swap;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),(long)pid,(long)deal,vol,net,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal(ev,price,aid,zid,d);if(!AnyOpenTracked(aid,zid,tag)){string c=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"bridge_version\":\"%s\",\"sequence_version\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()));SendJournal("TRADE_CLOSED",price,aid,zid,c);}
+   int k=TrackIndex(pid);if(entry==DEAL_ENTRY_IN){k=EnsureTrack(pid,tag,aid,zid);ENUM_DEAL_TYPE dtype=(ENUM_DEAL_TYPE)HistoryDealGetInteger(deal,DEAL_TYPE);string dir=dtype==DEAL_TYPE_BUY?"BUY":"SELL";string d=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(EventUidDeal("ENTRY_OPENED",deal)),JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,(long)deal,vol,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("ENTRY_OPENED",price,aid,zid,d);return;}
+   if(k>=0){aid=g_posAnalysis[k];zid=g_posZone[k];tag=g_posTag[k];}string ev="POSITION_EXIT";if(reason==DEAL_REASON_TP)ev="TP_HIT";else if(reason==DEAL_REASON_SL)ev="SL_HIT";double net=profit+commission+swap;string d=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(EventUidDeal(ev,deal)),JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),(long)pid,(long)deal,vol,net,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal(ev,price,aid,zid,d);if(!SequencePositionIdentifierOpen(pid)){string c=StringFormat("{\"event_uid\":\"%s\",\"trade_id\":\"%s\",\"campaign_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\"}",JsonEscape(EventUidPosition("TRADE_CLOSED",pid)),JsonEscape(CanonicalTradeId(pid)),JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),(long)pid,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()));SendJournal("TRADE_CLOSED",price,aid,zid,c);}
 }
 int OnInit()
 {
-   if(_Symbol!=XauSymbol){Print("Attach Data Bridge once to configured XAU chart only.");return INIT_FAILED;}if(CloudApiKey==""){Print("CloudApiKey is empty.");return INIT_PARAMETERS_INCORRECT;}SymbolSelect(DxySymbol,true);EventSetTimer(MathMax(10,SendEverySeconds));SendSnapshot("BOOTSTRAP");SendHeartbeat();RefreshPlanContext();MarkPositions();return INIT_SUCCEEDED;
+   if(_Symbol!=XauSymbol){Print("Attach Data Bridge once to configured XAU chart only.");return INIT_FAILED;}if(CloudApiKey==""){Print("CloudApiKey is empty.");return INIT_PARAMETERS_INCORRECT;}SymbolSelect(DxySymbol,true);EventSetTimer(MathMax(10,SendEverySeconds));SendSnapshot("BOOTSTRAP");SendHeartbeat();RefreshPlanContext();MarkPositions();BackfillJournalHistory(true);return INIT_SUCCEEDED;
 }
 void OnDeinit(const int reason){EventKillTimer();}
-void OnTimer(){SendSnapshot("LIVE");SendHeartbeat();RefreshPlanContext();MarkPositions();}
+void OnTimer(){SendSnapshot("LIVE");SendHeartbeat();RefreshPlanContext();MarkPositions();BackfillJournalHistory(false);}

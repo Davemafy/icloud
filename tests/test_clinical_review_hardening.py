@@ -125,3 +125,131 @@ def test_dashboard_labels_are_clinically_unambiguous_and_read_only():
     assert "/mt5/plan" not in cleaned
     assert "OrderSend" not in cleaned
     assert "WebRequest" not in cleaned
+
+
+
+def test_recovered_history_merges_by_position_and_dedupes_deal_events(monkeypatch):
+    rows = [
+        _row(
+            "TRADE_CLOSED",
+            40,
+            {
+                "event_uid": "TRADE_CLOSED|POSITION|777",
+                "trade_id": "MT5POS|1|777",
+                "campaign_id": "A1|Z1|R2",
+                "position_id": 777,
+                "setup": "REENTRY_2",
+            },
+            price=95.0,
+        ),
+        _row(
+            "TP_HIT",
+            30,
+            {
+                "event_uid": "TP_HIT|DEAL|9002",
+                "trade_id": "MT5POS|1|777",
+                "campaign_id": "A1|Z1|R2",
+                "position_id": 777,
+                "deal_id": 9002,
+                "setup": "REENTRY_2",
+                "net_profit": 25.0,
+            },
+            price=95.0,
+        ),
+        _row(
+            "TP_HIT",
+            30,
+            {
+                "trade_id": "A1|Z1|R2",
+                "position_id": 777,
+                "deal_id": 9002,
+                "setup": "REENTRY_2",
+                "net_profit": 25.0,
+            },
+            price=95.0,
+        ),
+        _row(
+            "ENTRY_OPENED",
+            10,
+            {
+                "trade_id": "A1|Z1|R2",
+                "position_id": 777,
+                "deal_id": 9001,
+                "setup": "REENTRY_2",
+                "direction": "SELL",
+                "grade": "A+",
+            },
+            price=100.0,
+        ),
+    ]
+    monkeypatch.setattr(journal, "recent_feedback", lambda limit=5000: rows)
+
+    trades = journal.build_trades()
+    assert len(trades) == 1
+    trade = trades[0]
+    assert trade["position_id"] == 777
+    assert trade["status"] == "CLOSED"
+    assert trade["pnl"] == 25.0
+    assert trade["setup"] == "REENTRY_2"
+    assert trade["display_id"] == "REENTRY_2 · POS 777"
+
+
+
+def test_legacy_campaign_close_is_suppressed_when_position_lifecycle_exists(monkeypatch):
+    campaign = "A1|Z1|R2"
+    rows = [
+        _row(
+            "TRADE_CLOSED",
+            50,
+            {
+                "trade_id": campaign,
+                "setup": "REENTRY_2",
+            },
+            price=95.0,
+        ),
+        _row(
+            "TRADE_CLOSED",
+            40,
+            {
+                "event_uid": "TRADE_CLOSED|POSITION|777",
+                "trade_id": "MT5POS|1|777",
+                "campaign_id": campaign,
+                "position_id": 777,
+                "setup": "REENTRY_2",
+            },
+            price=95.0,
+        ),
+        _row(
+            "TP_HIT",
+            30,
+            {
+                "event_uid": "TP_HIT|DEAL|9002",
+                "trade_id": "MT5POS|1|777",
+                "campaign_id": campaign,
+                "position_id": 777,
+                "deal_id": 9002,
+                "setup": "REENTRY_2",
+                "net_profit": 25.0,
+            },
+            price=95.0,
+        ),
+        _row(
+            "ENTRY_OPENED",
+            10,
+            {
+                "trade_id": campaign,
+                "position_id": 777,
+                "deal_id": 9001,
+                "setup": "REENTRY_2",
+                "direction": "SELL",
+            },
+            price=100.0,
+        ),
+    ]
+    monkeypatch.setattr(journal, "recent_feedback", lambda limit=5000: rows)
+
+    trades = journal.build_trades()
+    assert len(trades) == 1
+    assert trades[0]["position_id"] == 777
+    assert trades[0]["status"] == "CLOSED"
+    assert trades[0]["pnl"] == 25.0
