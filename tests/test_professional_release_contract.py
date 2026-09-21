@@ -11,14 +11,17 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.36"
-    assert manifest["release"] == "6.3.18"
-    assert manifest["data_bridge_version"] == "1.38"
+    assert SETTINGS.app_version == "6.5.37"
+    assert manifest["release"] == "6.3.19"
+    assert manifest["data_bridge_version"] == "1.39"
     assert manifest["sequence_ea_version"] == "3.34"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_38_CompileSafeJournalTruth.mq5"
-    assert bridge["sha256"] == "93592c4ad70823b84cdf87f5fe3298e1fb3bcc8e83c0fbaede87daeb470f048c"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5"
+    bridge_source = ROOT / bridge["path"]
+    assert bridge_source.exists()
+    bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
+    assert bridge_digest == bridge["sha256"] == "e77118a32794e9484f5d8859b288160208990b88c34ad1b8bf4ae8b3471023cf"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
     assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
@@ -48,5 +51,10 @@ def test_professional_release_contract_is_self_consistent():
         "m5_runner_trail_after_break_even",
         "runner_risk_history_recovery",
         "compile_safe_databridge_preprocessor_contract",
+        "idempotent_journal_event_keys",
+        "mt5_journal_history_backfill",
+        "position_stable_journal_aggregation",
+        "journal_recovery_after_cloud_redeploy",
+        "objective_progress_truth_dashboard",
     }
     assert required.issubset(set(manifest["channel_features"]))
