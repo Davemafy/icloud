@@ -23,6 +23,12 @@ def test_professional_release_contract_is_self_consistent():
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
     assert bridge_digest == bridge["sha256"] == "e77118a32794e9484f5d8859b288160208990b88c34ad1b8bf4ae8b3471023cf"
 
+    bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
+    bridge_core_source = ROOT / bridge_core["path"]
+    assert bridge_core_source.exists()
+    bridge_core_digest = hashlib.sha256(bridge_core_source.read_bytes()).hexdigest()
+    assert bridge_core_digest == bridge_core["sha256"] == "818a36e8d05a270bda175bbead4b62a85ad8ac1ac75a3bf96ebca6d6579910a7"
+
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
     assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
     source = ROOT / seq["path"]
