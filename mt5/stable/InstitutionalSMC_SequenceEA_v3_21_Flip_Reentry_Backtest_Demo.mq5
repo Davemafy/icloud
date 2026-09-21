@@ -452,42 +452,13 @@ bool StructuralProgress(bool buy,MqlRates &r[])
    if(ArraySize(r)<BEStructureLookback+3)return false;if(buy){double h=r[2].high;for(int i=2;i<=BEStructureLookback+1;i++)h=MathMax(h,r[i].high);return r[1].close>h;}double l=r[2].low;for(int i=2;i<=BEStructureLookback+1;i++)l=MathMin(l,r[i].low);return r[1].close<l;
 }
 
-// Recover the ORIGINAL stop distance for R-multiple management.
-// POSITION_SL is mutable; after BE it equals the entry and must never be used
-// as the denominator for runner trailing. Prefer the opening order's SL so this
-// survives terminal/EA restarts. Fall back to the current SL only before BE.
-double InitialRiskDistanceForPosition(double openPrice,double currentSL)
-{
-   long positionId=(long)PositionGetInteger(POSITION_IDENTIFIER);
-   double best=0.0;long earliest=0;
-   if(positionId>0&&HistorySelectByPosition(positionId))
-   {
-      int total=HistoryOrdersTotal();
-      for(int i=0;i<total;i++)
-      {
-         ulong ord=HistoryOrderGetTicket(i);if(ord==0)continue;
-         ENUM_ORDER_TYPE ot=(ENUM_ORDER_TYPE)HistoryOrderGetInteger(ord,ORDER_TYPE);
-         if(ot!=ORDER_TYPE_BUY&&ot!=ORDER_TYPE_SELL)continue;
-         double osl=HistoryOrderGetDouble(ord,ORDER_SL);if(osl<=0)continue;
-         long when=(long)HistoryOrderGetInteger(ord,ORDER_TIME_SETUP_MSC);
-         double d=MathAbs(openPrice-osl);
-         if(d<=_Point)continue;
-         if(earliest==0||when<earliest){earliest=when;best=d;}
-      }
-   }
-   if(best>_Point)return best;
-   double fallback=MathAbs(openPrice-currentSL);
-   if(currentSL>0&&fallback>_Point)return fallback;
-   return 0.0;
-}
-
 void ManagePositions()
 {
    MqlRates m1[],m5[];ArraySetAsSeries(m1,true);ArraySetAsSeries(m5,true);if(CopyRates(_Symbol,PERIOD_M1,0,30,m1)<20)return;double a1=ATR(m1,ATRPeriod,1);bool hm5=CopyRates(_Symbol,RunnerTrailTF,0,30,m5)>=20;double a5=hm5?ATR(m5,ATRPeriod,1):0;MqlTick tk;if(!SymbolInfoTick(_Symbol,tk))return;
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);if(!ticket)continue;if(PositionGetString(POSITION_SYMBOL)!=_Symbol||(ulong)PositionGetInteger(POSITION_MAGIC)!=MagicNumber)continue;ENUM_POSITION_TYPE ty=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);bool buy=ty==POSITION_TYPE_BUY;double o=PositionGetDouble(POSITION_PRICE_OPEN),sl=PositionGetDouble(POSITION_SL),tp=PositionGetDouble(POSITION_TP),mark=buy?tk.bid:tk.ask;string c=PositionGetString(POSITION_COMMENT);
-      double init=InitialRiskDistanceForPosition(o,sl);if(init<=0)continue;double rnow=buy?(mark-o)/init:(o-mark)/init;double desired=sl;bool change=false;
+      double init=MathAbs(o-sl);if(init<=0)continue;double rnow=buy?(mark-o)/init:(o-mark)/init;double desired=sl;bool change=false;
       if(rnow>=BreakEvenArmAtR&&StructuralProgress(buy,m1)){double be=o;if((buy&&(sl==0||be>desired))||(!buy&&(sl==0||be<desired))){desired=be;change=true;}}
       if(StringFind(c," RUN")>=0&&hm5&&rnow>=RunnerTrailStartR)
       {
