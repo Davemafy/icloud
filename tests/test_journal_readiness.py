@@ -1,5 +1,5 @@
 from app import service
-from app.main import _event_status, _readiness_prefix, _selected_zone
+from app.main import _event_status, _readiness_prefix, _selected_zone, _sequence_reconciled_status
 from app.models import Analysis, Direction, Grade, Zone, ZoneState
 
 
@@ -56,6 +56,41 @@ def test_m1_ready_status_is_explicit():
     z = _zone()
     z.core_method = "M1_READY|H4H1_PRIMARY"
     assert _event_status([], z.state.value, "M1_READY") == "M1 READY"
+
+
+def test_sequence_value_gate_overrides_macro_m1_ready_label():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "VALUE_PD_ARRAY",
+            "gate_reason": "WAITING_FOR_VALID_VALUE_PD_ARRAY",
+            "open_positions": 0,
+        },
+    )
+    assert status == "WAITING FOR VALUE"
+
+
+def test_sequence_open_position_overrides_waiting_labels():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "VALUE",
+            "gate_reason": "SIGNAL_FOUND_WAITING_FOR_PULLBACK",
+            "open_positions": 2,
+        },
+    )
+    assert status == "IN TRADE"
+
+
+def test_macro_handoff_is_not_called_ready_when_sequence_is_offline():
+    assert _sequence_reconciled_status(
+        "M1 READY",
+        {"online": False, "authority": "NONE", "open_positions": 0},
+    ) == "SEQUENCE OFFLINE"
 
 
 def test_active_analysis_uses_newest_analysis_not_stale_ai_approved(monkeypatch):

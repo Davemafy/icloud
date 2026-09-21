@@ -66,13 +66,18 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert "Execution readiness" in cleaned
     assert 'id="executionMeta"' in cleaned
     assert "WAITING FOR M1 CONFIRMATION" in cleaned
-    assert "M1 HANDOFF READY" in cleaned
+    assert "M1 HANDOFF ACTIVE" in cleaned
+    assert "M1 HANDOFF READY" not in cleaned
+    assert "WAITING FOR VALUE / RETRACE" in cleaned
+    assert "Entry permission: NO" in cleaned
     assert "SAFETY BLOCKED" in cleaned
     assert "SAFETY HOLD" in cleaned
     assert "This is not a location failure." in cleaned
     assert "HTF location/source quality only" in cleaned
     assert "Do not chase the existing move" in cleaned
-    assert "Sequence EA still applies its normal sweep" in cleaned
+    assert "This is not entry authorization" in cleaned
+    assert "live Sequence EA must still complete sweep" in cleaned
+    assert "thesis origin/ownership anchor" in cleaned
     assert "/mt5/plan" not in cleaned
     assert "OrderSend" not in cleaned
 

@@ -34,7 +34,7 @@ _READINESS_SPLIT = (
     '<div class="card"><h3>HTF setup quality</h3><div class="kpi" id="htfScore">0/6</div>'
     '<div class="muted" id="htfMeta">Location quality only — not entry readiness.</div></div>'
     '<div class="card"><h3>Execution readiness</h3><div class="kpi" id="jScore">WAITING</div>'
-    '<div class="muted" id="executionMeta">M1 handoff controls entry timing.</div></div>'
+    '<div class="muted" id="executionMeta">Cloud handoff is macro authority; the live Sequence micro-gate controls entry timing.</div></div>'
     '<div class="card"><h3>Sequence execution gate <span class="pill paper">LIVE DEBUG</span></h3>'
     '<div class="kpi" id="sequenceGate">WAITING</div>'
     '<div class="muted" id="sequenceGateMeta">Waiting for Sequence heartbeat telemetry.</div></div>'
@@ -178,6 +178,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           (selectedId===ownerId ? 'owns current M1 authority.' : 'does not own current M1 authority.')
         );
       }
+      if(selectedId && selectedId===ownerId){
+        parts.push('This selected zone is the thesis origin/ownership anchor; it does not mean current price is still inside the original core or envelope.');
+      }
       if(thesis.opposite_execution_blocked===true){
         parts.push('All non-owner/opposite zones are WATCH ONLY until the acquired thesis is released.');
       }
@@ -262,9 +265,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
       );
     }else{
-      state='M1 HANDOFF READY';
-      cls='ok';
-      meta=checklist+'Location has reached M1 handoff. Sequence EA still applies its normal sweep → MSS/BOS → displacement → value/retrace sequence plus all unchanged execution gates.';
+      state='M1 HANDOFF ACTIVE';
+      cls='blue';
+      meta=checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace and all unchanged execution gates.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -307,9 +310,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         seqGate.className='kpi ok';
         seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.';
       }else if(seqAuthority!=='NONE'){
-        seqGate.textContent=seqStage.replaceAll('_',' ');
-        seqGate.className='kpi '+(seqStage==='VALUE_PD_ARRAY'||seqStage==='VALUE'?'blue':'warn');
-        seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+'.';
+        const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+        seqGate.textContent=valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ');
+        seqGate.className='kpi '+(valueWait?'blue':'warn');
+        seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
       }else{
         seqGate.textContent=seqStage.replaceAll('_',' ');
         seqGate.className='kpi warn';
@@ -317,10 +321,39 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }
     }
 
-    if(seqOnline && seqAuthority!=='NONE' && !seqMismatch && !m1){
-      state='M1 SEARCH ACTIVE';
-      cls='blue';
-      meta=checklist+'Macro execution authority is live. Sequence is currently at '+seqStage.replaceAll('_',' ')+'; this is not the same as waiting for HTF location.';
+    if(m1 && !seqOnline){
+      state='SEQUENCE OFFLINE';
+      cls='bad';
+      meta=checklist+'Macro handoff exists, but fresh Sequence telemetry is unavailable. Entry permission: NO.';
+    }else if(seqOnline && seqMismatch){
+      state='EXECUTION HOLD';
+      cls='bad';
+      meta=checklist+'Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
+    }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
+      const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+      const forming=['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
+      const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
+      if(seqStage==='ORDER_SENT'){
+        state='ORDER SENT';
+        cls='ok';
+        meta=checklist+'Sequence has completed its entry gates and sent the paper order.';
+      }else if(valueWait){
+        state='WAITING FOR VALUE / RETRACE';
+        cls='blue';
+        meta=checklist+'Macro handoff is active, but Sequence is still waiting for a valid OTE/PD-array value retrace. Entry permission: NO.';
+      }else if(forming){
+        state='M1 SEQUENCE FORMING';
+        cls='blue';
+        meta=checklist+'Macro handoff is active. Current micro gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+      }else if(hold){
+        state='EXECUTION HOLD';
+        cls=seqStage==='SAFETY'?'bad':'warn';
+        meta=checklist+'Sequence gate '+seqStage.replaceAll('_',' ')+' is holding execution. '+(seqReason||'')+' Entry permission: NO.';
+      }else{
+        state='M1 SEQUENCE ACTIVE';
+        cls='blue';
+        meta=checklist+'Macro execution authority is live. Sequence is currently at '+seqStage.replaceAll('_',' ')+'. Entry permission: NO until the order gate completes.';
+      }
     }
 
     if(exec.textContent!==state)exec.textContent=state;
