@@ -1,6 +1,10 @@
 #property strict
 #property version "1.31"
-#property description "DEMO/PAPER read-only market + journal telemetry bridge for Institutional SMC Cloud."\n\n#ifndef TZ_JOURNAL_BRIDGE_VERSION\n#define TZ_JOURNAL_BRIDGE_VERSION "1.31"\n#endif
+#property description "DEMO/PAPER read-only market + journal telemetry bridge for Institutional SMC Cloud."
+
+#ifndef TZ_JOURNAL_BRIDGE_VERSION
+#define TZ_JOURNAL_BRIDGE_VERSION "1.31"
+#endif
 
 input string CloudBaseUrl="https://YOUR-SERVICE.up.railway.app";
 input string CloudApiKey="";
