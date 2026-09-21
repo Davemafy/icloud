@@ -253,3 +253,71 @@ def test_legacy_campaign_close_is_suppressed_when_position_lifecycle_exists(monk
     assert trades[0]["position_id"] == 777
     assert trades[0]["status"] == "CLOSED"
     assert trades[0]["pnl"] == 25.0
+
+
+def test_backfill_arrival_order_cannot_reopen_closed_position(monkeypatch):
+    # DataBridge history recovery walks MT5 deals newest -> oldest, so cloud arrival
+    # order can be EXIT/CLOSED first and the older ENTRY last. recent_feedback()
+    # returns newest insertion first, which used to make ENTRY_OPENED the final state.
+    rows = [
+        {
+            **_row(
+                "ENTRY_OPENED",
+                10,
+                {
+                    "event_uid": "ENTRY_OPENED|DEAL|9001",
+                    "trade_id": "MT5POS|1|777",
+                    "campaign_id": "A1|Z1|R2",
+                    "position_id": 777,
+                    "deal_id": 9001,
+                    "setup": "REENTRY_2",
+                    "direction": "SELL",
+                },
+                price=100.0,
+            ),
+            "id": 30,
+        },
+        {
+            **_row(
+                "TRADE_CLOSED",
+                30,
+                {
+                    "event_uid": "TRADE_CLOSED|POSITION|777",
+                    "trade_id": "MT5POS|1|777",
+                    "campaign_id": "A1|Z1|R2",
+                    "position_id": 777,
+                    "setup": "REENTRY_2",
+                },
+                price=95.0,
+            ),
+            "id": 20,
+        },
+        {
+            **_row(
+                "TP_HIT",
+                20,
+                {
+                    "event_uid": "TP_HIT|DEAL|9002",
+                    "trade_id": "MT5POS|1|777",
+                    "campaign_id": "A1|Z1|R2",
+                    "position_id": 777,
+                    "deal_id": 9002,
+                    "setup": "REENTRY_2",
+                    "net_profit": 25.0,
+                },
+                price=95.0,
+            ),
+            "id": 10,
+        },
+    ]
+    monkeypatch.setattr(journal, "recent_feedback", lambda limit=5000: rows)
+
+    trades = journal.build_trades()
+    assert len(trades) == 1
+    trade = trades[0]
+    assert trade["status"] == "CLOSED"
+    assert trade["entry_ts"] == 10
+    assert trade["exit_ts"] == 30
+    assert trade["entry_price"] == 100.0
+    assert trade["exit_price"] == 95.0
+    assert trade["pnl"] == 25.0
