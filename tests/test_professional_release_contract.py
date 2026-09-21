@@ -11,23 +11,23 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.41"
-    assert manifest["release"] == "6.3.21"
-    assert manifest["data_bridge_version"] == "1.41"
+    assert SETTINGS.app_version == "6.5.42"
+    assert manifest["release"] == "6.3.22"
+    assert manifest["data_bridge_version"] == "1.42"
     assert manifest["sequence_ea_version"] == "3.34"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_41_JournalProvenance.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
-    assert bridge_digest == bridge["sha256"] == "58783b7a4aed02eb69cc262faec130f9503e4553360b5524a31865a74edc077b"
+    assert bridge_digest == bridge["sha256"] == "eddbc2431131a63b7438aaddc2bc861b48ada8cffb3252b5026099b8630a4042"
 
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
     assert bridge_core_source.exists()
     bridge_core_digest = hashlib.sha256(bridge_core_source.read_bytes()).hexdigest()
-    assert bridge_core_digest == bridge_core["sha256"] == "6f4649717a488c708e9fcfd1d7d6b710d23d060b646612d031638b53fd163910"
+    assert bridge_core_digest == bridge_core["sha256"] == "990cc537380baa9df89551a882a31a124a3177693d694be367ff521526a8d8e9"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
     assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
@@ -68,5 +68,7 @@ def test_professional_release_contract_is_self_consistent():
         "journal_version_provenance_separation",
         "journal_position_metadata_persistence",
         "journal_history_metadata_provenance",
+        "mql5_tester_guard_compile_fix",
+        "installer_compile_diagnostics",
     }
     assert required.issubset(set(manifest["channel_features"]))

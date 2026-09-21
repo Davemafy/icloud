@@ -44,17 +44,17 @@ function PatchInput([string]$Path,[string]$Name,[string]$Value){
   $raw=Get-Content $Path -Raw
   $pattern='input\s+string\s+'+[regex]::Escape($Name)+'="[^"]*";'
   $replacement='input string '+$Name+'="'+$Value+'";'
+  if($raw -notmatch $pattern){throw "Could not find $Name in $(Split-Path $Path -Leaf)"}
   $new=[regex]::Replace($raw,$pattern,$replacement,1)
-  if($new-eq$raw){throw "Could not set $Name in $(Split-Path $Path -Leaf)"}
-  Set-Content $Path -Value $new -Encoding UTF8
+  if($new-ne$raw){Set-Content $Path -Value $new -Encoding UTF8}
 }
 function PatchDefine([string]$Path,[string]$Name,[string]$Value){
   $raw=Get-Content $Path -Raw
   $pattern='#define\s+'+[regex]::Escape($Name)+'\s+"[^"]*"'
   $replacement='#define '+$Name+' "'+$Value+'"'
+  if($raw -notmatch $pattern){throw "Could not find $Name in $(Split-Path $Path -Leaf)"}
   $new=[regex]::Replace($raw,$pattern,$replacement,1)
-  if($new-eq$raw){throw "Could not set $Name in $(Split-Path $Path -Leaf)"}
-  Set-Content $Path -Value $new -Encoding UTF8
+  if($new-ne$raw){Set-Content $Path -Value $new -Encoding UTF8}
 }
 function DiscoverTargets(){
   $root=Join-Path $env:APPDATA 'MetaQuotes\Terminal'
@@ -110,9 +110,19 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
   Write-Host "Compiling: $(Split-Path $Src -Leaf)" -ForegroundColor Cyan
   Start-Process -FilePath $Meta -ArgumentList @("/compile:$Src","/log:$log") -Wait|Out-Null
   Start-Sleep -Milliseconds 900
-  if(!(Test-Path $ex5)){throw "Compilation failed for $(Split-Path $Src -Leaf)."}
   $txt=if(Test-Path $log){Get-Content $log -Raw}else{''}
+  if(!(Test-Path $ex5)){
+    if($txt){
+      Write-Host ''
+      Write-Host 'MetaEditor compile log:' -ForegroundColor Yellow
+      Write-Host $txt -ForegroundColor DarkYellow
+    }
+    throw "Compilation failed for $(Split-Path $Src -Leaf)."
+  }
   if($txt -and $txt -notmatch '0 errors,\s*0 warnings'){
+    Write-Host ''
+    Write-Host 'MetaEditor compile log:' -ForegroundColor Yellow
+    Write-Host $txt -ForegroundColor DarkYellow
     throw "Compile did not report 0 errors, 0 warnings for $(Split-Path $Src -Leaf)."
   }
   Write-Host "  OK: 0 errors, 0 warnings." -ForegroundColor Green
