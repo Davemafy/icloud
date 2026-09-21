@@ -1,6 +1,6 @@
 #property strict
 #property version "1.31"
-#property description "DEMO/PAPER read-only market + journal telemetry bridge for Institutional SMC Cloud."
+#property description "DEMO/PAPER read-only market + journal telemetry bridge for Institutional SMC Cloud."\n\n#ifndef TZ_JOURNAL_BRIDGE_VERSION\n#define TZ_JOURNAL_BRIDGE_VERSION "1.31"\n#endif
 
 input string CloudBaseUrl="https://YOUR-SERVICE.up.railway.app";
 input string CloudApiKey="";
@@ -18,8 +18,26 @@ input int NewsWindowHours=24;
 // Journal telemetry only. This does not place, change, or close orders.
 input bool EnableJournalSync=true;
 input ulong SequenceMagicNumber=5632001;
-input string SequenceEaVersion="3.21";
+input string SequenceEaVersion="3.21"; // legacy fallback only; live journal reads TradeZone\\sequence_state.txt
 input int JournalMarkEverySeconds=60;
+
+string RuntimeStateValue(string fileName,string key)
+{
+   int h=FileOpen("TradeZone\\"+fileName,FILE_READ|FILE_TXT|FILE_ANSI);
+   if(h==INVALID_HANDLE)return "";
+   string needle=key+"=",value="";
+   while(!FileIsEnding(h))
+   {
+      string line=FileReadString(h);
+      if(StringFind(line,needle)==0){value=StringSubstr(line,StringLen(needle));break;}
+   }
+   FileClose(h);StringTrimLeft(value);StringTrimRight(value);return value;
+}
+string JournalSequenceVersion()
+{
+   string v=RuntimeStateValue("sequence_state.txt","version");
+   return v!=""?v:SequenceEaVersion;
+}
 
 string g_analysisId="",g_zoneId="",g_grade="";
 datetime g_lastMark=0;
@@ -82,7 +100,7 @@ bool SendSnapshot(string reason)
 }
 void SendHeartbeat()
 {
-   string b=StringFormat("{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_DataBridge\",\"version\":\"1.31\",\"symbol\":\"%s\",\"account_login\":%I64d,\"details\":{\"dxy\":\"%s\",\"journal_sync\":true,\"sequence_magic\":%I64d,\"sequence_expected_version\":\"%s\",\"paper_only\":true}}",(long)TimeTradeServer(),JsonEscape(XauSymbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),JsonEscape(DxySymbol),(long)SequenceMagicNumber,JsonEscape(SequenceEaVersion));
+   string b=StringFormat("{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_DataBridge\",\"version\":\"1.31\",\"symbol\":\"%s\",\"account_login\":%I64d,\"details\":{\"dxy\":\"%s\",\"journal_sync\":true,\"sequence_magic\":%I64d,\"sequence_expected_version\":\"%s\",\"paper_only\":true}}",(long)TimeTradeServer(),JsonEscape(XauSymbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),JsonEscape(DxySymbol),(long)SequenceMagicNumber,JsonEscape(JournalSequenceVersion()));
    string r;Post("/mt5/heartbeat",b,r);
 }
 void RefreshPlanContext()
@@ -92,11 +110,23 @@ void RefreshPlanContext()
 }
 string SetupTag(string comment)
 {
-   string tags[6]={"FR2","FR1","F0","R2","R1","P0"};for(int i=0;i<6;i++)if(StringFind(comment," "+tags[i])>=0||StringFind(comment,tags[i])==0)return tags[i];return "UNKNOWN";
+   string tags[10]={"FR2","FR1","F0","R2","R1","P0","S0","L0","C0","E0"};
+   for(int i=0;i<10;i++)if(StringFind(comment," "+tags[i])>=0||StringFind(comment,tags[i])==0)return tags[i];
+   return "UNKNOWN";
 }
 string SetupName(string tag)
 {
-   if(tag=="P0")return "PRIMARY";if(tag=="R1")return "REENTRY_1";if(tag=="R2")return "REENTRY_2";if(tag=="F0")return "ZONE_FLIP";if(tag=="FR1")return "FLIP_REENTRY_1";if(tag=="FR2")return "FLIP_REENTRY_2";return "UNKNOWN";
+   if(tag=="P0")return "PRIMARY";
+   if(tag=="R1")return "REENTRY_1";
+   if(tag=="R2")return "REENTRY_2";
+   if(tag=="F0")return "ZONE_FLIP";
+   if(tag=="FR1")return "FLIP_REENTRY_1";
+   if(tag=="FR2")return "FLIP_REENTRY_2";
+   if(tag=="S0")return "ZONE_SWEEP_CONTINUATION";
+   if(tag=="L0")return "LIQUIDITY_REVERSAL";
+   if(tag=="C0")return "CONTINUATION_RESCUE";
+   if(tag=="E0")return "ESCAPE_PULLBACK";
+   return "UNKNOWN";
 }
 int TrackIndex(ulong pid){for(int i=0;i<ArraySize(g_posId);i++)if(g_posId[i]==pid)return i;return -1;}
 int EnsureTrack(ulong pid,string tag,string aid,string zid)
@@ -115,14 +145,14 @@ bool AnyOpenTracked(string aid,string zid,string tag)
 void MarkPositions()
 {
    if(!EnableJournalSync)return;datetime now=TimeTradeServer();if(now-g_lastMark<JournalMarkEverySeconds)return;g_lastMark=now;MqlTick tk;if(!SymbolInfoTick(XauSymbol,tk))return;
-   for(int i=PositionsTotal()-1;i>=0;i--){ulong ticket=PositionGetTicket(i);if(!ticket)continue;if(PositionGetString(POSITION_SYMBOL)!=XauSymbol||(ulong)PositionGetInteger(POSITION_MAGIC)!=SequenceMagicNumber)continue;ulong pid=(ulong)PositionGetInteger(POSITION_IDENTIFIER);string comment=PositionGetString(POSITION_COMMENT),tag=SetupTag(comment);int k=TrackIndex(pid);if(k<0)k=EnsureTrack(pid,tag,g_analysisId,g_zoneId);string aid=g_posAnalysis[k],zid=g_posZone[k];double open=PositionGetDouble(POSITION_PRICE_OPEN),sl=PositionGetDouble(POSITION_SL),tp=PositionGetDouble(POSITION_TP),vol=PositionGetDouble(POSITION_VOLUME),profit=PositionGetDouble(POSITION_PROFIT);ENUM_POSITION_TYPE pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);string dir=pt==POSITION_TYPE_BUY?"BUY":"SELL";double mark=pt==POSITION_TYPE_BUY?tk.bid:tk.ask;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"volume\":%.4f,\"entry_price\":%.5f,\"current_sl\":%.5f,\"tp\":%.5f,\"floating_profit\":%.2f,\"bridge_version\":\"1.31\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,vol,open,sl,tp,profit,JsonEscape(SequenceEaVersion),JsonEscape(comment));SendJournal("POSITION_MARK",mark,aid,zid,d);}
+   for(int i=PositionsTotal()-1;i>=0;i--){ulong ticket=PositionGetTicket(i);if(!ticket)continue;if(PositionGetString(POSITION_SYMBOL)!=XauSymbol||(ulong)PositionGetInteger(POSITION_MAGIC)!=SequenceMagicNumber)continue;ulong pid=(ulong)PositionGetInteger(POSITION_IDENTIFIER);string comment=PositionGetString(POSITION_COMMENT),tag=SetupTag(comment);int k=TrackIndex(pid);if(k<0)k=EnsureTrack(pid,tag,g_analysisId,g_zoneId);string aid=g_posAnalysis[k],zid=g_posZone[k];double open=PositionGetDouble(POSITION_PRICE_OPEN),sl=PositionGetDouble(POSITION_SL),tp=PositionGetDouble(POSITION_TP),vol=PositionGetDouble(POSITION_VOLUME),profit=PositionGetDouble(POSITION_PROFIT);ENUM_POSITION_TYPE pt=(ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);string dir=pt==POSITION_TYPE_BUY?"BUY":"SELL";double mark=pt==POSITION_TYPE_BUY?tk.bid:tk.ask;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"direction\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"volume\":%.4f,\"entry_price\":%.5f,\"current_sl\":%.5f,\"tp\":%.5f,\"floating_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),dir,JsonEscape(g_grade),(long)pid,vol,open,sl,tp,profit,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("POSITION_MARK",mark,aid,zid,d);}
 }
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
 {
    if(!EnableJournalSync||trans.type!=TRADE_TRANSACTION_DEAL_ADD||trans.deal==0)return;ulong deal=trans.deal;if(!HistoryDealSelect(deal))return;if((ulong)HistoryDealGetInteger(deal,DEAL_MAGIC)!=SequenceMagicNumber)return;if(HistoryDealGetString(deal,DEAL_SYMBOL)!=XauSymbol)return;
    ENUM_DEAL_ENTRY entry=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);ENUM_DEAL_REASON reason=(ENUM_DEAL_REASON)HistoryDealGetInteger(deal,DEAL_REASON);ulong pid=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);string comment=HistoryDealGetString(deal,DEAL_COMMENT),tag=SetupTag(comment),aid=g_analysisId,zid=g_zoneId;double price=HistoryDealGetDouble(deal,DEAL_PRICE),vol=HistoryDealGetDouble(deal,DEAL_VOLUME),profit=HistoryDealGetDouble(deal,DEAL_PROFIT),commission=HistoryDealGetDouble(deal,DEAL_COMMISSION),swap=HistoryDealGetDouble(deal,DEAL_SWAP);
-   int k=TrackIndex(pid);if(entry==DEAL_ENTRY_IN){k=EnsureTrack(pid,tag,aid,zid);string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"bridge_version\":\"1.31\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),JsonEscape(g_grade),(long)pid,(long)deal,vol,JsonEscape(SequenceEaVersion),JsonEscape(comment));SendJournal("ENTRY_OPENED",price,aid,zid,d);return;}
-   if(k>=0){aid=g_posAnalysis[k];zid=g_posZone[k];tag=g_posTag[k];}string ev="POSITION_EXIT";if(reason==DEAL_REASON_TP)ev="TP_HIT";else if(reason==DEAL_REASON_SL)ev="SL_HIT";double net=profit+commission+swap;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,\"bridge_version\":\"1.31\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),(long)pid,(long)deal,vol,net,JsonEscape(SequenceEaVersion),JsonEscape(comment));SendJournal(ev,price,aid,zid,d);if(!AnyOpenTracked(aid,zid,tag)){string c=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"bridge_version\":\"1.31\",\"sequence_version\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),JsonEscape(SequenceEaVersion));SendJournal("TRADE_CLOSED",price,aid,zid,c);}
+   int k=TrackIndex(pid);if(entry==DEAL_ENTRY_IN){k=EnsureTrack(pid,tag,aid,zid);string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"grade\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),JsonEscape(g_grade),(long)pid,(long)deal,vol,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal("ENTRY_OPENED",price,aid,zid,d);return;}
+   if(k>=0){aid=g_posAnalysis[k];zid=g_posZone[k];tag=g_posTag[k];}string ev="POSITION_EXIT";if(reason==DEAL_REASON_TP)ev="TP_HIT";else if(reason==DEAL_REASON_SL)ev="SL_HIT";double net=profit+commission+swap;string d=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"position_id\":%I64d,\"deal_id\":%I64d,\"volume\":%.4f,\"net_profit\":%.2f,\"bridge_version\":\"%s\",\"sequence_version\":\"%s\",\"comment\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),(long)pid,(long)deal,vol,net,TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()),JsonEscape(comment));SendJournal(ev,price,aid,zid,d);if(!AnyOpenTracked(aid,zid,tag)){string c=StringFormat("{\"trade_id\":\"%s\",\"setup\":\"%s\",\"tag\":\"%s\",\"bridge_version\":\"%s\",\"sequence_version\":\"%s\"}",JsonEscape(TradeId(aid,zid,tag)),JsonEscape(SetupName(tag)),JsonEscape(tag),TZ_JOURNAL_BRIDGE_VERSION,JsonEscape(JournalSequenceVersion()));SendJournal("TRADE_CLOSED",price,aid,zid,c);}
 }
 int OnInit()
 {
