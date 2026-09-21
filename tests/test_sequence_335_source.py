@@ -35,14 +35,14 @@ def test_v335_terminal_reentry_cap_and_entry_audit():
     assert "TZ35_SendEntryDecisionAudit" in text
     assert "ENTRY_DECISION" in text
     for needle in [
-        '\"break_bar_ts\"',
-        '\"value_reaction_bar_ts\"',
-        '\"ote_low\"',
-        '\"ote_high\"',
-        '\"pd_low\"',
-        '\"pd_high\"',
-        '\"entry_low\"',
-        '\"entry_high\"',
-        '\"closed_m1_value_reaction_confirmed\"',
+        "break_bar_ts",
+        "value_reaction_bar_ts",
+        "ote_low",
+        "ote_high",
+        "pd_low",
+        "pd_high",
+        "entry_low",
+        "entry_high",
+        "closed_m1_value_reaction_confirmed",
     ]:
         assert needle in text
