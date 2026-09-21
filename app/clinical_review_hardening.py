@@ -79,7 +79,13 @@ _AUDIT_SCRIPT = r'''
 
 def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
     def build_trades(limit_events: int = 5000) -> list[dict]:
-        rows = list(reversed(journal.recent_feedback(limit_events)))
+        # MT5 history recovery can replay closed deals before their older entry deals.
+        # Aggregate by event time (not arrival/insertion order) so a recovered entry
+        # can never reopen a position that is already known to be closed.
+        rows = sorted(
+            journal.recent_feedback(limit_events),
+            key=lambda row: (int(row.get("ts") or 0), int(row.get("id") or 0)),
+        )
         groups: dict[str, dict] = {}
         seen_event_ids: set[str] = set()
 
@@ -181,7 +187,9 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
                 g["display_id"] = setup
 
             if event == "ENTRY_OPENED":
-                g["status"] = "OPEN"
+                # Never let a late/replayed historical entry reopen a terminal trade.
+                if g["status"] != "CLOSED":
+                    g["status"] = "OPEN"
                 g["entry_ts"] = g["entry_ts"] or ts
                 g["entry_price"] = g["entry_price"] or price
             elif event == "POSITION_MARK":
