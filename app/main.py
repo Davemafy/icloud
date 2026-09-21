@@ -66,7 +66,7 @@ def health():
         "active_analysis": a.analysis_id if a else None,
         "scheduler": scheduler_status(),
         "execution_contract": "V6_3_SMC_LOCATION_REGIME_MULTIMODEL",
-        "journal_sync": "V3_COMPONENT_TRUTH_SAFE_RELOAD",
+        "journal_sync": "V4_PROVENANCE_EXECUTION_GROUPS",
         "components": sys.get("components", {}),
         "auth_required": True,
     }
