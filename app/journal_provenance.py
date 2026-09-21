@@ -587,13 +587,15 @@ def performance_summary() -> dict:
         if _clean(base_journal.parse_details(row.get("details")).get("candidate_id"))
     }
 
-    net = sum(float(x.get("pnl") or 0.0) for x in closed_executions)
+    closed_execution_pnl = sum(float(x.get("pnl") or 0.0) for x in closed_executions)
+    realized_position_pnl = sum(float(x.get("pnl") or 0.0) for x in closed_positions)
     return {
         "paper_only": SETTINGS.paper_only,
         "aggregation_basis": "EXECUTION_GROUP",
         "grouping_policy": (
             "Exact campaign IDs when available; otherwise only same-direction entries within 2 seconds "
-            "and 0.35 XAU price units are grouped as one reconstructed execution burst."
+            "and 0.35 XAU price units are grouped as one reconstructed execution burst. "
+            "Win rate waits for the whole execution group to close; Demo P/L includes realized closed MT5 legs."
         ),
         "execution_count": len(executions),
         "closed_executions": len(closed_executions),
@@ -605,14 +607,16 @@ def performance_summary() -> dict:
         "closed_trades": len(closed_executions),
         "wins": len(wins),
         "win_rate": (len(wins) / len(closed_executions) * 100.0) if closed_executions else None,
-        "net_demo_pnl": net,
+        "net_demo_pnl": realized_position_pnl,
+        "realized_position_pnl": realized_position_pnl,
+        "closed_execution_pnl": closed_execution_pnl,
         "research_observations": len(observations),
         "unique_research_observations": len(unique_observations),
         "last_7d": {
             "closed_executions": len(last_7d_exec),
             "closed_positions": len(last_7d_positions),
             "closed_trades": len(last_7d_exec),
-            "net_demo_pnl": sum(float(x.get("pnl") or 0.0) for x in last_7d_exec),
+            "net_demo_pnl": sum(float(x.get("pnl") or 0.0) for x in last_7d_positions),
         },
         "by_setup": _bucket_summary(closed_executions, "setup"),
         "by_direction": _bucket_summary(closed_executions, "direction"),
