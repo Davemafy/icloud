@@ -81,6 +81,7 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
     def build_trades(limit_events: int = 5000) -> list[dict]:
         rows = list(reversed(journal.recent_feedback(limit_events)))
         groups: dict[str, dict] = {}
+        seen_event_ids: set[str] = set()
 
         for row in rows:
             event = str(row.get("event") or "").upper()
@@ -91,10 +92,23 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
             setup = journal._canonical_setup(d)
             position_id = d.get("position_id")
             raw_trade_id = str(d.get("trade_id") or "")
-            key = raw_trade_id or (
+            event_uid = str(d.get("event_uid") or "").strip()
+            if not event_uid:
+                deal_id = d.get("deal_id")
+                if deal_id not in (None, "", 0, "0"):
+                    event_uid = f"{event}|DEAL|{deal_id}"
+                elif event == "TRADE_CLOSED" and position_id not in (None, "", 0, "0"):
+                    event_uid = f"{event}|POSITION|{position_id}"
+            if event_uid:
+                if event_uid in seen_event_ids:
+                    continue
+                seen_event_ids.add(event_uid)
+
+            key = (
                 f"POSITION:{position_id}"
                 if position_id not in (None, "", 0, "0")
-                else "|".join(
+                else raw_trade_id
+                or "|".join(
                     [
                         str(row.get("analysis_id") or "NO_ANALYSIS"),
                         str(row.get("zone_id") or "NO_ZONE"),
@@ -111,7 +125,8 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
             g = groups.setdefault(
                 key,
                 {
-                    "trade_id": key,
+                    "trade_id": raw_trade_id or key,
+                    "campaign_id": raw_trade_id,
                     "display_id": display_id,
                     "position_id": position_id,
                     "analysis_id": row.get("analysis_id") or "",
@@ -145,6 +160,10 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
             g["last_ts"] = ts
             if setup:
                 g["setup"] = setup
+            if raw_trade_id and not g.get("campaign_id"):
+                g["campaign_id"] = raw_trade_id
+            if raw_trade_id and str(g.get("trade_id") or "").startswith("POSITION:"):
+                g["trade_id"] = raw_trade_id
             if d.get("direction"):
                 g["direction"] = d["direction"]
             if d.get("grade"):
@@ -237,6 +256,7 @@ def _export_csv_factory(journal) -> Callable[[], str]:
         rows = journal.build_trades()
         cols = [
             "trade_id",
+            "campaign_id",
             "display_id",
             "position_id",
             "analysis_id",
