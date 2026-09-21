@@ -12,16 +12,16 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert SETTINGS.app_version == "6.5.40"
-    assert manifest["release"] == "6.3.19"
-    assert manifest["data_bridge_version"] == "1.39"
+    assert manifest["release"] == "6.3.20"
+    assert manifest["data_bridge_version"] == "1.40"
     assert manifest["sequence_ea_version"] == "3.34"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
-    assert bridge_digest == bridge["sha256"] == "e77118a32794e9484f5d8859b288160208990b88c34ad1b8bf4ae8b3471023cf"
+    assert bridge_digest == bridge["sha256"] == "71db0e19051254dfff47da33c9141ed9254bdadd2e14de13e0009322ab072257"
 
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
@@ -62,5 +62,7 @@ def test_professional_release_contract_is_self_consistent():
         "position_stable_journal_aggregation",
         "journal_recovery_after_cloud_redeploy",
         "objective_progress_truth_dashboard",
+        "execution_truth_chart_status",
+        "legacy_no_trade_overlay_cleanup",
     }
     assert required.issubset(set(manifest["channel_features"]))
