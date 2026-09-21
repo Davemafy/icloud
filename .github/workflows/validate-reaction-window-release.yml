@@ -2,7 +2,7 @@ name: validate-reaction-window-release
 
 on:
   push:
-    branches: [main, fix/journal-provenance-6541]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
