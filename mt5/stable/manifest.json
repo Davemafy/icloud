@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.15",
+  "release": "6.3.16",
   "repository": "Davemafy/icloud",
-  "ref": "826de1781dbb5154310eecbb027d0eb8f13fcd3e",
-  "data_bridge_version": "1.36",
+  "ref": "92e10f9765ba30c4381954ab1a3ae33b47ff69b1",
+  "data_bridge_version": "1.37",
   "sequence_ea_version": "3.33",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -97,16 +97,18 @@
     "safety_block_preserves_owner_mirror",
     "spread_guard_suspends_orders_not_thesis",
     "safety_hold_dashboard_semantics",
-    "owner_mirror_updates_before_live_block"
+    "owner_mirror_updates_before_live_block",
+    "runtime_journal_component_truth",
+    "current_sequence_entry_tag_classification"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_36_ExecutionOwnership.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5",
       "requires_reload": true,
-      "sha256": "4ee92967ce22664313688536f6433153ac18f5d48a4e2bc8b97fe23e51073a42"
+      "sha256": "08ba484a2f676a78e36b19d7632057e2c9a903ab0d526caa7c7a174ab0d16e5f"
     },
     {
       "role": "sequence_ea",
@@ -124,7 +126,7 @@
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
       "target": "Include\\TradeZoneCore",
       "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "sha256": "af3b5b65622f1e399e7da9459734982834a72754c19b9b51a41ed49509be3d12"
+      "sha256": "bc698bbe09bd17eddb26c0fda944fc9c12403d2ab9844d25867ee343ed1e9ebf"
     },
     {
       "role": "zone_renderer",
