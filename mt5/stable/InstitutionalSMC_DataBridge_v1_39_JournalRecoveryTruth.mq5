@@ -246,13 +246,13 @@ int OnInit()
 {
    int rc=TZ_BridgeCore_OnInit();
    if(rc!=INIT_SUCCEEDED)return rc;
-   TZ_SendSnapshotCycle("V138_VERIFY");
+   TZ_SendSnapshotCycle("V139_VERIFY");
    RefreshPlanContext();
    TZ_ReadTwoZoneMap();
    TZR_RefreshAndRender();
    TZ_RenderTwoZoneMap();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV136();
+   TZ_SendHeartbeatV139();
    Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: idempotent journal recovery + runtime truth + V659 zones + ownership visualization.");
    return INIT_SUCCEEDED;
 }
@@ -268,12 +268,13 @@ void OnTimer()
 {
    TZ_SendSnapshotCycle("LIVE");
    RefreshPlanContext();
+   BackfillJournalHistory(false);
    TZ_ReadTwoZoneMap();
    TZR_RefreshAndRender();
    TZ_RenderTwoZoneMap();
    MarkPositions();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV136();
+   TZ_SendHeartbeatV139();
 }
 
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
