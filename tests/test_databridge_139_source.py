@@ -30,6 +30,7 @@ def test_v139_reports_current_runtime_and_recovery_contract():
         "HistoryDealsTotal()",
         "HistoryDealGetTicket(i)",
         "recovered_from_mt5_history",
+        "if(!SequencePositionIdentifierOpen(pid))",
     ]:
         assert needle in core
 
