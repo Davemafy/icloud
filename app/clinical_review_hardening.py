@@ -88,6 +88,7 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
                 continue
 
             d = journal.parse_details(row.get("details"))
+            setup = journal._canonical_setup(d)
             position_id = d.get("position_id")
             raw_trade_id = str(d.get("trade_id") or "")
             key = raw_trade_id or (
@@ -97,11 +98,10 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
                     [
                         str(row.get("analysis_id") or "NO_ANALYSIS"),
                         str(row.get("zone_id") or "NO_ZONE"),
-                        str(d.get("setup") or "EXECUTION"),
+                        setup or "EXECUTION",
                     ]
                 )
             )
-            setup = str(d.get("setup") or "")
             display_id = (
                 f"{setup or 'TRADE'} · POS {position_id}"
                 if position_id not in (None, "", 0, "0")
