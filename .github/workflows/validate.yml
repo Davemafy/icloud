@@ -2,7 +2,7 @@ name: validate
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/journal-provenance-6541]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,10 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
+      - name: Journal provenance SHA256
+        run: |
+          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_41_JournalProvenance.mq5
+          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
       - name: Run tests
         run: pytest -q
       - name: Python syntax check
