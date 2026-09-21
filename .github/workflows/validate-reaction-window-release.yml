@@ -31,7 +31,7 @@ jobs:
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.33"',
+              '#property version   "3.34"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
@@ -58,4 +58,4 @@ jobs:
           print('Sequence 3.34 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5
