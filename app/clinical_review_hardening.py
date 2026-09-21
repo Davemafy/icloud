@@ -205,7 +205,25 @@ def _build_trades_factory(journal) -> Callable[[int], list[dict]]:
                 g["mfe_r"] = r if g["mfe_r"] is None else max(g["mfe_r"], r)
                 g["mae_r"] = r if g["mae_r"] is None else min(g["mae_r"], r)
 
-        return list(reversed(list(groups.values())))
+        # Old bridge versions emitted TRADE_CLOSED at campaign level without a
+        # position_id. Once position-specific lifecycle events exist for the same
+        # campaign, that legacy campaign-only close is redundant and would otherwise
+        # appear as a zero-P/L phantom trade beside the real MT5 positions.
+        position_campaigns = {
+            str(g.get("campaign_id") or "")
+            for g in groups.values()
+            if g.get("position_id") not in (None, "", 0, "0")
+            and str(g.get("campaign_id") or "")
+        }
+        cleaned = [
+            g for g in groups.values()
+            if not (
+                g.get("position_id") in (None, "", 0, "0")
+                and str(g.get("campaign_id") or "") in position_campaigns
+                and str(g.get("status") or "") == "CLOSED"
+            )
+        ]
+        return list(reversed(cleaned))
 
     return build_trades
 
