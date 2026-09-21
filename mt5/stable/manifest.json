@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.18",
+  "release": "6.3.19",
   "repository": "Davemafy/icloud",
-  "ref": "99b1dc80b215ea3165ce70ad82dafe6235edce03",
-  "data_bridge_version": "1.38",
+  "ref": "d5d3592c4bf803d822926bf1323754db33e595bc",
+  "data_bridge_version": "1.39",
   "sequence_ea_version": "3.34",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -103,16 +103,21 @@
     "persistent_initial_risk_basis_after_be",
     "m5_runner_trail_after_break_even",
     "runner_risk_history_recovery",
-    "compile_safe_databridge_preprocessor_contract"
+    "compile_safe_databridge_preprocessor_contract",
+    "idempotent_journal_event_keys",
+    "mt5_journal_history_backfill",
+    "position_stable_journal_aggregation",
+    "journal_recovery_after_cloud_redeploy",
+    "objective_progress_truth_dashboard"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_38_CompileSafeJournalTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_38_CompileSafeJournalTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_38_CompileSafeJournalTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
       "requires_reload": true,
-      "sha256": "93592c4ad70823b84cdf87f5fe3298e1fb3bcc8e83c0fbaede87daeb470f048c"
+      "sha256": "e77118a32794e9484f5d8859b288160208990b88c34ad1b8bf4ae8b3471023cf"
     },
     {
       "role": "sequence_ea",
@@ -130,7 +135,7 @@
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
       "target": "Include\\TradeZoneCore",
       "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "sha256": "9cbd3456478c3d66a348bf53c368f6704711ef02a5879c944ff56dfe77428ee3"
+      "sha256": "e0079fa5b5a55653bb6cf6b578bc84bfc97cb2900950255a7e9b04f89a303243"
     },
     {
       "role": "zone_renderer",
