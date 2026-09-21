@@ -2,7 +2,7 @@ name: validate-reaction-window-release
 
 on:
   push:
-    branches: [main, cleanup-journal-objective-truth-v6537]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
