@@ -230,6 +230,53 @@ def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     return "PLANNED"
 
 
+def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
+    """Human execution status reconciled against live Sequence EA truth.
+
+    HTF/M1 handoff is macro authority only. A live Sequence micro-gate remains
+    authoritative for whether a new paper entry is still waiting, held, sent,
+    or already being managed.
+    """
+    status = str(base_status or "WAITING")
+    terminal = {"CLOSED", "MANAGING", "IN TRADE", "FLIP CANDIDATE"}
+    if status in terminal:
+        return status
+
+    seq = sequence_debug or {}
+    if not bool(seq.get("online")):
+        return "SEQUENCE OFFLINE" if status == "M1 READY" else status
+
+    open_positions = int(seq.get("open_positions") or 0)
+    if open_positions > 0:
+        return "IN TRADE"
+
+    authority = str(seq.get("authority") or "NONE")
+    stage = str(seq.get("gate_stage") or "UNKNOWN").upper()
+    reason = str(seq.get("gate_reason") or "").upper()
+
+    if authority == "NONE":
+        return "WAITING FOR SEQUENCE AUTHORITY" if status == "M1 READY" else status
+    if stage == "ORDER_SENT":
+        return "ORDER SENT"
+
+    if (
+        stage in {"VALUE", "VALUE_PD_ARRAY", "FLIP_VALUE_PD_ARRAY"}
+        or "WAITING_FOR_VALID_VALUE" in reason
+        or "WAITING_FOR_PULLBACK" in reason
+    ):
+        return "WAITING FOR VALUE"
+    if stage in {"SWEEP", "FLIP_SWEEP"}:
+        return "WAITING FOR SWEEP"
+    if stage in {"MSS_BOS", "FLIP_MSS_BOS"}:
+        return "WAITING FOR MSS/BOS"
+    if stage in {"DISPLACEMENT", "FLIP_DISPLACEMENT"}:
+        return "WAITING FOR DISPLACEMENT"
+    if stage in {"SAFETY", "RISK", "TARGET", "DUPLICATE", "AUTHORITY", "DATA", "MARKET", "BAR"}:
+        return "EXECUTION HOLD"
+
+    return "M1 SEQUENCE ACTIVE"
+
+
 def _sequence_debug_snapshot() -> dict:
     now = int(datetime.now(timezone.utc).timestamp())
     rows = latest_heartbeats(30)
@@ -396,6 +443,8 @@ def _journal_snapshot():
         and sequence_debug.get("online")
         and str(sequence_debug.get("authority") or "NONE") == "NONE"
     )
+    macro_status = _event_status(current_events, z.state.value if z else "", readiness)
+    reconciled_status = _sequence_reconciled_status(macro_status, sequence_debug)
 
     return {
         "paper_only": SETTINGS.paper_only,
@@ -419,7 +468,8 @@ def _journal_snapshot():
         } if s else None,
         "checks": checks,
         "readiness_score": f"{score}/{len(checks)}",
-        "status": _event_status(current_events, z.state.value if z else "", readiness),
+        "macro_status": macro_status,
+        "status": reconciled_status,
         "events": current_events,
         "sequence_debug": sequence_debug,
     }
