@@ -2,7 +2,7 @@ name: validate-reaction-window-release
 
 on:
   push:
-    branches: [main, fix/overlay-truth-6540]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
