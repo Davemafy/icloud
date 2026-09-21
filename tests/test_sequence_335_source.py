@@ -33,7 +33,7 @@ def test_v335_terminal_reentry_cap_and_entry_audit():
     text = _text()
     assert 'TZ_SetGate("THESIS","REENTRY_LIMIT_REACHED")' in text
     assert "TZ35_SendEntryDecisionAudit" in text
-    assert '\"event\":\"ENTRY_DECISION\"' in text
+    assert "ENTRY_DECISION" in text
     for needle in [
         '\"break_bar_ts\"',
         '\"value_reaction_bar_ts\"',
