@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.20",
+  "release": "6.3.21",
   "repository": "Davemafy/icloud",
-  "ref": "0db126e333a903fd6555fce111e85cbf92fdf5ac",
-  "data_bridge_version": "1.40",
+  "ref": "42f8b23599194c3a1c5b3fa29bd101160989ebdf",
+  "data_bridge_version": "1.41",
   "sequence_ea_version": "3.34",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -110,16 +110,20 @@
     "journal_recovery_after_cloud_redeploy",
     "objective_progress_truth_dashboard",
     "execution_truth_chart_status",
-    "legacy_no_trade_overlay_cleanup"
+    "legacy_no_trade_overlay_cleanup",
+    "journal_execution_group_aggregation",
+    "journal_version_provenance_separation",
+    "journal_position_metadata_persistence",
+    "journal_history_metadata_provenance"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_41_JournalProvenance.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_41_JournalProvenance.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_41_JournalProvenance.mq5",
       "requires_reload": true,
-      "sha256": "71db0e19051254dfff47da33c9141ed9254bdadd2e14de13e0009322ab072257"
+      "sha256": "58783b7a4aed02eb69cc262faec130f9503e4553360b5524a31865a74edc077b"
     },
     {
       "role": "sequence_ea",
@@ -137,7 +141,7 @@
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
       "target": "Include\\TradeZoneCore",
       "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "sha256": "818a36e8d05a270bda175bbead4b62a85ad8ac1ac75a3bf96ebca6d6579910a7"
+      "sha256": "6f4649717a488c708e9fcfd1d7d6b710d23d060b646612d031638b53fd163910"
     },
     {
       "role": "zone_renderer",
