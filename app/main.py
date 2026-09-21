@@ -213,7 +213,7 @@ def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
         return "CLOSED"
     if any(x in names for x in ("TP_HIT", "SL_HIT", "POSITION_EXIT")):
         return "MANAGING"
-    if "ENTRY_OPENED" in names:
+    if "ENTRY_OPENED" in names or "POSITION_MARK" in names:
         return "IN TRADE"
     if "FAILED_FLIP_CANDIDATE" in zone_state or any("FLIP_CANDIDATE" in n for n in names):
         return "FLIP CANDIDATE"
@@ -264,6 +264,8 @@ def _sequence_debug_snapshot() -> dict:
         "reentries": int(details.get("reentries") or 0),
         "flip_primary_entries": int(details.get("flip_primary_entries") or 0),
         "flip_reentries": int(details.get("flip_reentries") or 0),
+        "open_positions": int(details.get("open_positions") or 0),
+        "restart_safe": bool(details.get("restart_safe")),
         "owner_mirror_active": bool(details.get("owner_mirror_active")),
         "owner_mirror_zone_id": str(details.get("owner_mirror_zone_id") or ""),
         "execution_handoff_ts": int(details.get("execution_handoff_ts") or 0),
