@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.19",
+  "release": "6.3.20",
   "repository": "Davemafy/icloud",
-  "ref": "a03f8154e40108f42cd20c145852ff2542b6d858",
-  "data_bridge_version": "1.39",
+  "ref": "0db126e333a903fd6555fce111e85cbf92fdf5ac",
+  "data_bridge_version": "1.40",
   "sequence_ea_version": "3.34",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -108,16 +108,18 @@
     "mt5_journal_history_backfill",
     "position_stable_journal_aggregation",
     "journal_recovery_after_cloud_redeploy",
-    "objective_progress_truth_dashboard"
+    "objective_progress_truth_dashboard",
+    "execution_truth_chart_status",
+    "legacy_no_trade_overlay_cleanup"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_39_JournalRecoveryTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_40_OverlayTruth.mq5",
       "requires_reload": true,
-      "sha256": "e77118a32794e9484f5d8859b288160208990b88c34ad1b8bf4ae8b3471023cf"
+      "sha256": "71db0e19051254dfff47da33c9141ed9254bdadd2e14de13e0009322ab072257"
     },
     {
       "role": "sequence_ea",

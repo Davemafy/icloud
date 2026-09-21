@@ -235,7 +235,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     const allKeys=Object.keys(checks);
     const allPassed=allKeys.reduce((n,k)=>n+(checks[k]===true?1:0),0);
-    const checklist=allKeys.length ? ('Checklist '+allPassed+'/'+allKeys.length+'. ') : '';
+    const checklist=allKeys.length ? ('Macro checks '+allPassed+'/'+allKeys.length+'. ') : '';
     const m1=checks.m1_handoff_ready===true;
     const live=checks.live_data_safe===true;
     const thesis=activeThesis();
