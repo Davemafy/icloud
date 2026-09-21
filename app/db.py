@@ -36,6 +36,11 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS analyses(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, analysis_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, ai_ok INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS feedback(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, event TEXT NOT NULL, analysis_id TEXT, zone_id TEXT, price REAL, details TEXT);
+        CREATE TABLE IF NOT EXISTS feedback_event_keys(
+            event_uid TEXT PRIMARY KEY,
+            first_seen_ts INTEGER NOT NULL,
+            event TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS heartbeat(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ea TEXT, version TEXT, symbol TEXT, payload TEXT);
         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS zone_reactions(
@@ -91,6 +96,31 @@ def _details_text(value: Any) -> str:
         return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
     except Exception:
         return str(value)
+
+
+def _feedback_event_uid(f: Feedback) -> str:
+    raw = f.details
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            raw = {}
+    if not isinstance(raw, dict):
+        return ""
+
+    explicit = str(raw.get("event_uid") or "").strip()
+    if explicit:
+        return explicit
+
+    event = str(f.event or "").upper()
+    deal_id = raw.get("deal_id")
+    if deal_id not in (None, "", 0, "0"):
+        return f"{event}|DEAL|{deal_id}"
+
+    position_id = raw.get("position_id")
+    if event == "TRADE_CLOSED" and position_id not in (None, "", 0, "0"):
+        return f"{event}|POSITION|{position_id}"
+    return ""
 
 
 def save_snapshot(s: MarketSnapshot) -> None:
@@ -157,8 +187,16 @@ def save_feedback(f: Feedback) -> None:
         except Exception as exc:
             audit(f.ts, "feedback.execution_safety.error", f"analysis={f.analysis_id} zone={f.zone_id} error={type(exc).__name__}:{exc}")
 
+    event_uid = _feedback_event_uid(f)
     details_text = _details_text(f.details)
     with _lock, connect() as db:
+        if event_uid:
+            cur = db.execute(
+                "INSERT OR IGNORE INTO feedback_event_keys(event_uid,first_seen_ts,event) VALUES(?,?,?)",
+                (event_uid, f.ts, f.event),
+            )
+            if cur.rowcount == 0:
+                return
         db.execute(
             "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
             (f.ts, f.event, f.analysis_id, f.zone_id, f.price, details_text),
