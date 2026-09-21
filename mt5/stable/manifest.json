@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.23",
+  "release": "6.3.24",
   "repository": "Davemafy/icloud",
-  "ref": "fb31f7fd41b4d37c84d497ddf5ca9b417d091744",
-  "data_bridge_version": "1.42",
+  "ref": "be1a848180117a254369ceba090afda8d96edb0a",
+  "data_bridge_version": "1.43",
   "sequence_ea_version": "3.35",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -121,16 +121,19 @@
     "reentry_pd_array_accepted_invalidation_guard",
     "reentry_signal_freshness_guard",
     "reentry_limit_terminal_gate",
-    "entry_decision_audit_telemetry"
+    "entry_decision_audit_telemetry",
+    "sequence_335_truth_overlay",
+    "reentry_confirmation_overlay",
+    "thesis_entry_limit_overlay"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_42_JournalCompileFix.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
       "requires_reload": true,
-      "sha256": "eddbc2431131a63b7438aaddc2bc861b48ada8cffb3252b5026099b8630a4042"
+      "sha256": "e44a1e27c4f68c7dc4332bc2a20cd6a94022d7b340b9c32ccd17547d9856ccd9"
     },
     {
       "role": "sequence_ea",
