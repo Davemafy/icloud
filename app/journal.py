@@ -35,18 +35,49 @@ def parse_details(raw: Any) -> dict:
         return {"text": text}
 
 
+_SETUP_BY_TAG = {
+    "P0": "PRIMARY",
+    "R1": "REENTRY_1",
+    "R2": "REENTRY_2",
+    "F0": "ZONE_FLIP",
+    "FR1": "FLIP_REENTRY_1",
+    "FR2": "FLIP_REENTRY_2",
+    "S0": "ZONE_SWEEP_CONTINUATION",
+    "L0": "LIQUIDITY_REVERSAL",
+    "C0": "CONTINUATION_RESCUE",
+    "E0": "ESCAPE_PULLBACK",
+}
+
+
+def _canonical_setup(details: dict) -> str:
+    setup = str(details.get("setup") or "").strip()
+    if setup and setup.upper() != "UNKNOWN":
+        return setup
+
+    tag = str(details.get("tag") or "").strip().upper()
+    if tag in _SETUP_BY_TAG:
+        return _SETUP_BY_TAG[tag]
+
+    comment = str(details.get("comment") or "").upper()
+    for candidate in sorted(_SETUP_BY_TAG, key=len, reverse=True):
+        if f" {candidate} " in f" {comment} " or comment.startswith(candidate + " "):
+            return _SETUP_BY_TAG[candidate]
+    return setup or "UNKNOWN"
+
+
 def build_trades(limit_events: int = 5000) -> list[dict]:
     rows = list(reversed(recent_feedback(limit_events)))
     groups: dict[str, dict] = {}
     for row in rows:
         d = parse_details(row.get("details"))
+        setup = _canonical_setup(d)
         key = str(
             d.get("trade_id")
             or "|".join(
                 [
                     str(row.get("analysis_id") or "NO_ANALYSIS"),
                     str(row.get("zone_id") or "NO_ZONE"),
-                    str(d.get("setup") or "NO_SETUP"),
+                    setup or "NO_SETUP",
                 ]
             )
         )
@@ -56,7 +87,7 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
                 "trade_id": key,
                 "analysis_id": row.get("analysis_id") or "",
                 "zone_id": row.get("zone_id") or "",
-                "setup": d.get("setup") or "",
+                "setup": setup,
                 "direction": d.get("direction") or "",
                 "grade": d.get("grade") or "",
                 "status": "PLANNED",
@@ -82,8 +113,8 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
         g["event_count"] += 1
         g["last_event"] = event
         g["last_ts"] = ts
-        if d.get("setup"):
-            g["setup"] = d["setup"]
+        if setup:
+            g["setup"] = setup
         if d.get("direction"):
             g["direction"] = d["direction"]
         if d.get("grade"):
