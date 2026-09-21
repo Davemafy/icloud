@@ -157,7 +157,7 @@ string PositionMetaFile(ulong pid)
 }
 void SavePositionMeta(ulong pid,string tag,string aid,string zid,string grade,string bridgeVer,string sequenceVer,string cloudVer)
 {
-   if(IsTester()||pid==0)return;
+   if((bool)MQLInfoInteger(MQL_TESTER)||pid==0)return;
    FolderCreate("TradeZone");
    int h=FileOpen("TradeZone\\"+PositionMetaFile(pid),FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(h==INVALID_HANDLE)return;
