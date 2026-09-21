@@ -12,20 +12,20 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert SETTINGS.app_version == "6.5.36"
-    assert manifest["release"] == "6.3.16"
+    assert manifest["release"] == "6.3.17"
     assert manifest["data_bridge_version"] == "1.37"
-    assert manifest["sequence_ea_version"] == "3.33"
+    assert manifest["sequence_ea_version"] == "3.34"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5"
     assert bridge["sha256"] == "08ba484a2f676a78e36b19d7632057e2c9a903ab0d526caa7c7a174ab0d16e5f"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert digest == seq["sha256"] == "9dba86a03f424273b632c347289aff4570a5a8e649be0694715968f9d9321fd9"
+    assert digest == seq["sha256"] == "79378339b39ab6af268eb4e71f42d4ca1a2b33d988b5a488b8a7afa956c6565d"
 
     required = {
         "outer_zone_liquidity_sweep_execution_authority",
@@ -44,5 +44,8 @@ def test_professional_release_contract_is_self_consistent():
         "owner_mirror_updates_before_live_block",
         "runtime_journal_component_truth",
         "current_sequence_entry_tag_classification",
+        "persistent_initial_risk_basis_after_be",
+        "m5_runner_trail_after_break_even",
+        "runner_risk_history_recovery",
     }
     assert required.issubset(set(manifest["channel_features"]))
