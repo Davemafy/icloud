@@ -492,4 +492,6 @@ def test_partial_multi_leg_execution_remains_one_open_execution(monkeypatch):
     perf = journal_provenance.performance_summary()
     assert perf["execution_count"] == 1
     assert perf["closed_executions"] == 0
-    assert perf["net_demo_pnl"] == 0
+    assert perf["net_demo_pnl"] == 7.0
+    assert perf["realized_position_pnl"] == 7.0
+    assert perf["closed_execution_pnl"] == 0
