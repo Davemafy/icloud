@@ -344,7 +344,13 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
         for g in groups.values()
         if not (
             g.get("position_id") in (None, "", 0, "0")
-            and _clean(g.get("campaign_id")) in position_campaigns
+            and (
+                _clean(g.get("campaign_id"))
+                if _meaningful_campaign(g.get("campaign_id"))
+                else _clean(g.get("trade_id"))
+                if _meaningful_campaign(g.get("trade_id"))
+                else ""
+            ) in position_campaigns
             and _clean(g.get("status")).upper() == "CLOSED"
         )
     ]
