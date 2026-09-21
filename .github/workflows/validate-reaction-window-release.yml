@@ -33,8 +33,8 @@ jobs:
               for a,b in [('(',')'),('{','}'),('[',']')]:
                   assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
           for needle in [
-              '#property version "1.39"',
-              '#define TZ_BRIDGE_VERSION "1.39"',
+              '#property version "1.40"',
+              '#define TZ_BRIDGE_VERSION "1.40"',
               '#define TZ_SEQUENCE_EXPECTED "3.34"',
               'BackfillJournalHistory(false);',
               'TZ_SendHeartbeatV140();',
