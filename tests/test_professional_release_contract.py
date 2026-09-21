@@ -12,9 +12,13 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert SETTINGS.app_version == "6.5.35"
-    assert manifest["release"] == "6.3.15"
-    assert manifest["data_bridge_version"] == "1.36"
+    assert manifest["release"] == "6.3.16"
+    assert manifest["data_bridge_version"] == "1.37"
     assert manifest["sequence_ea_version"] == "3.33"
+
+    bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5"
+    assert bridge["sha256"] == "08ba484a2f676a78e36b19d7632057e2c9a903ab0d526caa7c7a174ab0d16e5f"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
     assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5"
@@ -38,5 +42,7 @@ def test_professional_release_contract_is_self_consistent():
         "spread_guard_suspends_orders_not_thesis",
         "safety_hold_dashboard_semantics",
         "owner_mirror_updates_before_live_block",
+        "runtime_journal_component_truth",
+        "current_sequence_entry_tag_classification",
     }
     assert required.issubset(set(manifest["channel_features"]))
