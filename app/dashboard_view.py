@@ -274,12 +274,23 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqModel=String(seq.candidate_model||'NONE');
     const seqOnline=seq.online===true;
     const seqMismatch=seq.authority_mismatch===true;
+    const seqOpen=Number(seq.open_positions||0);
+
+    if(seqOnline && seqOpen>0){
+      state='IN TRADE • MANAGING';
+      cls='ok';
+      meta='Sequence is managing '+seqOpen+' open position'+(seqOpen===1?'':'s')+'. Existing stops/targets remain active; any further entry still requires the normal re-entry gates.';
+    }
 
     if(seqGate && seqMeta){
       if(!seqOnline){
         seqGate.textContent='OFFLINE';
         seqGate.className='kpi bad';
         seqMeta.textContent='No fresh Sequence heartbeat. Execution cannot be trusted until telemetry returns.';
+      }else if(seqOpen>0){
+        seqGate.textContent='MANAGING '+seqOpen+' POSITION'+(seqOpen===1?'':'S');
+        seqGate.className='kpi ok';
+        seqMeta.textContent='Authority '+seqAuthority+' • current micro gate '+seqStage.replaceAll('_',' ')+' • '+(seqReason||'position management active')+'. This is management telemetry, not a new-entry signal.';
       }else if(seqMismatch && seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:')){
         seqGate.textContent='SAFETY HOLD';
         seqGate.className='kpi bad';
