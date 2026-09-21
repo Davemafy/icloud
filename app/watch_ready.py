@@ -358,9 +358,17 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
     analysis.execution_policy = policy
 
     if thesis_continuation:
+        if location_mode == "CORE_NOW":
+            location_text = "returned to its surviving tactical core"
+        elif location_mode == "LATCHED_AFTER_ZONE_SWEEP":
+            location_text = "remains authorized by its proven outer-zone liquidity-sweep handoff"
+        elif location_mode == "LATCHED_AFTER_CORE_TOUCH":
+            location_text = "remains inside its still-valid reaction window after the earlier qualified core interaction"
+        else:
+            location_text = "retains its previously acquired macro execution location"
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: active {selected.original_direction.value} thesis "
-            "returned to its surviving tactical core. A fresh M1 sequence remains mandatory."
+            f"{location_text}. A fresh M1 sequence remains mandatory."
         )
     elif sweep:
         analysis.trader_brief += (
