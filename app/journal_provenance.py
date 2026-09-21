@@ -191,7 +191,13 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
             key,
             {
                 "trade_id": raw_trade_id or key,
-                "campaign_id": campaign if _meaningful_campaign(campaign) else "",
+                "campaign_id": (
+                    campaign
+                    if _meaningful_campaign(campaign)
+                    else raw_trade_id
+                    if _meaningful_campaign(raw_trade_id)
+                    else ""
+                ),
                 "execution_id": "",
                 "execution_group_provenance": "",
                 "display_id": "",
@@ -262,6 +268,8 @@ def build_trades(limit_events: int = 5000) -> list[dict]:
 
         if _meaningful_campaign(campaign) and not _meaningful_campaign(group.get("campaign_id")):
             group["campaign_id"] = campaign
+        elif _meaningful_campaign(raw_trade_id) and not _meaningful_campaign(group.get("campaign_id")):
+            group["campaign_id"] = raw_trade_id
 
         if raw_trade_id and raw_trade_id.upper().startswith("MT5POS|"):
             group["trade_id"] = raw_trade_id
