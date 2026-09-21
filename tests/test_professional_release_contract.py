@@ -12,13 +12,13 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert SETTINGS.app_version == "6.5.36"
-    assert manifest["release"] == "6.3.17"
-    assert manifest["data_bridge_version"] == "1.37"
+    assert manifest["release"] == "6.3.18"
+    assert manifest["data_bridge_version"] == "1.38"
     assert manifest["sequence_ea_version"] == "3.34"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_37_RuntimeJournalTruth.mq5"
-    assert bridge["sha256"] == "08ba484a2f676a78e36b19d7632057e2c9a903ab0d526caa7c7a174ab0d16e5f"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_38_CompileSafeJournalTruth.mq5"
+    assert bridge["sha256"] == "93592c4ad70823b84cdf87f5fe3298e1fb3bcc8e83c0fbaede87daeb470f048c"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
     assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5"
@@ -47,5 +47,6 @@ def test_professional_release_contract_is_self_consistent():
         "persistent_initial_risk_basis_after_be",
         "m5_runner_trail_after_break_even",
         "runner_risk_history_recovery",
+        "compile_safe_databridge_preprocessor_contract",
     }
     assert required.issubset(set(manifest["channel_features"]))
