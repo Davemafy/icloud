@@ -70,6 +70,8 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert "M1 HANDOFF READY" not in cleaned
     assert "WAITING FOR VALUE / RETRACE" in cleaned
     assert "Entry permission: NO" in cleaned
+    assert "Macro checks " in cleaned
+    assert "Checklist " not in cleaned
     assert "SAFETY BLOCKED" in cleaned
     assert "SAFETY HOLD" in cleaned
     assert "This is not a location failure." in cleaned
