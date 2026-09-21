@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.16",
+  "release": "6.3.17",
   "repository": "Davemafy/icloud",
-  "ref": "92e10f9765ba30c4381954ab1a3ae33b47ff69b1",
+  "ref": "f1360474b23bd8c16bb929046ce3a779cef13b72",
   "data_bridge_version": "1.37",
-  "sequence_ea_version": "3.33",
+  "sequence_ea_version": "3.34",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -99,7 +99,10 @@
     "safety_hold_dashboard_semantics",
     "owner_mirror_updates_before_live_block",
     "runtime_journal_component_truth",
-    "current_sequence_entry_tag_classification"
+    "current_sequence_entry_tag_classification",
+    "persistent_initial_risk_basis_after_be",
+    "m5_runner_trail_after_break_even",
+    "runner_risk_history_recovery"
   ],
   "files": [
     {
@@ -112,11 +115,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_33_SafetyPersistentOwner_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5",
       "requires_reload": true,
-      "sha256": "9dba86a03f424273b632c347289aff4570a5a8e649be0694715968f9d9321fd9"
+      "sha256": "79378339b39ab6af268eb4e71f42d4ca1a2b33d988b5a488b8a7afa956c6565d"
     }
   ],
   "support_files": [
