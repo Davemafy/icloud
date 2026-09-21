@@ -47,7 +47,7 @@ string JournalSequenceVersion()
    return v!=""?v:SequenceEaVersion;
 }
 
-string g_analysisId="",g_zoneId="",g_grade="";
+string g_analysisId="",g_zoneId="",g_grade="",g_cloudVersion="";
 datetime g_lastMark=0;
 datetime g_lastJournalBackfill=0;
 int g_lastBackfillEvents=0;
@@ -116,7 +116,11 @@ void SendHeartbeat()
 void RefreshPlanContext()
 {
    if(!EnableJournalSync)return;string text;if(!Get("/mt5/plan",text))return;
-   string a=KV(text,"analysis_id"),z=KV(text,"zone_id");if(a!="")g_analysisId=a;if(z!="")g_zoneId=z;g_grade=KV(text,"grade");
+   string a=KV(text,"analysis_id"),z=KV(text,"zone_id"),cv=KV(text,"cloud_version");
+   if(a!="")g_analysisId=a;
+   if(z!="")g_zoneId=z;
+   if(cv!="")g_cloudVersion=cv;
+   g_grade=KV(text,"grade");
 }
 string SetupTag(string comment)
 {
@@ -147,6 +151,40 @@ string TradeId(string aid,string zid,string tag){if(aid=="")aid="NO_ANALYSIS";if
 string CanonicalTradeId(ulong pid){return "MT5POS|"+StringFormat("%I64d",(long)AccountInfoInteger(ACCOUNT_LOGIN))+"|"+StringFormat("%I64d",(long)pid);}
 string EventUidDeal(string event,ulong deal){return event+"|DEAL|"+StringFormat("%I64d",(long)deal);}
 string EventUidPosition(string event,ulong pid){return event+"|POSITION|"+StringFormat("%I64d",(long)pid);}
+string PositionMetaFile(ulong pid)
+{
+   return "position_meta_"+StringFormat("%I64d",(long)pid)+".txt";
+}
+void SavePositionMeta(ulong pid,string tag,string aid,string zid,string grade,string bridgeVer,string sequenceVer,string cloudVer)
+{
+   if(IsTester()||pid==0)return;
+   FolderCreate("TradeZone");
+   int h=FileOpen("TradeZone\\"+PositionMetaFile(pid),FILE_WRITE|FILE_TXT|FILE_ANSI);
+   if(h==INVALID_HANDLE)return;
+   FileWriteString(h,"position_id="+StringFormat("%I64d",(long)pid)+"\r\n");
+   FileWriteString(h,"analysis_id="+aid+"\r\n");
+   FileWriteString(h,"zone_id="+zid+"\r\n");
+   FileWriteString(h,"tag="+tag+"\r\n");
+   FileWriteString(h,"grade="+grade+"\r\n");
+   FileWriteString(h,"execution_bridge_version="+bridgeVer+"\r\n");
+   FileWriteString(h,"execution_sequence_version="+sequenceVer+"\r\n");
+   FileWriteString(h,"execution_cloud_version="+cloudVer+"\r\n");
+   FileClose(h);
+}
+bool LoadPositionMeta(ulong pid,string &tag,string &aid,string &zid,string &grade,string &bridgeVer,string &sequenceVer,string &cloudVer)
+{
+   string fileName=PositionMetaFile(pid);
+   string savedPid=RuntimeStateValue(fileName,"position_id");
+   if(savedPid=="")return false;
+   aid=RuntimeStateValue(fileName,"analysis_id");
+   zid=RuntimeStateValue(fileName,"zone_id");
+   tag=RuntimeStateValue(fileName,"tag");
+   grade=RuntimeStateValue(fileName,"grade");
+   bridgeVer=RuntimeStateValue(fileName,"execution_bridge_version");
+   sequenceVer=RuntimeStateValue(fileName,"execution_sequence_version");
+   cloudVer=RuntimeStateValue(fileName,"execution_cloud_version");
+   return true;
+}
 bool SendJournalAt(datetime eventTs,string event,double price,string aid,string zid,string details)
 {
    if(!EnableJournalSync)return false;string body=StringFormat("{\"ts\":%I64d,\"event\":\"%s\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",(long)eventTs,JsonEscape(event),JsonEscape(aid),JsonEscape(zid),price,details);string r;return Post("/mt5/feedback",body,r);
