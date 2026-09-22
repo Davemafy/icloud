@@ -254,6 +254,7 @@ def test_liquidity_reversal_handoff_can_acquire_owner_without_touching_remote_co
     assert acquired["ownership_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
     assert float(acquired["ownership_anchor_price"]) == 110.0
     assert policy.active_owner_snapshot(snap.sent_at) is not None
+    assert "Execution ownership acquired by" not in analysis.trader_brief
 
 
 def test_confirmed_owner_has_separate_broad_and_strict_core_buffers(monkeypatch):
