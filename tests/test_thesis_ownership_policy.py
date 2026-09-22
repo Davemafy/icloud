@@ -1,5 +1,5 @@
 from app import db
-from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from app.models import Analysis, Direction, Grade, Heartbeat, MarketSnapshot, Zone, ZoneState
 import app.thesis_ownership_policy as policy
 from app.zone_reaction_lifecycle import register_analysis_zones, update_zone_reactions
 
@@ -50,7 +50,7 @@ def _owner() -> dict:
         "source_tf": "H4>H1",
         "source_ts": 111,
         "status": "REACTION_CONFIRMED",
-        "grade": "B+",
+        "grade": "A",
         "core_low": 99.0,
         "core_high": 101.0,
         "zone_low": 95.0,
@@ -72,7 +72,7 @@ def _owner() -> dict:
 
 
 def test_live_buy_thesis_overrides_new_sell_ranking(monkeypatch):
-    buy = _zone("BUY_ZONE", Direction.BUY, 111, Grade.B_PLUS)
+    buy = _zone("BUY_ZONE", Direction.BUY, 111, Grade.A)
     sell = _zone("SELL_ZONE", Direction.SELL, 222, Grade.A)
     analysis = Analysis(
         analysis_id="A1",
@@ -276,3 +276,145 @@ def test_m1_handoff_requires_confirmed_or_in_progress_owner(monkeypatch):
 
     assert policy.owner_core_interacting(_snapshot(100.0)) is not None
     assert policy.owner_m1_handoff_interacting(_snapshot(100.0)) is None
+
+
+
+def _seed_legacy_bplus_owner(tmp_path, monkeypatch, *, heartbeat_ts: int | None, open_positions: int = 0):
+    path = tmp_path / "legacy_bplus_owner.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _zone("BUY_LEGACY", Direction.BUY, 333, Grade.B_PLUS)
+    analysis = Analysis(
+        analysis_id="A_LEGACY",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+    key = "BUY|H4>H1|333"
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE zone_reactions
+            SET status='OBJECTIVE_IN_PROGRESS',
+                core_touched_at=9000,
+                reaction_confirmed_at=9050,
+                ownership_acquired_at=9060,
+                ownership_authority='HTF_CORE_HANDOFF',
+                ownership_analysis_id='A_PRE_V2',
+                ownership_anchor_price=100.0,
+                ownership_zone_id=?,
+                ownership_zone_payload=?,
+                last_reason='LEGACY_BPLUS_OWNER'
+            WHERE reaction_key=?
+            """,
+            (zone.zone_id, zone.model_dump_json(), key),
+        )
+
+    if heartbeat_ts is not None:
+        db.save_heartbeat(
+            Heartbeat(
+                ts=heartbeat_ts,
+                ea="InstitutionalSMC_SequenceEA",
+                version="3.38",
+                symbol="XAUUSD",
+                details={
+                    "open_positions": open_positions,
+                    "restart_safe": open_positions == 0,
+                },
+            )
+        )
+    return key, zone
+
+
+def test_flat_legacy_bplus_owner_is_retired_with_fresh_sequence_truth(tmp_path, monkeypatch):
+    key, _ = _seed_legacy_bplus_owner(
+        tmp_path,
+        monkeypatch,
+        heartbeat_ts=10_000,
+        open_positions=0,
+    )
+
+    assert policy.active_owner_snapshot(10_000) is None
+
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_acquired_at,status,last_reason FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert int(row["ownership_acquired_at"] or 0) == 0
+    assert row["status"] == "OBJECTIVE_IN_PROGRESS"
+    assert policy.LEGACY_OWNER_RELEASE_REASON in str(row["last_reason"])
+
+
+def test_legacy_bplus_owner_stays_locked_while_sequence_has_open_positions(tmp_path, monkeypatch):
+    key, _ = _seed_legacy_bplus_owner(
+        tmp_path,
+        monkeypatch,
+        heartbeat_ts=10_000,
+        open_positions=1,
+    )
+
+    owner = policy.active_owner_snapshot(10_000)
+
+    assert owner is not None
+    assert owner["reaction_key"] == key
+    assert owner["compat_execution_lock_protected"] is True
+    assert owner["compat_execution_lock_reason"] == "SEQUENCE_POSITIONS_OPEN"
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_acquired_at FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert int(row["ownership_acquired_at"] or 0) == 9060
+
+
+def test_legacy_bplus_owner_fails_closed_when_sequence_truth_is_stale(tmp_path, monkeypatch):
+    key, _ = _seed_legacy_bplus_owner(
+        tmp_path,
+        monkeypatch,
+        heartbeat_ts=9_900,
+        open_positions=0,
+    )
+
+    owner = policy.active_owner_snapshot(10_000)
+
+    assert owner is not None
+    assert owner["reaction_key"] == key
+    assert owner["compat_execution_lock_protected"] is True
+    assert owner["compat_execution_lock_reason"] == "SEQUENCE_POSITION_TRUTH_UNAVAILABLE"
+
+
+def test_bplus_cannot_acquire_new_execution_ownership_directly(tmp_path, monkeypatch):
+    path = tmp_path / "bplus_direct_acquire.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _zone("BUY_BPLUS", Direction.BUY, 444, Grade.B_PLUS)
+    analysis = Analysis(
+        analysis_id="A_BPLUS",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.BUY,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+
+    acquired = policy.acquire_execution_ownership(
+        analysis,
+        _snapshot(),
+        "HTF_CORE_HANDOFF",
+        zone.zone_id,
+        anchor_price=100.0,
+    )
+
+    assert acquired is None
+    assert policy.active_owner_snapshot(10_000) is None
