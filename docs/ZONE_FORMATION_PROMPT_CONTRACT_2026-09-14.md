@@ -190,6 +190,22 @@ Targets are execution constraints, not decorative levels.
 - If no directionally valid primary target remains, MT5 receives `WATCH_ONLY`; the candidate cannot execute.
 - A flip BUY target must remain above the failed SELL envelope; a flip SELL target must remain below the failed BUY envelope.
 
+## No-owner two-sided execution authority
+
+When there is no acquired thesis lock, the published PRIMARY BUY and PRIMARY SELL remain independent
+institutional candidates. A D1-aligned plan selection is a planning preference, not exclusive execution
+authority.
+
+- A currently interacting/qualified A or A+ primary may earn M1 authority even when it is counter to D1.
+- Current executable location ranks before D1 preference. D1 remains context and a tie-breaker when
+  otherwise comparable candidates are simultaneously executable.
+- The countertrend side must still pass the same HTF source, liquidity, geometry, M15 health, M1
+  sweep/MSS/BOS/displacement/value reaction, safety, directional-target and minimum-RR requirements.
+- Once one side acquires a legitimate execution handoff and thesis ownership, the existing ownership
+  contract becomes sticky and the opposite side is blocked until that thesis is released.
+- A MAP CONTEXT label must never by itself prevent an independently valid, currently interacting opposite
+  primary from being evaluated for M1 authority while no thesis owner exists.
+
 ## Future-change rule
 
 When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
