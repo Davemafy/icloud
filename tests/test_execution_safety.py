@@ -431,3 +431,41 @@ def test_owner_target_progress_shifts_tp2_into_exported_target1():
     assert float(out["original_target2"]) == 4319.88
     assert float(out["original_target3"]) == 0.0
     assert float(out["next_open_target"]) == 4341.13
+
+
+
+def _legacy_mql_kv(text: str, key: str) -> str:
+    """Mirror Sequence v3.38's first-substring KV lookup."""
+    needle = key + "="
+    start = text.find(needle)
+    if start < 0:
+        return ""
+    start += len(needle)
+    end = text.find("\n", start)
+    if end < 0:
+        end = len(text)
+    return text[start:end].strip()
+
+
+def test_global_execution_authority_precedes_bplus_shadow_key_for_sequence_v338():
+    zone = _sell_zone("M1_READY")
+    zone.original_target1 = 4280.0
+    zone.original_target2 = 4270.0
+    zone.original_target3 = 4260.0
+    analysis = _analysis(zone)
+    snap = _snapshot(4306.50, spread_points=16.0)
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "original_direction=SELL\n"
+        "bplus_execution_authority=0\n"
+        "original_target1=4280.00000\n"
+        "original_target2=4270.00000\n"
+        "original_target3=4260.00000\n"
+    )
+
+    text = guard_plan_text(raw, analysis, snap)
+
+    assert "execution_authority=HTF_CORE_HANDOFF\n" in text
+    assert text.index("execution_authority=HTF_CORE_HANDOFF\n") < text.index("bplus_execution_authority=0\n")
+    assert _legacy_mql_kv(text, "execution_authority") == "HTF_CORE_HANDOFF"
