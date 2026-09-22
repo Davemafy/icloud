@@ -16,6 +16,7 @@ from .liquidity_reversal_handoff import (
 )
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
+from .risk_matrix import matrix_payload
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
@@ -61,8 +62,15 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
         "CONFLUENCE_QUALITY",
     ]
     zone_map["nearer_valid_a_zone_can_outrank_remote_fresher_a_zone"] = True
-    zone_map["bplus_is_reduced_risk_not_watch_only"] = True
-    zone_map["grade_risk_pct"] = {"A+": 1.00, "A": 0.75, "B+": 0.25}
+    zone_map["bplus_is_research_context_only"] = True
+    zone_map["context_grade_risk_matrix"] = matrix_payload()
+    zone_map["four_zone_map_contract"] = {
+        "primary_per_side": 1,
+        "reserve_per_side": 1,
+        "max_visible_zones": 4,
+        "same_side_simultaneous_ownership": False,
+        "reserve_promotes_only_after_primary_invalidation_and_fresh_requalification": True,
+    }
     policy["public_zone_map"] = zone_map
     a.execution_policy = policy
 
