@@ -6,6 +6,7 @@ from .config import SETTINGS
 from .db import connect
 from .engine import atr, evaluate_zone_state
 from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
+from .risk_matrix import execution_grade_eligible, execution_touch_limit
 
 # Public primary zones stay analysis-only until either (a) live price reaches the
 # tactical core, or (b) price enters the qualified outer envelope and a closed M15
@@ -17,8 +18,6 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 # location toward the next still-open objective.
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
-MAX_READY_TOUCHES = 1
-BPLUS_MAX_READY_TOUCHES = 2
 READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
 READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
@@ -76,8 +75,8 @@ def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
 
 
 def _execution_touch_limit(zone: Zone) -> int:
-    """B+ is a reduced-risk research tier, not a permission to ignore exhaustion."""
-    return BPLUS_MAX_READY_TOUCHES if zone.grade == Grade.B_PLUS else MAX_READY_TOUCHES
+    """Context-grade matrix: A+ <=1 touch, A <=2 touches, B+ no new authority."""
+    return execution_touch_limit(zone)
 
 
 def _reaction_key(zone: Zone) -> str:
@@ -181,7 +180,7 @@ def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or int(zone.touch_count) > _execution_touch_limit(zone):
+    if not execution_grade_eligible(zone):
         return {}
     label, liquidity_price = _attached_liquidity(zone)
     if liquidity_price <= 0:
@@ -236,7 +235,7 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or int(zone.touch_count) > _execution_touch_limit(zone):
+    if not execution_grade_eligible(zone):
         return {}
 
     row = _lifecycle_row(zone)
@@ -283,7 +282,7 @@ def _thesis_continuation_ready(analysis: Analysis, zone: Zone, snapshot: MarketS
         return False
     if not bool(meta.get("continuation_authority")):
         return False
-    if zone.grade == Grade.REJECT:
+    if not execution_grade_eligible(zone):
         return False
     # A frozen owner keeps the location it actually earned. Core-owned theses can
     # return through the core; zone-sweep-owned theses may remain inside their
@@ -301,9 +300,7 @@ def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
         return False
     if _readiness(zone) not in READY_INPUT_STATES:
         return False
-    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}:
-        return False
-    if int(zone.touch_count) > _execution_touch_limit(zone):
+    if not execution_grade_eligible(zone):
         return False
     if _common_zone_health(zone, snapshot):
         return True

@@ -86,10 +86,10 @@ def test_wrong_liquidity_side_blocks_ready():
     assert watch_zone_ready(z, s) is False
 
 
-def test_second_mitigation_blocks_ready():
+def test_second_mitigation_a_grade_remains_ready():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4>H1", readiness="INTERACTING", touches=2)
-    assert watch_zone_ready(z, s) is False
+    assert watch_zone_ready(z, s) is True
 
 
 def test_armed_zone_stays_not_ready_until_core_interaction():
@@ -258,9 +258,9 @@ def test_reaction_window_closes_after_tp1_is_hit(tmp_path, monkeypatch):
     assert watch_zone_ready(z, _snapshot(97.0, ts=1120)) is False
 
 
-def test_confirmed_thesis_can_continue_from_same_core_after_display_downgrade():
+def test_confirmed_a_thesis_can_continue_from_same_core_after_second_touch():
     s = _snapshot(100.0)
-    z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=2)
+    z = _zone(source_tf="H4>H1", grade=Grade.A, readiness="WATCH", touches=2)
     a = Analysis(
         analysis_id="A1",
         generated_at=1,
@@ -283,7 +283,7 @@ def test_confirmed_thesis_can_continue_from_same_core_after_display_downgrade():
     assert "execution_role:THESIS_CONTINUATION" in z.notes
 
 
-def test_bplus_second_touch_zone_can_receive_reduced_risk_primary_authority():
+def test_bplus_second_touch_zone_is_watch_only_without_primary_authority():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=2)
     a = Analysis(
@@ -294,8 +294,8 @@ def test_bplus_second_touch_zone_can_receive_reduced_risk_primary_authority():
         selected_zone_id="Z1",
     )
     selected = promote_watch_to_m1_ready(a, s)
-    assert selected is z
-    assert z.core_method.startswith("M1_READY|")
+    assert selected is None
+    assert watch_zone_ready(z, s) is False
 
 
 def test_bplus_third_touch_is_still_exhausted_and_blocked():

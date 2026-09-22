@@ -17,6 +17,7 @@ from .db import init_db, latest_heartbeats, latest_snapshot, recent_feedback, sa
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
+from .risk_matrix import execution_grade_eligible, execution_touch_limit, original_risk_pct, zone_risk_context
 from .mt5_zone_render import mt5_zone_render_text
 from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
@@ -454,15 +455,18 @@ def _journal_snapshot():
             "flip_target2": z.flip_target2,
             "flip_target3": z.flip_target3,
             "flip_runner": z.flip_runner,
+            "risk_context": zone_risk_context(z),
+            "base_risk_pct": original_risk_pct(z),
+            "execution_grade_eligible": execution_grade_eligible(z),
         }
 
     checks = {
-        "fresh_zone": bool(z and z.touch_count <= (2 if z.grade.value == "B+" else 1)),
+        "fresh_zone": bool(z and execution_touch_limit(z) >= 0 and z.touch_count <= execution_touch_limit(z)),
         "liquidity_in_marked_zone": bool(z and "LIQUIDITY_IN_MARKED_ZONE" in set(z.confluences)),
         "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
         "clear_run": bool(z and z.clear_run > 0),
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
-        "grade_executable": bool(z and z.grade.value in {"A+", "A", "B+"}),
+        "grade_executable": bool(z and execution_grade_eligible(z)),
         "m1_handoff_ready": bool(z and readiness == "M1_READY"),
         "live_data_safe": bool(
             s

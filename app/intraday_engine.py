@@ -209,12 +209,10 @@ def _zone(c: Candidate, s: MarketSnapshot, liq, context: Direction, n: int) -> Z
         + (1 if clear >= need else 0)
     )
     grade = Grade.A_PLUS if score >= 8 else Grade.A if score >= 5 else Grade.B_PLUS
-    if counter and grade == Grade.A_PLUS:
-        grade = Grade.A
 
     actionable = (
         c.source_tf in {"H4>H1", "H1"}
-        and touches <= 1
+        and ((grade == Grade.A_PLUS and touches <= 1) or (grade == Grade.A and touches <= 2))
         and distance_h1_atr <= ACTIONABLE_MAX_H1_ATR
         and width_atr <= ACTIONABLE_MAX_M15_ATR
         and clear >= need
@@ -232,7 +230,7 @@ def _zone(c: Candidate, s: MarketSnapshot, liq, context: Direction, n: int) -> Z
         readiness = "WATCH" if distance_h1_atr <= WATCH_MAX_H1_ATR else "CONTEXT"
         if grade in (Grade.A_PLUS, Grade.A):
             grade = Grade.B_PLUS
-    if touches >= 2 and readiness == "ACTIONABLE":
+    if touches >= 3:
         readiness = "WATCH"
         grade = Grade.B_PLUS
 

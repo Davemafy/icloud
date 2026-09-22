@@ -2,14 +2,17 @@ from app.config import SETTINGS
 from app.engine import active_plan_text
 from app.execution_safety import guard_plan_text
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from app.risk_matrix import RISK_MODEL, execution_grade_eligible, flip_risk_pct, original_risk_pct, zone_risk_context
 
 
-def _zone(grade: Grade) -> Zone:
+def _zone(grade: Grade, *, countertrend: bool = False, touches: int | None = None) -> Zone:
+    if touches is None:
+        touches = 0 if grade == Grade.A_PLUS else 1
     return Zone(
-        zone_id="BPLUS_EXEC",
-        original_direction=Direction.BUY,
-        flip_direction=Direction.SELL,
-        setup_type="REVERSAL",
+        zone_id=f"{grade.value}_{'CT' if countertrend else 'TR'}",
+        original_direction=Direction.BUY if not countertrend else Direction.SELL,
+        flip_direction=Direction.SELL if not countertrend else Direction.BUY,
+        setup_type="REVERSAL" if countertrend else "CONTINUATION",
         source_tf="H4>H1",
         grade=grade,
         state=ZoneState.ACTIVE,
@@ -19,18 +22,19 @@ def _zone(grade: Grade) -> Zone:
         location_score=8.0,
         zone_low=95.0,
         zone_high=105.0,
-        touch_count=2 if grade == Grade.B_PLUS else 1,
+        touch_count=touches,
         independent_confluence_count=4,
-        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"],
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE" if not countertrend else "BSL_IN_MARKED_ZONE"],
         source_ts=10,
         invalidation_level=95.0,
         invalidation_rule="M15 accepted invalidation",
-        original_target1=110.0,
-        original_target2=115.0,
-        original_target3=120.0,
-        flip_target1=90.0,
-        flip_target2=85.0,
+        original_target1=110.0 if not countertrend else 90.0,
+        original_target2=115.0 if not countertrend else 85.0,
+        original_target3=120.0 if not countertrend else 80.0,
+        flip_target1=90.0 if not countertrend else 110.0,
+        flip_target2=85.0 if not countertrend else 115.0,
         clear_run=9.0,
+        countertrend=countertrend,
     )
 
 
@@ -63,30 +67,54 @@ def _kv(text: str) -> dict[str, str]:
     return dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
 
 
-def test_grade_risk_defaults_are_code_authoritative():
+def test_context_grade_risk_defaults_are_code_authoritative():
     assert SETTINGS.research_validation_initial_capital == 10000.0
-    assert SETTINGS.research_risk_pct_a_plus == 1.00
-    assert SETTINGS.research_risk_pct_a == 0.75
-    assert SETTINGS.research_risk_pct_b_plus == 0.25
+    assert SETTINGS.research_risk_pct_trend_a_plus == 1.00
+    assert SETTINGS.research_risk_pct_trend_a == 0.75
+    assert SETTINGS.research_risk_pct_countertrend_a_plus == 0.50
+    assert SETTINGS.research_risk_pct_countertrend_a == 0.25
+    assert SETTINGS.research_risk_epoch == "CONTEXT_GRADE_10000_V2"
 
 
-def test_bplus_plan_is_executable_but_exports_smallest_risk_tier():
-    zone = _zone(Grade.B_PLUS)
+def test_context_x_grade_matrix_exact_percentages():
+    cases = [
+        (_zone(Grade.A_PLUS, countertrend=False), "TREND", 1.00, 0.50),
+        (_zone(Grade.A, countertrend=False), "TREND", 0.75, 0.25),
+        (_zone(Grade.A_PLUS, countertrend=True), "COUNTERTREND", 0.50, 1.00),
+        (_zone(Grade.A, countertrend=True), "COUNTERTREND", 0.25, 0.75),
+    ]
+    for zone, context, original, flip in cases:
+        assert zone_risk_context(zone) == context
+        assert original_risk_pct(zone) == original
+        assert flip_risk_pct(zone) == flip
+        assert execution_grade_eligible(zone)
+
+
+def test_second_touch_a_remains_eligible_but_a_plus_does_not():
+    assert execution_grade_eligible(_zone(Grade.A, touches=2))
+    assert not execution_grade_eligible(_zone(Grade.A_PLUS, touches=2))
+
+
+def test_bplus_is_watch_only_with_zero_new_entry_budget():
+    zone = _zone(Grade.B_PLUS, touches=2)
     plan = _kv(active_plan_text(_analysis(zone)))
-    assert plan["ea_mode"] == "DUAL_BRANCH"
+    assert plan["ea_mode"] == "WATCH_ONLY"
     assert plan["grade"] == "B+"
-    assert plan["risk_model"] == "GRADE_SCALED_INITIAL_CAPITAL_V1"
-    assert plan["validation_initial_capital"] == "10000.00"
-    assert plan["grade_risk_pct"] == "0.25"
-    assert plan["bplus_reduced_risk"] == "1"
+    assert plan["risk_model"] == RISK_MODEL
+    assert plan["grade_risk_pct"] == "0.00"
+    assert plan["original_risk_pct"] == "0.00"
+    assert plan["flip_risk_pct"] == "0.00"
+    assert plan["bplus_execution_authority"] == "0"
 
 
-def test_execution_guard_preserves_bplus_authority_and_risk_truth():
-    zone = _zone(Grade.B_PLUS)
+def test_guard_exports_countertrend_a_quarter_percent_base_risk():
+    zone = _zone(Grade.A, countertrend=True)
     analysis = _analysis(zone)
-    raw = active_plan_text(analysis)
-    guarded = _kv(guard_plan_text(raw, analysis, _snapshot()))
+    guarded = _kv(guard_plan_text(active_plan_text(analysis), analysis, _snapshot()))
     assert guarded["ea_mode"] == "DUAL_BRANCH"
     assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
+    assert guarded["risk_model"] == RISK_MODEL
+    assert guarded["risk_context"] == "COUNTERTREND"
     assert guarded["grade_risk_pct"] == "0.25"
-    assert guarded["bplus_reduced_risk"] == "1"
+    assert guarded["original_risk_pct"] == "0.25"
+    assert guarded["flip_risk_pct"] == "0.75"

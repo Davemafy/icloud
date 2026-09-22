@@ -101,6 +101,7 @@ def _confirmed_buy_thesis_analysis(zone: Zone, *, ai_approved: bool = True) -> A
             "owner_zone_id": zone.zone_id,
             "owner_zone_present": True,
             "continuation_authority": True,
+            "ownership_authority": "HTF_CORE_HANDOFF",
             "objective_open": True,
         }
     }
@@ -191,8 +192,9 @@ def test_liquidity_reversal_handoff_can_export_dual_branch_without_promoting_liq
     assert out["liquidity_reversal_risk_multiplier"] == "0.50"
 
 
-def test_confirmed_bplus_owner_can_export_thesis_continuation_after_strict_m1_ready():
+def test_confirmed_a_second_touch_owner_can_export_thesis_continuation_after_strict_m1_ready():
     zone = _buy_bplus_thesis_zone()
+    zone.grade = Grade.A
     analysis = _confirmed_buy_thesis_analysis(zone)
     snap = _snapshot(4270.70, spread_points=16.0)
     raw = (
@@ -215,7 +217,7 @@ def test_confirmed_bplus_owner_can_export_thesis_continuation_after_strict_m1_re
     assert out["ea_mode"] == "DUAL_BRANCH"
     assert out["core_handoff_ready"] == "1"
     assert out["execution_authority"] == "HTF_CORE_HANDOFF"
-    assert out["thesis_continuation_bplus_override"] == "1"
+    assert out["thesis_continuation_bplus_override"] == "0"
     assert out["setup_type"] == "CONTINUATION"
     assert out["zone_setup_type_original"] == "REVERSAL"
     assert out["execution_role"] == "THESIS_CONTINUATION"
@@ -243,9 +245,9 @@ def test_fresh_or_unconfirmed_bplus_zone_stays_watch_only():
     assert out["core_handoff_ready"] == "0"
 
 
-def test_confirmed_bplus_owner_still_fails_closed_without_ai_approval():
+def test_confirmed_bplus_owner_stays_watch_only_even_with_ai_approval():
     zone = _buy_bplus_thesis_zone()
-    analysis = _confirmed_buy_thesis_analysis(zone, ai_approved=False)
+    analysis = _confirmed_buy_thesis_analysis(zone, ai_approved=True)
     snap = _snapshot(4270.70, spread_points=16.0)
     raw = (
         "ea_mode=WATCH_ONLY\n"

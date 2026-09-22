@@ -5,7 +5,8 @@ from typing import Any
 from .config import SETTINGS
 from .engine import atr, liquidity_map
 from .execution_safety import has_live_directional_target
-from .models import Analysis, Direction, Grade, MarketSnapshot, ZoneState
+from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from .risk_matrix import execution_grade_eligible
 
 LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6519"
 LOOKBACK_M15_BARS = 8
@@ -21,7 +22,7 @@ _AI_RULE = """
 14. LIQUIDITY REVERSAL HANDOFF (PAPER/DEMO ONLY): a structural H1/H4/D1 liquidity pool may
     authorize M1 execution observation before the remote primary HTF core is reached only when the
     Daily context agrees with the reversal direction, the liquidity pool is outside but reasonably
-    near a same-direction execution-grade primary zone (A+, A or reduced-risk B+), M15 has swept and rejected that pool, and a later M15
+    near a same-direction execution-grade primary zone (A+ or A), M15 has swept and rejected that pool, and a later M15
     displacement closes through nearby structure in the same direction. The liquidity pool remains a
     liquidity object; it must never be relabeled or rendered as an institutional zone. This handoff is
     not an entry. MT5 must still produce the full M1 sweep/internal-sweep -> MSS/BOS -> displacement ->
@@ -88,13 +89,13 @@ def _context_zone(analysis: Analysis, direction: Direction):
         z for z in analysis.zones
         if z.state == ZoneState.ACTIVE
         and z.original_direction == direction
-        and z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
+        and execution_grade_eligible(z)
     ]
     if not candidates:
         return None
     candidates.sort(
         key=lambda z: (
-            {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2}.get(z.grade, 9),
+            {Grade.A_PLUS: 0, Grade.A: 1}.get(z.grade, 9),
             0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2,
             -float(z.location_score),
             int(z.touch_count),
