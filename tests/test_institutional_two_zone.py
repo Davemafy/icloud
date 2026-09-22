@@ -115,7 +115,7 @@ def test_distance_does_not_delete_a_valid_prompt_zone(monkeypatch):
     assert analysis.execution_policy["public_zone_map"]["distance_is_not_a_hard_zone_filter"] is True
 
 
-def test_repeated_mitigation_keeps_zone_visible_but_downgrades_execution(monkeypatch):
+def test_strong_second_mitigation_can_remain_a_grade_at_reduced_risk(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate, touches=2)
     analysis = _analysis([
@@ -125,8 +125,8 @@ def test_repeated_mitigation_keeps_zone_visible_but_downgrades_execution(monkeyp
     zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
 
     assert len(zones) == 1
-    assert zones[0].grade == Grade.B_PLUS
-    assert zones[0].core_method.startswith("WATCH|")
+    assert zones[0].grade == Grade.A
+    assert zones[0].core_method.startswith("ARMED|")
     assert analysis.selected_zone_id == zones[0].zone_id
 
 
