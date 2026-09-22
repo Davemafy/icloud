@@ -137,6 +137,20 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
     for key in kv:
         if key not in final_order:
             final_order.append(key)
+
+    # Sequence v3.38's legacy KV reader searches for the first occurrence of
+    # "execution_authority=" anywhere in the text, not strictly at line start.
+    # The context-grade field "bplus_execution_authority=0" can therefore shadow
+    # the real global authority when it appears first. Keep the exact global key
+    # immediately after ea_mode so older MT5 parsers read the intended value.
+    if "execution_authority" in final_order:
+        final_order.remove("execution_authority")
+        try:
+            insert_at = final_order.index("ea_mode") + 1
+        except ValueError:
+            insert_at = 0
+        final_order.insert(insert_at, "execution_authority")
+
     return "".join(f"{key}={kv[key]}\n" for key in final_order)
 
 
