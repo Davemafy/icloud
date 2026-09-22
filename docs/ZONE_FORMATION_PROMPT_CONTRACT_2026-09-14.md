@@ -77,10 +77,13 @@ This is mandatory for the intraday alert map:
 - If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
 - If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
-- Structural grade and D1 alignment are separate axes.
 - A+ and A are the only new execution grades. B+ remains visible research context / WATCH ONLY.
+- TREND and COUNTERTREND do not use the same qualification rubric.
+- TREND grades continuation-source quality: HTF authority, displacement/BOS strength, freshness, premium/discount location and supporting FVG/volume evidence.
+- COUNTERTREND grades reversal-location quality: HTF extremity, required structural liquidity inside the envelope, actual sweep/rejection evidence, source response strength, H4>H1 agreement and supporting FVG/volume/PSY evidence.
+- Countertrend is not downgraded merely because D1 points the other way; instead it must satisfy the dedicated reversal rubric.
 - Base thesis risk uses the context x grade matrix before sequence-share/model multipliers: TREND A+ = 1.00%, TREND A = 0.75%, COUNTERTREND A+ = 0.50%, COUNTERTREND A = 0.25%.
-- Countertrend does not automatically downgrade an A+ source to A. Quality is graded from the source itself; direction only changes the risk budget.
+- Historical profit after price leaves a zone must never retroactively upgrade that zone's grade. Strong post-reaction momentum validates lifecycle/execution quality and future re-entry research, not the original pre-entry classification.
 - Among already-valid execution-grade candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
 - A nearer valid zone may outrank a remote fresher zone under the deterministic ranking contract; grade remains an explicit quality/risk tiebreaker.
 - Freshness remains important after intraday reachability is established; repeated mitigation still downgrades quality.
@@ -116,10 +119,13 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 
 ## Mitigation and invalidation
 
-- A+ execution eligibility is limited to 0–1 core mitigation.
+- Touch count means distinct institutional mitigation cycles, not every M15 bar or every small core-edge oscillation.
+- The first core interaction starts one mitigation campaign. A second mitigation is counted only after price closes outside the full envelope and later re-enters the tactical core.
+- Continuous chop/absorption inside one valid envelope remains one mitigation campaign; raw core-contact episodes may still be retained as diagnostics.
+- A+ execution eligibility is limited to 0–1 qualified mitigation.
 - A execution eligibility may persist through a second qualified mitigation at the reduced A risk tier.
-- Three-plus mitigations are B+ research context / WATCH ONLY and must not obtain new execution authority.
-- Repeated mitigation downgrades quality; it must not move or manufacture the zone.
+- Three-plus qualified mitigations are B+ research context / WATCH ONLY and must not obtain new execution authority.
+- Repeated qualified mitigation downgrades quality; it must not move or manufacture the zone.
 - Closed M15 body acceptance beyond the outer envelope invalidates the original zone.
 - A wick-only liquidity raid does not invalidate.
 - Invalidation creates only a flip candidate; it is not an instant reverse entry.
