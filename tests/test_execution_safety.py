@@ -101,6 +101,7 @@ def _confirmed_buy_thesis_analysis(zone: Zone, *, ai_approved: bool = True) -> A
             "owner_zone_id": zone.zone_id,
             "owner_zone_present": True,
             "continuation_authority": True,
+            "ownership_authority": "HTF_CORE_HANDOFF",
             "objective_open": True,
         }
     }
