@@ -17,13 +17,13 @@ _FRESHNESS_LABEL_REPLACEMENT = (
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
 _JOURNAL_CONTEXT_CARD = (
     '<div class="card" style="margin-top:12px">'
-    '<h3>Map / execution ownership <span class="pill paper">READ ONLY</span></h3>'
+    '<h3>Map / thesis ownership &amp; M1 authority <span class="pill paper">READ ONLY</span></h3>'
     '<div class="kpi" id="ownershipState">WAITING</div>'
     '<div id="journalContext" class="note">'
-    'Waiting for map and execution-ownership context…'
+    'Waiting for thesis ownership and M1-authority context…'
     '</div>'
     '<p class="note"><b>Display only:</b> this panel does not change zone selection, '
-    'AI approval, M1 handoff, risk, orders, or Sequence EA execution.</p>'
+    'AI approval, thesis ownership, M1 handoff, risk, orders, or Sequence EA execution.</p>'
     '</div>'
 )
 _READINESS_CARD = (
@@ -34,7 +34,7 @@ _READINESS_SPLIT = (
     '<div class="card"><h3>HTF setup quality</h3><div class="kpi" id="htfScore">0/6</div>'
     '<div class="muted" id="htfMeta">Location quality only — not entry readiness.</div></div>'
     '<div class="card"><h3>Execution readiness</h3><div class="kpi" id="jScore">WAITING</div>'
-    '<div class="muted" id="executionMeta">Cloud handoff is macro authority; the live Sequence micro-gate controls entry timing.</div></div>'
+    '<div class="muted" id="executionMeta">Thesis ownership is a directional lock; current M1 handoff plus the live Sequence micro-gate control new-entry timing.</div></div>'
     '<div class="card"><h3>Sequence execution gate <span class="pill paper">LIVE DEBUG</span></h3>'
     '<div class="kpi" id="sequenceGate">WAITING</div>'
     '<div class="muted" id="sequenceGateMeta">Waiting for Sequence heartbeat telemetry.</div></div>'
@@ -118,13 +118,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
       tag.className='ownership-tag note';
       if(locked && ownerId && zid===ownerId){
-        tag.textContent='EXECUTION OWNER';
+        tag.textContent='THESIS OWNER • DIRECTION LOCK';
         tag.classList.add('ok');
       }else if(locked){
-        tag.textContent='WATCH ONLY • NO M1 AUTHORITY';
+        tag.textContent='WATCH ONLY • BLOCKED BY ACTIVE THESIS';
         tag.classList.add('warn');
       }else if(selectedId && zid===selectedId){
-        tag.textContent='SELECTED • UNLOCKED';
+        tag.textContent='PLAN SELECTED • NO THESIS LOCK';
         tag.classList.add('blue');
       }else{
         tag.textContent='MAP CONTEXT';
@@ -154,33 +154,43 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     parts.push('Journal status '+status+'.');
     parts.push(rows ? ('Current HTF map: '+rows+' published primary zone'+(rows===1?'':'s')+'.') : 'Current HTF map: no published primary zone.');
 
-    let ownership='NO OWNER';
+    let ownership='NO THESIS OWNER';
     let cls='warn';
     if(locked){
       if(ownerId && selectedId===ownerId){
-        ownership='OWNER MATCH';
+        ownership='THESIS OWNER MATCH';
         cls='ok';
       }else if(ownerId){
-        ownership='WATCH / BLOCKED';
+        ownership='THESIS OWNER / DIFFERENT SELECTION';
         cls='warn';
       }else{
-        ownership='OWNER OFF MAP';
+        ownership='THESIS OWNER OFF MAP';
         cls='bad';
       }
 
       parts.push(
-        'Execution owner '+(ownerDir||'—')+' • '+(ownerId||'owner zone not republished')+
-        ' • '+ownerStatus+'.'
+        'Thesis owner '+(ownerDir||'—')+' • '+(ownerId||'owner zone not republished')+
+        ' • '+ownerStatus+'. Direction lock is active; this does not by itself authorize a new M1 entry.'
       );
       if(selectedId){
         parts.push(
           'Journal-selected zone '+selectedId+' ('+(selectedDir||'—')+', '+selectedTouches+' touches) '+
-          (selectedId===ownerId ? 'owns current M1 authority.' : 'does not own current M1 authority.')
+          (selectedId===ownerId ? 'matches the active thesis owner.' : 'does not match the active thesis owner.')
         );
       }
       if(selectedId && selectedId===ownerId){
         parts.push('This selected zone is the thesis origin/ownership anchor; it does not mean current price is still inside the original core or envelope.');
       }
+      const checks=j?.checks||{};
+      const m1Handoff=checks.m1_handoff_ready===true;
+      const seq=j?.sequence_debug||{};
+      const cloudAuthority=String(seq.cloud_authority||'NONE');
+      const sequenceAuthority=String(seq.authority||'NONE');
+      parts.push(
+        'Current M1 location handoff '+(m1Handoff?'YES':'NO')+
+        '. Cloud execution authority '+cloudAuthority+
+        '. Sequence authority '+sequenceAuthority+'.'
+      );
       if(thesis.opposite_execution_blocked===true){
         parts.push('All non-owner/opposite zones are WATCH ONLY until the acquired thesis is released.');
       }
@@ -192,11 +202,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         parts.push('No chase: a fresh same-direction M1 confirmation is still required for any new entry.');
       }
     }else if(selectedId){
-      ownership='SELECTED / UNLOCKED';
+      ownership='PLAN SELECTED / NO THESIS LOCK';
       cls='blue';
-      parts.push('No acquired thesis lock is active. Journal-selected zone '+selectedId+' is the current execution selection, subject to all normal M1 and safety gates.');
+      parts.push('No acquired thesis lock is active. Journal-selected zone '+selectedId+' is the current plan selection only; new-entry authority still requires current M1 handoff and Sequence confirmation.');
     }else{
-      parts.push('No acquired thesis lock and no M1-authorized zone are currently selected.');
+      parts.push('No acquired thesis lock and no current M1-authorized zone are selected.');
     }
 
     stateOut.textContent=ownership;
@@ -261,7 +271,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls='warn';
       meta=checklist+(
         ownerMatch
-          ? 'The active thesis owns execution. Waiting only for a fresh same-direction M1 confirmation. Do not chase the existing move.'
+          ? 'The active thesis direction lock remains, but there is no current M1 location handoff or new-entry authority. Do not chase the existing move.'
           : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
       );
     }else{
@@ -413,8 +423,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 def compact_dashboard_html(html: str) -> str:
     """Presentation-only cleanup for the human dashboard.
 
-    The raw execution-policy panel is removed, map visibility versus current M1
-    execution ownership is explained, and HTF setup quality is separated from
+    The raw execution-policy panel is removed, map visibility, thesis-direction ownership, and current M1 entry authority are
+    explained separately, and HTF setup quality is separated from
     M1 execution readiness. This function does not alter /mt5/plan,
     deterministic analysis, AI approval, risk controls, or any MT5/Sequence EA
     code path.
