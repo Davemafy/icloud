@@ -79,6 +79,29 @@ def _filter_targets(direction: str, values: list[float], reference: float, gap: 
     return valid, max(0, len(values) - len(valid))
 
 
+def live_directional_targets(zone: Zone, snapshot: MarketSnapshot) -> list[float]:
+    """Return only still-profitable original objectives from the live execution price.
+
+    This is the cloud-side pre-ownership guard.  A historical/remote thesis may
+    remain valid as context, but it cannot acquire fresh execution ownership after
+    price has already traded through every same-direction objective.
+    """
+    direction = zone.original_direction.value
+    reference = float(snapshot.ask if direction == "BUY" else snapshot.bid)
+    values = [
+        float(zone.original_target1 or 0.0),
+        float(zone.original_target2 or 0.0),
+        float(zone.original_target3 or 0.0),
+        float(zone.original_runner or 0.0),
+    ]
+    valid, _ = _filter_targets(direction, values, reference, target_min_gap(snapshot))
+    return valid
+
+
+def has_live_directional_target(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    return bool(live_directional_targets(zone, snapshot))
+
+
 def _pack_targets(kv: dict[str, str], prefix: str, values: list[float]) -> None:
     keys = [f"{prefix}_target1", f"{prefix}_target2", f"{prefix}_target3", f"{prefix}_runner"]
     packed = values[:4] + [0.0] * max(0, 4 - len(values))
