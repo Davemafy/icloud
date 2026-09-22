@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from .config import SETTINGS
-from .db import connect
+from .db import audit, connect, latest_heartbeats
 from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
+from .risk_matrix import execution_grade_eligible
 
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
@@ -14,13 +15,15 @@ EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDIT
 OWNER_REFRESH_BUFFER_M15_ATR = 0.30
 OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
+SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS = 45
+LEGACY_OWNER_RELEASE_REASON = "CONTEXT_GRADE_V2_INELIGIBLE_OWNER_FLAT"
 
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. WATCH state alone or an exhausted
     repeatedly mitigated zone may remain visible, but cannot block the opposite side merely because price interacted with it.
-    An eligible B+ zone may own execution only after a deterministic core/zone-sweep handoff and remains reduced-risk. Once a qualified handoff has acquired ownership, that
+    A+ and A are the only execution grades under the context-grade V2 risk contract; B+ is watch/research only and may not acquire new execution ownership. A legacy owner acquired under an older B+ contract is retired from execution locking only after a fresh Sequence heartbeat proves zero open positions; otherwise the system fails closed. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
     completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
     from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
@@ -45,6 +48,75 @@ def _zone_reaction_key(zone: Zone) -> str:
     return (
         f"{zone.original_direction.value}|{zone.source_tf}|0|"
         f"{float(zone.core_low):.2f}|{float(zone.core_high):.2f}"
+    )
+
+
+def _sequence_position_truth(now: int) -> tuple[bool, int]:
+    """Return (fresh, open_positions) from the live Sequence heartbeat.
+
+    Grade-contract migration is allowed to retire a legacy non-executable owner
+    only when the Sequence EA is freshly online and explicitly reports that no
+    managed positions remain. Missing/stale telemetry therefore fails closed.
+    """
+    rows = latest_heartbeats(30)
+    hb = next(
+        (x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"),
+        None,
+    )
+    if hb is None:
+        return False, 0
+    hb_ts = int(hb.get("ts") or 0)
+    if hb_ts <= 0 or int(now) - hb_ts > SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS:
+        return False, 0
+    payload = hb.get("payload") if isinstance(hb.get("payload"), dict) else {}
+    details = dict(payload.get("details") or {}) if isinstance(payload, dict) else {}
+    try:
+        open_positions = max(0, int(details.get("open_positions") or 0))
+    except (TypeError, ValueError):
+        return False, 0
+    return True, open_positions
+
+
+def _owner_execution_lock_eligible(owner: dict[str, Any]) -> bool:
+    """Whether the frozen owner still qualifies to monopolize execution authority."""
+    payload = str(owner.get("ownership_zone_payload") or "")
+    if payload:
+        try:
+            zone = Zone.model_validate_json(payload)
+            return execution_grade_eligible(zone)
+        except Exception:
+            # Fall through to the persisted grade. Ambiguous A/A+ rows are kept
+            # fail-closed; known B+ legacy rows are the compatibility case.
+            pass
+    return str(owner.get("grade") or "").upper() != "B+"
+
+
+def _retire_legacy_owner_execution_lock(owner: dict[str, Any], now: int) -> None:
+    """Retire only the execution lock; keep the lifecycle row for audit/history."""
+    key = str(owner.get("reaction_key") or "")
+    if not key:
+        return
+    acquired_at = int(owner.get("ownership_acquired_at") or 0)
+    authority = str(owner.get("ownership_authority") or "")
+    reason = (
+        f"EXECUTION_AUTHORITY_RELEASED:{LEGACY_OWNER_RELEASE_REASON}:"
+        f"acquired_at={acquired_at}:authority={authority}"
+    )
+    with connect() as db:
+        db.execute(
+            """
+            UPDATE zone_reactions
+            SET ownership_acquired_at=0,last_reason=?,last_seen_at=?
+            WHERE reaction_key=? AND ownership_acquired_at>0
+              AND invalidated_at=0 AND objective_complete_at=0
+            """,
+            (reason, int(now), key),
+        )
+    audit(
+        int(now),
+        "thesis.execution_owner.released",
+        f"reaction_key={key} reason={LEGACY_OWNER_RELEASE_REASON} "
+        f"grade={owner.get('grade','')} authority={authority} acquired_at={acquired_at}",
     )
 
 
@@ -79,7 +151,29 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
         ).fetchall()
     if not rows:
         return None
-    return dict(rows[0])
+
+    sequence_fresh, open_positions = _sequence_position_truth(int(now))
+    for raw in rows:
+        owner = dict(raw)
+        if _owner_execution_lock_eligible(owner):
+            return owner
+
+        # v6.5.51 made B+ watch-only. Historical B+ locks created under the
+        # older reduced-risk contract must not starve a fresh A/A+ opposite
+        # setup forever once the old campaign is flat. We retire the execution
+        # monopoly only with fresh, explicit Sequence position truth.
+        if not sequence_fresh or open_positions > 0:
+            owner["compat_execution_lock_protected"] = True
+            owner["compat_execution_lock_reason"] = (
+                "SEQUENCE_POSITIONS_OPEN"
+                if open_positions > 0
+                else "SEQUENCE_POSITION_TRUTH_UNAVAILABLE"
+            )
+            return owner
+
+        _retire_legacy_owner_execution_lock(owner, int(now))
+
+    return None
 
 
 def active_owner_snapshot(now: int) -> dict[str, Any] | None:
@@ -349,7 +443,7 @@ def acquire_execution_ownership(
     if not SETTINGS.paper_only or authority not in EXECUTION_AUTHORITIES:
         return None
     zone = next((z for z in analysis.zones if z.zone_id == zone_id and z.state == ZoneState.ACTIVE), None)
-    if zone is None:
+    if zone is None or not execution_grade_eligible(zone):
         return None
 
     ensure_execution_ownership_schema()
@@ -373,11 +467,11 @@ def acquire_execution_ownership(
             """
             UPDATE zone_reactions SET
                 ownership_acquired_at=CASE WHEN ownership_acquired_at=0 THEN ? ELSE ownership_acquired_at END,
-                ownership_authority=CASE WHEN ownership_authority='' THEN ? ELSE ownership_authority END,
-                ownership_analysis_id=CASE WHEN ownership_analysis_id='' THEN ? ELSE ownership_analysis_id END,
-                ownership_anchor_price=CASE WHEN ownership_anchor_price<=0 THEN ? ELSE ownership_anchor_price END,
-                ownership_zone_id=CASE WHEN ownership_zone_id='' THEN ? ELSE ownership_zone_id END,
-                ownership_zone_payload=CASE WHEN ownership_zone_payload='' THEN ? ELSE ownership_zone_payload END,
+                ownership_authority=CASE WHEN ownership_acquired_at=0 OR ownership_authority='' THEN ? ELSE ownership_authority END,
+                ownership_analysis_id=CASE WHEN ownership_acquired_at=0 OR ownership_analysis_id='' THEN ? ELSE ownership_analysis_id END,
+                ownership_anchor_price=CASE WHEN ownership_acquired_at=0 OR ownership_anchor_price<=0 THEN ? ELSE ownership_anchor_price END,
+                ownership_zone_id=CASE WHEN ownership_acquired_at=0 OR ownership_zone_id='' THEN ? ELSE ownership_zone_id END,
+                ownership_zone_payload=CASE WHEN ownership_acquired_at=0 OR ownership_zone_payload='' THEN ? ELSE ownership_zone_payload END,
                 reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
                 status=CASE
                     WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED'
