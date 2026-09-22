@@ -115,3 +115,108 @@ def test_final_ownership_guard_cannot_persist_stale_liquidity_handoff():
     assert "LIQUIDITY_HANDOFF_NO_LIVE_DIRECTIONAL_TARGET" in analysis.guards
     assert analysis.ai_approved is False
     assert "expired before ownership" in analysis.trader_brief
+
+
+def test_sell_prezone_handoff_is_blocked_while_price_is_between_buy_and_sell_zones():
+    sell = _sell_zone(target1=90.0)
+    buy = Zone(
+        zone_id="BUY_ORIGIN",
+        original_direction=Direction.BUY,
+        flip_direction=Direction.SELL,
+        setup_type="REVERSAL",
+        source_tf="H4>H1",
+        grade=Grade.B_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=91.0,
+        core_high=94.0,
+        core_method="WATCH|TEST",
+        location_score=7.0,
+        zone_low=88.0,
+        zone_high=95.0,
+        touch_count=2,
+        independent_confluence_count=3,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"],
+        source_ts=2,
+        invalidation_level=88.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=118.0,
+        clear_run=5.0,
+    )
+    analysis = _analysis(sell)
+    analysis.zones = [sell, buy]
+
+    handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
+
+    assert handoff["active"] is False
+    assert handoff["authority"] == "NONE"
+    assert handoff["reason"] == "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
+    assert handoff["interzone_transit"]["origin_zone_id"] == "BUY_ORIGIN"
+    assert handoff["interzone_transit"]["destination_zone_id"] == "SELL_REMOTE"
+    assert handoff["requires_destination_zone_contact"] is True
+
+
+def test_buy_prezone_handoff_is_blocked_while_price_is_between_sell_and_buy_zones():
+    buy = Zone(
+        zone_id="BUY_REMOTE",
+        original_direction=Direction.BUY,
+        flip_direction=Direction.SELL,
+        setup_type="CONTINUATION",
+        source_tf="H4>H1",
+        grade=Grade.A_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=79.0,
+        core_high=80.0,
+        core_method="ARMED|TEST",
+        location_score=9.0,
+        zone_low=77.0,
+        zone_high=82.0,
+        touch_count=1,
+        independent_confluence_count=4,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"],
+        source_ts=3,
+        invalidation_level=77.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=110.0,
+        clear_run=8.0,
+    )
+    sell = Zone(
+        zone_id="SELL_ORIGIN",
+        original_direction=Direction.SELL,
+        flip_direction=Direction.BUY,
+        setup_type="REVERSAL",
+        source_tf="H4>H1",
+        grade=Grade.B_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=106.0,
+        core_high=109.0,
+        core_method="WATCH|TEST",
+        location_score=7.0,
+        zone_low=105.0,
+        zone_high=112.0,
+        touch_count=2,
+        independent_confluence_count=3,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "BSL_IN_MARKED_ZONE"],
+        source_ts=4,
+        invalidation_level=112.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=82.0,
+        clear_run=5.0,
+    )
+    analysis = Analysis(
+        analysis_id="A_BUY_TARGET_GUARD",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.BUY,
+        zones=[buy, sell],
+        selected_zone_id=buy.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+
+    handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
+
+    assert handoff["active"] is False
+    assert handoff["authority"] == "NONE"
+    assert handoff["reason"] == "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
+    assert handoff["interzone_transit"]["origin_zone_id"] == "SELL_ORIGIN"
+    assert handoff["interzone_transit"]["destination_zone_id"] == "BUY_REMOTE"
