@@ -103,7 +103,7 @@ def _retire_legacy_owner_execution_lock(owner: dict[str, Any], now: int) -> None
         f"acquired_at={acquired_at}:authority={authority}"
     )
     with connect() as db:
-        db.execute(
+        cur = db.execute(
             """
             UPDATE zone_reactions
             SET ownership_acquired_at=0,last_reason=?,last_seen_at=?
@@ -112,6 +112,8 @@ def _retire_legacy_owner_execution_lock(owner: dict[str, Any], now: int) -> None
             """,
             (reason, int(now), key),
         )
+    if cur.rowcount <= 0:
+        return
     audit(
         int(now),
         "thesis.execution_owner.released",
