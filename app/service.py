@@ -7,6 +7,7 @@ from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot, save_analysis
 from .dynamic_continuation_zoning import apply_dynamic_continuation_rezone
 from .execution_models import build_execution_overlay, regime_brief
+from .execution_safety import has_live_directional_target
 from .institutional_two_zone import build_prompt_analysis
 from .liquidity_objective_policy import apply_liquidity_objective_policy
 from .liquidity_reversal_handoff import (
@@ -160,6 +161,36 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         policy["execution_authority"] = auth_meta
         a.execution_policy = policy
         return authority, thesis
+
+    if authority == "LIQUIDITY_REVERSAL_HANDOFF":
+        zone = next(
+            (z for z in a.zones if z.zone_id == zone_id),
+            None,
+        )
+        if zone is None or not has_live_directional_target(zone, s):
+            attempted = authority
+            auth_meta["authority"] = "NONE"
+            auth_meta["attempted_authority"] = attempted
+            auth_meta["ownership_acquired"] = False
+            auth_meta["owner_continuation"] = False
+            auth_meta["block_reason"] = "NO_LIVE_DIRECTIONAL_TARGET"
+            policy["execution_authority"] = auth_meta
+
+            lrh_meta = dict(policy.get("liquidity_reversal_handoff") or {})
+            lrh_meta["active"] = False
+            lrh_meta["authority"] = "NONE"
+            lrh_meta["reason"] = "NO_LIVE_DIRECTIONAL_TARGET"
+            policy["liquidity_reversal_handoff"] = lrh_meta
+            policy.pop("paper_ai_fallback", None)
+            a.execution_policy = policy
+            a.ai_approved = False
+            if "LIQUIDITY_HANDOFF_NO_LIVE_DIRECTIONAL_TARGET" not in a.guards:
+                a.guards.append("LIQUIDITY_HANDOFF_NO_LIVE_DIRECTIONAL_TARGET")
+            a.trader_brief += (
+                " Liquidity-reversal handoff expired before ownership because no "
+                "same-direction objective remains beyond live price."
+            )
+            return "NONE", None
 
     if not bool(a.approved):
         return authority, None
