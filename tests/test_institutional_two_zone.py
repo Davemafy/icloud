@@ -287,3 +287,40 @@ def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_exe
     assert public["grade"] == "B+"
     assert public["qualified_mitigations"] == 8
     assert public["grade_degrade_reason"] == "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
+
+
+def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus():
+    candidate = _buy_reversal_candidate()
+    candidate.strength = 1.8
+
+    audit = policy._grade_audit(
+        candidate,
+        0,
+        7.5,
+        countertrend=True,
+        structural_liquidity_tf="H4",
+        psy_confluence=False,
+    )
+
+    assert audit["grade"] == Grade.A
+    assert "strength_ge_2" in audit["aplus_missing"]
+    assert audit["a_missing"] == []
+    assert audit["model"] == "COUNTERTREND_REVERSAL"
+
+
+def test_trend_grade_audit_exposes_score_and_freshness_gap():
+    candidate = _sell_candidate()
+
+    audit = policy._grade_audit(
+        candidate,
+        2,
+        8.0,
+        countertrend=False,
+        structural_liquidity_tf="H4",
+        psy_confluence=True,
+    )
+
+    assert audit["grade"] in {Grade.A, Grade.B_PLUS}
+    assert audit["model"] == "TREND_CONTINUATION"
+    assert "mitigations_le_1" in audit["aplus_missing"]
+    assert "score" in audit
