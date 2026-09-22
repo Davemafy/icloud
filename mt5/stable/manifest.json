@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.27",
+  "release": "6.3.28",
   "repository": "Davemafy/icloud",
-  "ref": "90fac82a28f10658972de52e901d7050baac0430",
-  "data_bridge_version": "1.46",
-  "sequence_ea_version": "3.37",
+  "ref": "ed80251244ed56186b775ef1d0c0d1621c04076b",
+  "data_bridge_version": "1.47",
+  "sequence_ea_version": "3.38",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -136,31 +136,34 @@
     "ownership_brief_lifecycle_truth",
     "journal_immediate_resync_on_cloud_version_change",
     "journal_periodic_continuity_resync",
-    "bplus_reduced_risk_execution",
-    "grade_scaled_validation_capital_risk",
+    "context_grade_risk_matrix",
+    "bplus_watch_only_no_new_entry_budget",
+    "a_second_touch_reduced_risk_eligibility",
+    "fixed_10000_research_risk_anchor",
+    "trend_countertrend_risk_scaling",
     "non_compounding_validation_capital_anchor",
     "ordercalcprofit_risk_sizing",
     "subminimum_lot_fail_closed",
     "aggregate_split_volume_cap",
-    "sequence_337_truth_overlay",
-    "databridge_146_sequence_337_truth"
+    "sequence_338_truth_overlay",
+    "databridge_147_sequence_338_truth"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_46_GradeRiskTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_46_GradeRiskTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_46_GradeRiskTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
       "requires_reload": true,
-      "sha256": "ccc67b0d02cd7b52aa9a8fe90acdb2993556f6fb6e506f3c465e986aeb2a117e"
+      "sha256": "378dd6536c0470659ba17884754756da1d4a8a8fe21cdd63676bab803ebc6b12"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_37_GradeRiskAutoSize_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_37_GradeRiskAutoSize_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_37_GradeRiskAutoSize_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
       "requires_reload": true,
-      "sha256": "51f1600ab5958a8530d19ec7df4506dc1465bed873398de044bf01f3845a986d"
+      "sha256": "13e47adad74199b27272f44654f1f1113ddb9a580d6549cb3a06639c81174701"
     }
   ],
   "support_files": [
