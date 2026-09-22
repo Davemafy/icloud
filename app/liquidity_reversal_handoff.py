@@ -21,7 +21,7 @@ _AI_RULE = """
 14. LIQUIDITY REVERSAL HANDOFF (PAPER/DEMO ONLY): a structural H1/H4/D1 liquidity pool may
     authorize M1 execution observation before the remote primary HTF core is reached only when the
     Daily context agrees with the reversal direction, the liquidity pool is outside but reasonably
-    near a same-direction A/A+ primary zone, M15 has swept and rejected that pool, and a later M15
+    near a same-direction execution-grade primary zone (A+, A or reduced-risk B+), M15 has swept and rejected that pool, and a later M15
     displacement closes through nearby structure in the same direction. The liquidity pool remains a
     liquidity object; it must never be relabeled or rendered as an institutional zone. This handoff is
     not an entry. MT5 must still produce the full M1 sweep/internal-sweep -> MSS/BOS -> displacement ->
@@ -126,7 +126,7 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
 
     zone = _context_zone(analysis, direction)
     if zone is None:
-        return _inactive("NO_SAME_DIRECTION_A_TIER_CONTEXT_ZONE")
+        return _inactive("NO_SAME_DIRECTION_EXECUTION_GRADE_CONTEXT_ZONE")
     if str(zone.dxy_support).upper() == "CONFLICT":
         return _inactive("DXY_CONFLICT")
     if not has_live_directional_target(zone, snapshot):
