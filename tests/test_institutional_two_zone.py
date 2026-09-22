@@ -185,3 +185,81 @@ def test_live_quote_overlap_with_core_labels_zone_interacting(monkeypatch):
     assert policy.primary_zone_interacting(zone, snap) is True
     assert zone.core_method.startswith("INTERACTING|")
     assert analysis.execution_policy["public_zone_map"]["sell"]["state"] == "INTERACTING"
+
+
+def _buy_reversal_candidate() -> policy.PromptCandidate:
+    return policy.PromptCandidate(
+        direction=Direction.BUY,
+        source_tf="H4>H1",
+        source_ts=1_799_000_000,
+        core_low=94.0,
+        core_high=96.0,
+        zone_low=90.0,
+        zone_high=98.0,
+        strength=2.4,
+        fvg=False,
+        source_kind="LIQUIDITY_SWEEP_REJECTION+LIQUIDITY_SWEEP_REJECTION",
+        volume_expansion=True,
+        method="PROMPT_H4_PARENT_H1_REFINEMENT",
+    )
+
+
+def test_countertrend_uses_dedicated_reversal_model_and_can_be_a_plus(monkeypatch):
+    candidate = _buy_reversal_candidate()
+    _patch_common(monkeypatch, candidate, touches=1)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_SSL", price=92.0, side="BELOW", source_tf="H4", distance=3.0)
+    ])
+    analysis.overall_bias = Direction.SELL
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot(mid=100.0))
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert zone.countertrend is True
+    assert zone.setup_type == "REVERSAL"
+    assert zone.grade == Grade.A_PLUS
+    assert zone.touch_count == 1
+    assert any(x == "grade_context:COUNTERTREND_REVERSAL" for x in zone.notes)
+
+
+def test_countertrend_second_qualified_mitigation_is_a_not_forced_bplus(monkeypatch):
+    candidate = _buy_reversal_candidate()
+    _patch_common(monkeypatch, candidate, touches=2)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_SSL", price=92.0, side="BELOW", source_tf="H4", distance=3.0)
+    ])
+    analysis.overall_bias = Direction.SELL
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot(mid=100.0))
+
+    assert len(zones) == 1
+    assert zones[0].grade == Grade.A
+    assert zones[0].touch_count == 2
+
+
+def test_core_edge_chop_is_one_qualified_mitigation_until_envelope_exit():
+    bars = [
+        policy.Bar(ts=200, open=100.2, high=100.8, low=99.8, close=100.4),
+        policy.Bar(ts=300, open=101.2, high=101.4, low=101.1, close=101.2),
+        policy.Bar(ts=400, open=100.9, high=101.1, low=99.9, close=100.3),
+        policy.Bar(ts=500, open=101.3, high=101.5, low=101.1, close=101.3),
+        policy.Bar(ts=600, open=100.8, high=101.0, low=99.9, close=100.5),
+    ]
+
+    mitigations = policy._qualified_mitigations(
+        100.0, 101.0, 98.0, 103.0, 100, bars, raw_touch_episodes=3
+    )
+
+    assert mitigations == 1
+
+    bars.extend(
+        [
+            policy.Bar(ts=700, open=103.2, high=104.2, low=103.1, close=104.0),
+            policy.Bar(ts=800, open=101.1, high=101.2, low=100.1, close=100.6),
+        ]
+    )
+    mitigations = policy._qualified_mitigations(
+        100.0, 101.0, 98.0, 103.0, 100, bars, raw_touch_episodes=4
+    )
+    assert mitigations == 2
