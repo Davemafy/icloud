@@ -8,7 +8,7 @@ from .execution_safety import has_live_directional_target
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from .risk_matrix import execution_grade_eligible
 
-LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6555"
+LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6556"
 INTERZONE_TRANSIT_REASON = "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
 LOOKBACK_M15_BARS = 8
 MAX_EVENT_AGE_BARS = 4
@@ -94,29 +94,38 @@ def interzone_transit_guard(
 ) -> dict[str, Any]:
     """Block remote opposite-direction ownership while price is between mapped zones.
 
-    Example: price has left a lower BUY zone and is still below a higher SELL zone.
-    In that corridor the SELL zone is a destination, not an already-acquired SELL
-    thesis. The mirror rule applies while price travels down from SELL toward BUY.
+    Example: price is interacting with, or has left, a lower BUY zone and is still
+    below a higher SELL zone. In that corridor the SELL zone is a destination, not
+    an already-acquired SELL thesis. The mirror rule applies while price travels
+    down from SELL toward BUY.
     B+ may act as contextual origin evidence even though it is not executable.
     """
     px = float(snapshot.mid)
     direction = destination_zone.original_direction
     if direction == Direction.SELL:
-        destination_ahead = px < float(destination_zone.zone_low)
+        destination_low = float(destination_zone.zone_low)
+        destination_ahead = px < destination_low
         origins = [
             z for z in analysis.zones
             if z.state == ZoneState.ACTIVE
             and z.original_direction == Direction.BUY
-            and float(z.zone_high) < px
+            # The lower BUY zone may still be INTERACTING while price begins the
+            # journey toward the higher SELL destination. Requiring price to be
+            # completely above the BUY envelope was too strict and allowed a
+            # premature SELL owner to survive while price was still inside BUY.
+            and float(z.zone_high) < destination_low
+            and float(z.zone_low) <= px
         ]
         origin = max(origins, key=lambda z: float(z.zone_high), default=None)
     elif direction == Direction.BUY:
-        destination_ahead = px > float(destination_zone.zone_high)
+        destination_high = float(destination_zone.zone_high)
+        destination_ahead = px > destination_high
         origins = [
             z for z in analysis.zones
             if z.state == ZoneState.ACTIVE
             and z.original_direction == Direction.SELL
-            and float(z.zone_low) > px
+            and float(z.zone_low) > destination_high
+            and float(z.zone_high) >= px
         ]
         origin = min(origins, key=lambda z: float(z.zone_low), default=None)
     else:
