@@ -18,6 +18,7 @@ from .engine import (
 )
 from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from .prompt_contract import prompt_dxy_direction, prompt_snapshot_complete
+from .risk_matrix import execution_grade_eligible
 
 SWEEP_LOOKBACK = 8
 FOLLOW_THROUGH_BARS = 3
@@ -322,11 +323,14 @@ def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> G
     score += 1 if candidate.fvg else 0
     score += 1 if "SWEEP_REJECTION" in candidate.source_kind else 0
     score += 1 if candidate.volume_expansion else 0
-    score += 2 if touches == 0 else 1 if touches == 1 else -2
+    score += 2 if touches == 0 else 1 if touches == 1 else 0 if touches == 2 else -3
     score += 1 if location_score >= 7.0 else 0
-    if touches >= 2:
+    # Quality grade remains independent from trend/countertrend context. A strong
+    # second-touch source may remain A and trade at the A risk tier. Three-plus
+    # mitigations are B+ research context only.
+    if touches >= 3:
         return Grade.B_PLUS
-    if score >= 8:
+    if score >= 8 and touches <= 1:
         return Grade.A_PLUS
     if score >= 5:
         return Grade.A
@@ -425,7 +429,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     fvals = flip_targets + [0.0] * (4 - len(flip_targets))
     clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
     countertrend = context not in (Direction.NEUTRAL, candidate.direction)
-    readiness = "ARMED" if grade in {Grade.A_PLUS, Grade.A} and touches <= 1 else "WATCH"
+    readiness = "ARMED" if ((grade == Grade.A_PLUS and touches <= 1) or (grade == Grade.A and touches <= 2)) else "WATCH"
 
     zone = Zone(
         zone_id=f"PZ_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}",
@@ -556,7 +560,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     for zone in analysis.zones:
         _set_readiness(zone, "INTERACTING" if primary_zone_interacting(zone, snapshot) else _readiness(zone))
 
-    executable = [z for z in analysis.zones if z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} and z.state == ZoneState.ACTIVE]
+    executable = [z for z in analysis.zones if z.state == ZoneState.ACTIVE and execution_grade_eligible(z)]
     preferred = next((z for z in executable if z.original_direction == context), None)
     if preferred is None and executable:
         preferred = min(executable, key=lambda z: _distance(snapshot.mid, z.core_low, z.core_high))
