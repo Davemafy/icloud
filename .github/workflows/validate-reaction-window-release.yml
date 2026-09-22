@@ -24,6 +24,31 @@ jobs:
         run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_handoff_preownership_guard.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_databridge_145_source.py tests/test_databridge_146_source.py tests/test_journal_provenance.py tests/test_grade_risk_execution.py tests/test_sequence_337_source.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
       - name: Python syntax
         run: python -m compileall -q app tests
+      - name: Verify manifest pinned-ref SHA256
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          manifest = json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          repo = manifest['repository']
+          ref = manifest['ref']
+          assert ref and ref != 'main', 'Stable manifest must pin an immutable source ref.'
+          for item in [*manifest.get('files', []), *manifest.get('support_files', [])]:
+              expected = str(item.get('sha256') or '').lower()
+              assert expected, f"Missing SHA256 for {item.get('path')}"
+              url = f"https://raw.githubusercontent.com/{repo}/{ref}/{item['path']}"
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  data = response.read()
+              actual = hashlib.sha256(data).hexdigest()
+              assert actual == expected, (
+                  f"Pinned-ref SHA mismatch for {item['path']}: "
+                  f"expected={expected} actual={actual} ref={ref}"
+              )
+          print(f"Stable manifest pinned-ref verification OK: {ref}")
+          PY
       - name: DataBridge 1.46 structural checks
         run: |
           python - <<'PY'
