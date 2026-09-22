@@ -19,27 +19,29 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_journal_provenance.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_journal_provenance.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
       - name: Python syntax
         run: python -m compileall -q app tests
-      - name: DataBridge 1.43 structural checks
+      - name: DataBridge 1.44 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5')
           t=p.read_text(encoding='utf-8')
           core=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5').read_text(encoding='utf-8')
           for text in (t, core):
               for a,b in [('(',')'),('{','}'),('[',']')]:
                   assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
           for needle in [
-              '#property version "1.43"',
-              '#define TZ_BRIDGE_VERSION "1.43"',
-              '#define TZ_SEQUENCE_EXPECTED "3.35"',
+              '#property version "1.44"',
+              '#define TZ_BRIDGE_VERSION "1.44"',
+              '#define TZ_SEQUENCE_EXPECTED "3.36"',
               'BackfillJournalHistory(false);',
-              'TZ_SendHeartbeatV143();',
+              'TZ_SendHeartbeatV144();',
               'WAITING FOR CLOSED M1 VALUE REACTION',
               'THESIS ENTRY LIMIT REACHED',
+              'ENTRY BLOCKED: MIN RR',
+              'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED',
           ]:
               assert needle in t,needle
           for needle in [
@@ -58,20 +60,20 @@ jobs:
           ]:
               assert needle in core,needle
           assert 'IsTester()' not in core
-          print('DataBridge 1.43 release structural checks OK')
+          print('DataBridge 1.44 release structural checks OK')
           PY
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5
+          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5
           sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
-      - name: Sequence 3.35 structural checks
+      - name: Sequence 3.36 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_36_HandoffConfirmationRR_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.35"',
+              '#property version   "3.36"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
@@ -97,10 +99,16 @@ jobs:
               'PD_ARRAY_ACCEPTED_INVALIDATION',
               'REENTRY_LIMIT_REACHED',
               'ENTRY_DECISION',
+              'TZ36_PostHandoffEntryReady',
+              'WAITING_FOR_CLOSED_M1_POST_HANDOFF_VALUE_REACTION',
+              'POST_HANDOFF_OBJECTIVE_ALREADY_TRADED',
+              'MIN_RR_NOT_MET',
+              'nearest_open_target',
+              'rr_at_entry',
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.35 release structural checks OK')
+          print('Sequence 3.36 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_36_HandoffConfirmationRR_Demo.mq5

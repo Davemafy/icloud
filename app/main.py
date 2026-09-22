@@ -283,8 +283,12 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return "WAITING FOR SEQUENCE AUTHORITY" if status == "M1 READY" else status
     if stage == "ORDER_SENT":
         return "ORDER SENT"
-    if stage == "REENTRY_CONFIRMATION":
+    if stage in {"REENTRY_CONFIRMATION", "HANDOFF_CONFIRMATION"}:
         return "WAITING FOR M1 VALUE REACTION"
+    if stage == "TARGET" and "MIN_RR_NOT_MET" in reason:
+        return "ENTRY BLOCKED: MIN RR"
+    if stage == "TARGET" and "POST_HANDOFF_OBJECTIVE_ALREADY_TRADED" in reason:
+        return "ENTRY BLOCKED: OBJECTIVE ALREADY TRADED"
     if stage == "THESIS" and "REENTRY_LIMIT_REACHED" in reason:
         return "THESIS ENTRY LIMIT REACHED"
 

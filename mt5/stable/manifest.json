@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.24",
+  "release": "6.3.25",
   "repository": "Davemafy/icloud",
-  "ref": "be1a848180117a254369ceba090afda8d96edb0a",
-  "data_bridge_version": "1.43",
-  "sequence_ea_version": "3.35",
+  "ref": "23e378091859fbf3fabc9224528134316e32603a",
+  "data_bridge_version": "1.44",
+  "sequence_ea_version": "3.36",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -124,24 +124,31 @@
     "entry_decision_audit_telemetry",
     "sequence_335_truth_overlay",
     "reentry_confirmation_overlay",
-    "thesis_entry_limit_overlay"
+    "thesis_entry_limit_overlay",
+    "post_handoff_closed_m1_value_reaction",
+    "post_handoff_signal_freshness_guard",
+    "post_handoff_pd_array_invalidation_guard",
+    "post_handoff_target_already_traded_guard",
+    "minimum_rr_enforced_at_order_gate",
+    "entry_decision_rr_audit",
+    "sequence_336_truth_overlay"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_43_Sequence335Truth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
       "requires_reload": true,
-      "sha256": "e44a1e27c4f68c7dc4332bc2a20cd6a94022d7b340b9c32ccd17547d9856ccd9"
+      "sha256": "f1e180f6990e4213baa73fda4e7df4abf871da405f9f1be13a2d120f7f4f8906"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_35_ConfirmedValueReentry_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_36_HandoffConfirmationRR_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_36_HandoffConfirmationRR_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_36_HandoffConfirmationRR_Demo.mq5",
       "requires_reload": true,
-      "sha256": "84c8764d7db289d3547e8d9864d3e209a2640e98a57e1b71099a231d4adee491"
+      "sha256": "2fd0d0eda831ef2dcf79855064267125dc8f0f7c866e7322082c787a7a4f5cd0"
     }
   ],
   "support_files": [

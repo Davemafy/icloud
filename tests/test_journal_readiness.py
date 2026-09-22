@@ -146,3 +146,45 @@ def test_sequence_reentry_limit_is_terminal_for_same_thesis():
         },
     )
     assert status == "THESIS ENTRY LIMIT REACHED"
+
+
+def test_sequence_initial_handoff_confirmation_has_explicit_wait_state():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "HANDOFF_CONFIRMATION",
+            "gate_reason": "WAITING_FOR_CLOSED_M1_POST_HANDOFF_VALUE_REACTION",
+            "open_positions": 0,
+        },
+    )
+    assert status == "WAITING FOR M1 VALUE REACTION"
+
+
+def test_sequence_min_rr_failure_is_explicit():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "TARGET",
+            "gate_reason": "MIN_RR_NOT_MET",
+            "open_positions": 0,
+        },
+    )
+    assert status == "ENTRY BLOCKED: MIN RR"
+
+
+def test_sequence_expired_post_handoff_target_is_explicit():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "LIQUIDITY_REVERSAL_HANDOFF",
+            "gate_stage": "TARGET",
+            "gate_reason": "POST_HANDOFF_OBJECTIVE_ALREADY_TRADED",
+            "open_positions": 0,
+        },
+    )
+    assert status == "ENTRY BLOCKED: OBJECTIVE ALREADY TRADED"

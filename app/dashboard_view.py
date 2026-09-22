@@ -311,10 +311,12 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.';
       }else if(seqAuthority!=='NONE'){
         const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
-        const reactionWait=seqStage==='REENTRY_CONFIRMATION';
+        const reactionWait=seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+        const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
+        const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ')));
-        seqGate.className='kpi '+(limitReached?'warn':((valueWait||reactionWait)?'blue':'warn'));
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ')))));
+        seqGate.className='kpi '+(limitReached||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
       }else{
         seqGate.textContent=seqStage.replaceAll('_',' ');
@@ -333,7 +335,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       meta=checklist+'Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
     }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
       const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
-      const reactionWait=seqStage==='REENTRY_CONFIRMATION';
+      const reactionWait=seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+      const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
+      const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
       const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
       const forming=['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
       const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
@@ -345,10 +349,18 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         state='THESIS ENTRY LIMIT REACHED';
         cls='warn';
         meta=checklist+'The configured re-entry allowance for this acquired thesis is exhausted. No further same-thesis entry is permitted unless a new thesis is legitimately acquired.';
+      }else if(minRRBlock){
+        state='ENTRY BLOCKED: MIN RR';
+        cls='warn';
+        meta=checklist+'A structural entry candidate exists, but reward to the nearest still-open objective is below the plan minimum RR. Entry permission: NO.';
+      }else if(targetExpired){
+        state='ENTRY BLOCKED: OBJECTIVE ALREADY TRADED';
+        cls='warn';
+        meta=checklist+'The nearest post-handoff objective already traded after the handoff, so the late entry is expired rather than chased. Entry permission: NO.';
       }else if(reactionWait){
         state='WAITING FOR M1 VALUE REACTION';
         cls='blue';
-        meta=checklist+'Price has produced/approached execution value, but re-entry now requires a CLOSED M1 same-direction rejection/micro-break from that OTE/PD overlap. Entry permission: NO.';
+        meta=checklist+'Execution value exists, but any R1/R2 or pre-zone L0/S0 handoff entry now requires a CLOSED M1 same-direction rejection/micro-break from the OTE/PD overlap. Entry permission: NO.';
       }else if(valueWait){
         state='WAITING FOR VALUE / RETRACE';
         cls='blue';
