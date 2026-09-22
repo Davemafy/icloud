@@ -6,7 +6,7 @@ from typing import Awaitable, Callable
 
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
-from .institutional_two_zone import primary_zone_interacting
+from .institutional_two_zone import primary_zone_approaching
 from .liquidity_reversal_handoff import detect_liquidity_reversal_handoff
 from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
@@ -146,7 +146,7 @@ def _interaction_ids(snap) -> set[str]:
     a = latest_analysis(ai_required=False)
     if a is None:
         return set()
-    ids = {z.zone_id for z in a.zones if primary_zone_interacting(z, snap)}
+    ids = {z.zone_id for z in a.zones if primary_zone_approaching(z, snap)}
     owner = owner_core_interacting(snap)
     if owner is not None:
         owner_id = str(owner.get("latest_zone_id") or owner.get("reaction_key") or "")
