@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .engine import atr
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
-from .risk_matrix import execution_grade_eligible
+from .risk_matrix import execution_grade_eligible, original_risk_pct, zone_risk_context
 
 SECONDARY_ZONE_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V659_SECONDARY_RESERVE"
 XAU_POINTS_PER_PIP = 10.0
@@ -77,6 +77,8 @@ def _reserve_payload(primary: Zone, reserve: Zone, snapshot: MarketSnapshot) -> 
         "execution_authority": False,
         "source_tf": reserve.source_tf,
         "grade": reserve.grade.value,
+        "risk_context": zone_risk_context(reserve),
+        "base_risk_pct_if_promoted": original_risk_pct(reserve),
         "low": reserve.zone_low,
         "high": reserve.zone_high,
         "core_low": reserve.core_low,
@@ -139,7 +141,7 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         reserve_map[direction.value.lower()] = payload
         brief_parts.append(
             f"{direction.value}2={reserve.zone_low:.2f}-{reserve.zone_high:.2f} "
-            f"(core={reserve.core_low:.2f}-{reserve.core_high:.2f},{reserve.source_tf},{reserve.grade.value},RESERVE,touches={reserve.touch_count})"
+            f"(core={reserve.core_low:.2f}-{reserve.core_high:.2f},{reserve.source_tf},{reserve.grade.value},{zone_risk_context(reserve)},risk={original_risk_pct(reserve):.2f}%,RESERVE,touches={reserve.touch_count})"
         )
 
     policy = dict(analysis.execution_policy or {})
