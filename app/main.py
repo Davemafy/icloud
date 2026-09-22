@@ -228,6 +228,23 @@ def _readiness_prefix(z) -> str:
     return method.split("|", 1)[0] if "|" in method else method
 
 
+def _zone_note_text(z, prefix: str, default: str = "") -> str:
+    if z is None:
+        return default
+    for note in list(getattr(z, "notes", []) or []):
+        text = str(note)
+        if text.startswith(prefix):
+            return text.split(":", 1)[1] if ":" in text else default
+    return default
+
+
+def _zone_note_int(z, prefix: str, default: int = 0) -> int:
+    try:
+        return int(float(_zone_note_text(z, prefix, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
 def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     names = [str(x.get("event", "")).upper() for x in events]
     if "TRADE_CLOSED" in names:
@@ -458,7 +475,11 @@ def _journal_snapshot():
             "flip_direction": z.flip_direction.value,
             "setup_type": z.setup_type,
             "source_tf": z.source_tf,
+            "structural_grade": _zone_note_text(z, "structural_grade:", z.grade.value),
             "grade": z.grade.value,
+            "current_execution_grade": _zone_note_text(z, "current_execution_grade:", z.grade.value),
+            "grade_degrade_reason": _zone_note_text(z, "grade_degrade_reason:", "NONE"),
+            "grade_context_model": _zone_note_text(z, "grade_context:", ""),
             "state": z.state.value,
             "readiness": readiness,
             "core_low": z.core_low,
@@ -467,6 +488,8 @@ def _journal_snapshot():
             "zone_low": z.zone_low,
             "zone_high": z.zone_high,
             "touch_count": z.touch_count,
+            "qualified_mitigations": _zone_note_int(z, "qualified_mitigations:", int(z.touch_count)),
+            "raw_core_touch_episodes": _zone_note_int(z, "raw_core_touch_episodes:", int(z.touch_count)),
             "confluences": z.confluences,
             "independent_confluence_count": z.independent_confluence_count,
             "invalidation_level": z.invalidation_level,
