@@ -25,7 +25,7 @@ FOLLOW_THROUGH_BARS = 3
 MIN_REJECTION_WICK_FRACTION = 0.30
 MIN_FOLLOW_THROUGH_ATR = 0.60
 H1_PARENT_OVERLAP_ATR = 0.25
-INTERACTION_BUFFER_M15_ATR = 0.30
+APPROACH_BUFFER_M15_ATR = 0.30
 CORE_MIN_POINTS = 100.0
 CORE_MAX_POINTS = 150.0
 ENVELOPE_MIN_POINTS = 200.0
@@ -512,15 +512,37 @@ def _set_readiness(zone: Zone, readiness: str) -> None:
     zone.notes = [f"readiness:{readiness}" if str(note).startswith("readiness:") else note for note in zone.notes]
 
 
-def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
+def _zone_health_allows_interaction(zone: Zone, snapshot: MarketSnapshot) -> bool:
     if zone.state != ZoneState.ACTIVE or zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}:
         return False
     if evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15) != ZoneState.ACTIVE:
         return False
-    if "LIQUIDITY_IN_MARKED_ZONE" not in set(zone.confluences):
+    return "LIQUIDITY_IN_MARKED_ZONE" in set(zone.confluences)
+
+
+def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """True only when the live quote actually overlaps the tactical core.
+
+    INTERACTING is user-facing state truth, so ATR proximity must not manufacture
+    a contact that has not happened. The quote spread may overlap the core even if
+    the midpoint sits just outside it, therefore use bid/ask rather than midpoint.
+    """
+    if not _zone_health_allows_interaction(zone, snapshot):
         return False
+    bid = float(snapshot.bid)
+    ask = float(snapshot.ask)
+    lo, hi = sorted((float(zone.core_low), float(zone.core_high)))
+    return ask >= lo and bid <= hi
+
+
+def primary_zone_approaching(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """Pre-refresh trigger only: keep the old ATR proximity without relabelling the zone."""
+    if not _zone_health_allows_interaction(zone, snapshot):
+        return False
+    if primary_zone_interacting(zone, snapshot):
+        return True
     m15a = max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
-    buffer_price = max(_point(snapshot) * 5.0, INTERACTION_BUFFER_M15_ATR * m15a)
+    buffer_price = max(_point(snapshot) * 5.0, APPROACH_BUFFER_M15_ATR * m15a)
     return _distance(snapshot.mid, zone.core_low, zone.core_high) <= buffer_price
 
 
