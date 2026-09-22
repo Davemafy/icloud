@@ -180,7 +180,7 @@ def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if !execution_grade_eligible(zone):
+    if not execution_grade_eligible(zone):
         return {}
     label, liquidity_price = _attached_liquidity(zone)
     if liquidity_price <= 0:
