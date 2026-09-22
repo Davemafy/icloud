@@ -88,7 +88,7 @@ def _context_zone(analysis: Analysis, direction: Direction):
         z for z in analysis.zones
         if z.state == ZoneState.ACTIVE
         and z.original_direction == direction
-        and z.grade in {Grade.A_PLUS, Grade.A}
+        and z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
     ]
     if not candidates:
         return None
