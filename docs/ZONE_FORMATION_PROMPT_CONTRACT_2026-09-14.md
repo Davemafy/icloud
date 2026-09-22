@@ -77,8 +77,10 @@ This is mandatory for the intraday alert map:
 - If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
 - If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
-- Grade is an execution-risk tier after structural validity: A+ = 1.00%, A = 0.75%, B+ = 0.25% of the non-compounding validation-capital anchor before sequence-share multipliers.
-- B+ is not automatically WATCH-only. It may receive M1 authority when it passes the same source/liquidity/M15/location/M1/target/RR gates; it remains lowest priority and lowest risk.
+- Structural grade and D1 alignment are separate axes.
+- A+ and A are the only new execution grades. B+ remains visible research context / WATCH ONLY.
+- Base thesis risk uses the context x grade matrix before sequence-share/model multipliers: TREND A+ = 1.00%, TREND A = 0.75%, COUNTERTREND A+ = 0.50%, COUNTERTREND A = 0.25%.
+- Countertrend does not automatically downgrade an A+ source to A. Quality is graded from the source itself; direction only changes the risk budget.
 - Among already-valid execution-grade candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
 - A nearer valid zone may outrank a remote fresher zone under the deterministic ranking contract; grade remains an explicit quality/risk tiebreaker.
 - Freshness remains important after intraday reachability is established; repeated mitigation still downgrades quality.
@@ -92,7 +94,7 @@ A second level may be published as a BACKUP only. It is not a second active exec
 
 - At most one SECONDARY SELL and one SECONDARY BUY may be shown.
 - SECONDARY must pass the same structural source, BSL/SSL, source-timeframe geometry, freshness and M15-health rules as a primary zone.
-- SECONDARY must be A or A+ and have no more than one core mitigation.
+- SECONDARY must be A+ with no more than one core mitigation, or A with no more than two qualified core mitigations.
 - SECONDARY must come from a distinct institutional source and must not overlap the primary envelope.
 - For SELL: Level 2 must be a higher supply zone beyond the primary SELL invalidation side.
 - For BUY: Level 2 must be a lower demand zone beyond the primary BUY invalidation side.
@@ -109,27 +111,31 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 - PRIMARY zones may use a soft filled envelope with a slightly stronger core.
 - RESERVE zones use a lighter/dashed presentation and remain visually subordinate to Primary.
 - Labels must include direction, role, grade, state and touch count.
-- Up to four qualified records may be rendered: Primary SELL, Reserve SELL, Primary BUY, Reserve BUY.
+- Up to four qualified records may be rendered: Primary SELL, Reserve SELL, Primary BUY, Reserve BUY. These form the four-zone research map: two SELL locations and two BUY locations maximum, never forced.
 - Missing records are not forced.
 
 ## Mitigation and invalidation
 
-- Fresh 0–1 touch zones rank highest within comparable intraday relevance.
+- A+ execution eligibility is limited to 0–1 core mitigation.
+- A execution eligibility may persist through a second qualified mitigation at the reduced A risk tier.
+- Three-plus mitigations are B+ research context / WATCH ONLY and must not obtain new execution authority.
 - Repeated mitigation downgrades quality; it must not move or manufacture the zone.
 - Closed M15 body acceptance beyond the outer envelope invalidates the original zone.
 - A wick-only liquidity raid does not invalidate.
 - Invalidation creates only a flip candidate; it is not an instant reverse entry.
 
-## Grade-scaled research risk
+## Context x grade research risk
 
 DEMO / PAPER validation sizing uses a fixed validation-capital anchor rather than upward compounding.
 
 - Validation initial capital = 10,000.
-- A+ thesis budget = 1.00% of the sizing base.
-- A thesis budget = 0.75%.
-- B+ thesis budget = 0.25%.
+- TREND A+ base thesis budget = 1.00% of the sizing base.
+- TREND A base thesis budget = 0.75%.
+- COUNTERTREND A+ base thesis budget = 0.50%.
+- COUNTERTREND A base thesis budget = 0.25%.
+- B+ base thesis budget = 0.00%; B+ is WATCH / research context only.
 - Sizing base = the lesser of current realized account balance and the 10,000 validation anchor, so losses reduce future size but gains do not compound the experiment.
-- Existing primary/re-entry/flip share multipliers still apply inside that thesis budget.
+- Existing primary/re-entry/flip share multipliers and model-specific reductions still apply inside that base thesis budget and may reduce it, never increase it.
 - Lot calculation must use the actual entry-to-stop monetary loss per lot when available, floor to broker volume step, and return no trade if the calculated size is below broker minimum. It must never round a sub-minimum risk upward.
 - On hedging accounts, TP1/TP2/runner splitting must never create more aggregate volume than the risk-sized total.
 
@@ -210,7 +216,7 @@ When there is no acquired thesis lock, the published PRIMARY BUY and PRIMARY SEL
 institutional candidates. A D1-aligned plan selection is a planning preference, not exclusive execution
 authority.
 
-- A currently interacting/qualified A+, A, or eligible reduced-risk B+ primary may earn M1 authority even when it is counter to D1.
+- A currently interacting/qualified A+ or A primary may earn M1 authority even when it is counter to D1. Countertrend status reduces risk; it does not weaken the M1 confirmation standard.
 - Current executable location ranks before D1 preference. D1 remains context and a tie-breaker when
   otherwise comparable candidates are simultaneously executable.
 - The countertrend side must still pass the same HTF source, liquidity, geometry, M15 health, M1
