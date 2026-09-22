@@ -128,3 +128,57 @@ def test_m15_invalidation_after_reaction_preserves_success_history(tmp_path, mon
     assert record["status"] == "INVALIDATED_AFTER_REACTION"
     assert record["reaction_confirmed_at"] == 2200
     assert record["invalidated_at"] == 2300
+
+
+def test_prezone_owner_counts_only_targets_live_beyond_ownership_anchor(tmp_path, monkeypatch):
+    path = tmp_path / "reaction_anchor_truth.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+    zone = _zone()
+    register_analysis_zones(_analysis([zone]))
+    key = "SELL|H4>H1|1000"
+
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE zone_reactions
+            SET status='REACTION_CONFIRMED',
+                reaction_confirmed_at=2050,
+                ownership_acquired_at=2050,
+                ownership_authority='LIQUIDITY_REVERSAL_HANDOFF',
+                ownership_analysis_id='A_PREZONE',
+                ownership_anchor_price=96.0,
+                ownership_zone_id=?,
+                ownership_zone_payload=?,
+                best_price=96.0
+            WHERE reaction_key=?
+            """,
+            (zone.zone_id, zone.model_dump_json(), key),
+        )
+
+    progress = _snapshot(
+        2200,
+        94.4,
+        [
+            Bar(ts=2000, open=95.6, high=95.8, low=95.2, close=95.4),
+            Bar(ts=2100, open=95.2, high=95.5, low=94.3, close=94.5),
+        ],
+        atr_m15=2.0,
+    )
+    update_zone_reactions(progress)
+
+    with db.connect() as conn:
+        row = conn.execute(
+            """
+            SELECT status,target1_hit_at,target2_hit_at,target3_hit_at
+            FROM zone_reactions WHERE reaction_key=?
+            """,
+            (key,),
+        ).fetchone()
+
+    # TP1=97 was already behind the SELL handoff anchor at 96, so this owner
+    # cannot claim it as completed. TP2=95 was live and was crossed afterwards.
+    assert int(row["target1_hit_at"] or 0) == 0
+    assert int(row["target2_hit_at"] or 0) == progress.sent_at
+    assert int(row["target3_hit_at"] or 0) == 0
+    assert row["status"] == "OBJECTIVE_IN_PROGRESS"
