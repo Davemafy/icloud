@@ -42,3 +42,31 @@ def test_journal_target_progress_does_not_consume_unowned_map_targets():
     assert result["next_open"] is None
     assert result["completed"] == []
     assert result["scope"] == "PLAN"
+
+
+def test_prezone_handoff_does_not_label_targets_behind_anchor_as_completed_thesis_targets():
+    a = SimpleNamespace(
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "owner_zone_id": "SELL_OWNER",
+                "direction": "SELL",
+                "ownership_authority": "LIQUIDITY_REVERSAL_HANDOFF",
+                "ownership_anchor_price": 4340.0,
+                "target1_hit_at": 100,
+                "target2_hit_at": 200,
+                "target3_hit_at": 0,
+                "best_price": 4338.0,
+            }
+        }
+    )
+    z = _zone()
+    z.zone_low = 4368.61
+    z.zone_high = 4394.61
+
+    result = _journal_target_progress(a, z)
+
+    assert result["scope"] == "PREZONE_HANDOFF"
+    assert result["completed"] == []
+    assert result["remaining"] == [4320.18]
+    assert result["next_open"] == 4320.18

@@ -6,6 +6,7 @@ from .config import SETTINGS
 from .db import audit, connect, latest_heartbeats
 from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
+from .liquidity_reversal_handoff import INTERZONE_TRANSIT_REASON, interzone_transit_guard
 from .risk_matrix import execution_grade_eligible
 
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
@@ -17,6 +18,7 @@ OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
 SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS = 45
 LEGACY_OWNER_RELEASE_REASON = "CONTEXT_GRADE_V2_INELIGIBLE_OWNER_FLAT"
+INTERZONE_OWNER_RELEASE_REASON = "PREZONE_LIQUIDITY_OWNER_RELEASED_FOR_INTERZONE_TRANSIT"
 
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
@@ -120,6 +122,107 @@ def _retire_legacy_owner_execution_lock(owner: dict[str, Any], now: int) -> None
         f"reaction_key={key} reason={LEGACY_OWNER_RELEASE_REASON} "
         f"grade={owner.get('grade','')} authority={authority} acquired_at={acquired_at}",
     )
+
+
+def _owner_acquired_before_destination_zone(owner: dict[str, Any], zone: Zone) -> bool:
+    """True when a liquidity-reversal owner was acquired outside the HTF destination."""
+    if str(owner.get("ownership_authority") or "") != "LIQUIDITY_REVERSAL_HANDOFF":
+        return False
+    anchor = float(owner.get("ownership_anchor_price") or 0.0)
+    if anchor <= 0:
+        return False
+    if zone.original_direction == Direction.SELL:
+        return anchor < float(zone.zone_low)
+    if zone.original_direction == Direction.BUY:
+        return anchor > float(zone.zone_high)
+    return False
+
+
+def _release_interzone_prezone_owner(analysis: Analysis, snapshot: MarketSnapshot) -> dict[str, Any] | None:
+    """Release a flat pre-zone owner when the current map shows zone-to-zone transit.
+
+    A pre-zone liquidity reversal is optional micro authority. It must never turn a
+    higher SELL destination into an already-active SELL thesis while price is still
+    travelling up from a lower BUY zone (or the mirrored SELL-to-BUY journey).
+    Existing positions are protected: without fresh Sequence truth proving flat,
+    the owner remains fail-closed until it can be released safely.
+    """
+    now = int(snapshot.sent_at)
+    owner = _active_owner_row(now)
+    if owner is None or str(owner.get("ownership_authority") or "") != "LIQUIDITY_REVERSAL_HANDOFF":
+        return None
+
+    owner_zone = _ownership_zone_snapshot(owner)
+    if owner_zone is None:
+        wanted = str(owner.get("ownership_zone_id") or owner.get("latest_zone_id") or "")
+        owner_zone = next((z for z in analysis.zones if wanted and z.zone_id == wanted), None)
+    if owner_zone is None:
+        owner_zone = next(
+            (z for z in analysis.zones if z.original_direction.value == str(owner.get("direction") or "")),
+            None,
+        )
+    if owner_zone is None or not _owner_acquired_before_destination_zone(owner, owner_zone):
+        return None
+
+    transit = interzone_transit_guard(analysis, snapshot, owner_zone)
+    if not bool(transit.get("blocked")):
+        return None
+
+    sequence_fresh, open_positions = _sequence_position_truth(now)
+    if not sequence_fresh or open_positions > 0:
+        return {
+            "released": False,
+            "reason": "SEQUENCE_POSITIONS_OPEN" if open_positions > 0 else "SEQUENCE_POSITION_TRUTH_UNAVAILABLE",
+            "interzone_transit": transit,
+            "owner_zone_id": owner_zone.zone_id,
+        }
+
+    key = str(owner.get("reaction_key") or "")
+    acquired_at = int(owner.get("ownership_acquired_at") or 0)
+    old_authority = str(owner.get("ownership_authority") or "")
+    reason = (
+        f"EXECUTION_AUTHORITY_RELEASED:{INTERZONE_OWNER_RELEASE_REASON}:"
+        f"acquired_at={acquired_at}:authority={old_authority}:"
+        f"origin={transit.get('origin_zone_id','')}:destination={owner_zone.zone_id}"
+    )
+    with connect() as db:
+        cur = db.execute(
+            """
+            UPDATE zone_reactions
+            SET ownership_acquired_at=0,last_reason=?,last_seen_at=?
+            WHERE reaction_key=? AND ownership_acquired_at>0
+              AND invalidated_at=0 AND objective_complete_at=0
+            """,
+            (reason, now, key),
+        )
+    if cur.rowcount <= 0:
+        return None
+
+    audit(
+        now,
+        "thesis.execution_owner.released",
+        f"reaction_key={key} reason={INTERZONE_OWNER_RELEASE_REASON} "
+        f"origin={transit.get('origin_zone_id','')} destination={owner_zone.zone_id} "
+        f"authority={old_authority} acquired_at={acquired_at}",
+    )
+    release = {
+        "released": True,
+        "reason": INTERZONE_OWNER_RELEASE_REASON,
+        "interzone_reason": INTERZONE_TRANSIT_REASON,
+        "interzone_transit": transit,
+        "owner_zone_id": owner_zone.zone_id,
+        "ownership_acquired_at": acquired_at,
+        "ownership_authority": old_authority,
+    }
+    policy = dict(analysis.execution_policy or {})
+    policy["interzone_owner_release"] = release
+    analysis.execution_policy = policy
+    analysis.trader_brief += (
+        f" Previous pre-zone {owner_zone.original_direction.value} handoff released safely while flat: "
+        f"price is in transit from {transit.get('origin_zone_id') or 'the opposite zone'} toward "
+        f"{owner_zone.zone_id}. Destination-zone contact is required before that side can reacquire authority."
+    )
+    return release
 
 
 def _active_owner_row(now: int) -> dict[str, Any] | None:
@@ -327,6 +430,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "ownership_analysis_id": str(owner.get("ownership_analysis_id") or ""),
         "ownership_anchor_price": float(owner.get("ownership_anchor_price") or 0.0),
         "reaction_confirmed_at": int(owner.get("reaction_confirmed_at") or 0),
+        "core_touched_at": int(owner.get("core_touched_at") or 0),
         "target1_hit_at": int(owner.get("target1_hit_at") or 0),
         "target2_hit_at": int(owner.get("target2_hit_at") or 0),
         "target3_hit_at": int(owner.get("target3_hit_at") or 0),
@@ -511,6 +615,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     if not SETTINGS.paper_only:
         return None
 
+    _release_interzone_prezone_owner(analysis, snapshot)
     owner = _active_owner_row(int(snapshot.sent_at))
     policy = dict(analysis.execution_policy or {})
 

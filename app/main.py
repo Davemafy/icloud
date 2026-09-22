@@ -357,12 +357,13 @@ def _journal_target_progress(a, z) -> dict:
     if a is None or z is None:
         return {"next_open": None, "remaining": [], "completed": [], "scope": "NONE"}
 
-    targets = [
-        float(z.original_target1 or 0.0),
-        float(z.original_target2 or 0.0),
-        float(z.original_target3 or 0.0),
+    indexed_targets = [
+        (1, float(z.original_target1 or 0.0)),
+        (2, float(z.original_target2 or 0.0)),
+        (3, float(z.original_target3 or 0.0)),
     ]
-    targets = [x for x in targets if x > 0]
+    indexed_targets = [(idx, target) for idx, target in indexed_targets if target > 0]
+    all_targets = [target for _, target in indexed_targets]
     meta = dict((a.execution_policy or {}).get("active_thesis") or {})
     is_owner = bool(
         meta.get("locked")
@@ -376,15 +377,40 @@ def _journal_target_progress(a, z) -> dict:
         # publish an active-thesis objective until a handoff actually owns it.
         return {
             "next_open": None,
-            "remaining": targets,
+            "remaining": all_targets,
             "completed": [],
             "scope": "PLAN",
         }
 
+    authority = str(meta.get("ownership_authority") or "")
+    anchor = float(meta.get("ownership_anchor_price") or 0.0)
+    prezone_handoff = bool(
+        authority == "LIQUIDITY_REVERSAL_HANDOFF"
+        and anchor > 0
+        and (
+            (z.original_direction.value == "SELL" and anchor < float(z.zone_low))
+            or (z.original_direction.value == "BUY" and anchor > float(z.zone_high))
+        )
+    )
+
+    # Only objectives that were still on the profit side when authority began can
+    # be called completed by this owner. A SELL target already above a pre-zone
+    # handoff anchor (or BUY target already below it) is stale plan context, not a TP.
+    live_targets: list[tuple[int, float]] = []
+    for idx, target in indexed_targets:
+        if anchor <= 0:
+            live = True
+        elif z.original_direction.value == "SELL":
+            live = target < anchor
+        else:
+            live = target > anchor
+        if live:
+            live_targets.append((idx, target))
+
     best = float(meta.get("best_price") or 0.0)
     remaining: list[float] = []
     completed: list[float] = []
-    for idx, target in enumerate(targets, start=1):
+    for idx, target in live_targets:
         hit_at = int(meta.get(f"target{idx}_hit_at") or 0)
         crossed = bool(
             best > 0
@@ -399,7 +425,7 @@ def _journal_target_progress(a, z) -> dict:
         "next_open": remaining[0] if remaining else None,
         "remaining": remaining,
         "completed": completed,
-        "scope": "ACTIVE_THESIS",
+        "scope": "PREZONE_HANDOFF" if prezone_handoff else "ACTIVE_THESIS",
     }
 
 

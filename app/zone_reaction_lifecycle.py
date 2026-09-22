@@ -7,7 +7,7 @@ from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 from .db import connect
 
-REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V6520"
+REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V6555"
 TERMINAL = {"OBJECTIVE_COMPLETE", "INVALIDATED", "INVALIDATED_AFTER_REACTION"}
 
 
@@ -165,6 +165,22 @@ def _crossed(direction: str, best: float, target: float) -> bool:
     return best <= target if direction == Direction.SELL.value else best >= target
 
 
+def _objective_anchor(row: Any) -> float:
+    """Return the price from which objective progress is allowed to begin."""
+    acquired_at = int(row["ownership_acquired_at"] or 0) if "ownership_acquired_at" in row.keys() else 0
+    ownership_anchor = float(row["ownership_anchor_price"] or 0.0) if "ownership_anchor_price" in row.keys() else 0.0
+    if acquired_at > 0 and ownership_anchor > 0:
+        return ownership_anchor
+    return float(row["core_low"] if str(row["direction"]) == Direction.SELL.value else row["core_high"])
+
+
+def _target_live_from_anchor(direction: str, target: float, anchor: float) -> bool:
+    """A target already behind the activation anchor was never completed by this thesis."""
+    if target <= 0 or anchor <= 0:
+        return False
+    return target < anchor if direction == Direction.SELL.value else target > anchor
+
+
 def update_zone_reactions(snapshot: MarketSnapshot) -> None:
     """Advance persisted zone lifecycle from live/closed market evidence.
 
@@ -235,14 +251,21 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
             t1_hit = int(row["target1_hit_at"] or 0)
             t2_hit = int(row["target2_hit_at"] or 0)
             t3_hit = int(row["target3_hit_at"] or 0)
-            if not t1_hit and _crossed(direction, best, target1):
+            objective_anchor = _objective_anchor(row)
+            t1_live = _target_live_from_anchor(direction, target1, objective_anchor)
+            t2_live = _target_live_from_anchor(direction, target2, objective_anchor)
+            t3_live = _target_live_from_anchor(direction, target3, objective_anchor)
+            if not t1_hit and t1_live and _crossed(direction, best, target1):
                 t1_hit = now
-            if not t2_hit and _crossed(direction, best, target2):
+            if not t2_hit and t2_live and _crossed(direction, best, target2):
                 t2_hit = now
-            if not t3_hit and _crossed(direction, best, target3):
+            if not t3_hit and t3_live and _crossed(direction, best, target3):
                 t3_hit = now
 
-            valid_targets = [x for x in (target1,target2,target3) if x > 0]
+            valid_targets = [
+                target for target, live in ((target1,t1_live),(target2,t2_live),(target3,t3_live))
+                if target > 0 and live
+            ]
             deepest_hit = False
             if valid_targets:
                 deepest = valid_targets[-1]

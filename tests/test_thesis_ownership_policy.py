@@ -418,3 +418,124 @@ def test_bplus_cannot_acquire_new_execution_ownership_directly(tmp_path, monkeyp
 
     assert acquired is None
     assert policy.active_owner_snapshot(10_000) is None
+
+
+def _seed_interzone_liquidity_owner(tmp_path, monkeypatch, *, open_positions: int):
+    path = tmp_path / "interzone_liquidity_owner.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    sell = _zone("SELL_REMOTE", Direction.SELL, 555, Grade.A_PLUS)
+    sell.core_low = 120.0
+    sell.core_high = 121.0
+    sell.zone_low = 118.0
+    sell.zone_high = 123.0
+    sell.original_target1 = 110.0
+    sell.original_target2 = 105.0
+    sell.original_target3 = 90.0
+
+    buy = _zone("BUY_ORIGIN", Direction.BUY, 556, Grade.B_PLUS)
+    buy.core_low = 91.0
+    buy.core_high = 94.0
+    buy.zone_low = 88.0
+    buy.zone_high = 95.0
+    buy.original_target1 = 118.0
+
+    first = Analysis(
+        analysis_id="A_INTERZONE_OWNER",
+        generated_at=10_000,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id=sell.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    snap = _snapshot(100.0)
+    register_analysis_zones(first)
+    acquired = policy.acquire_execution_ownership(
+        first,
+        snap,
+        "LIQUIDITY_REVERSAL_HANDOFF",
+        sell.zone_id,
+        anchor_price=110.0,
+    )
+    assert acquired is not None
+
+    db.save_heartbeat(
+        Heartbeat(
+            ts=10_000,
+            ea="InstitutionalSMC_SequenceEA",
+            version="3.38",
+            symbol="XAUUSD",
+            details={
+                "open_positions": open_positions,
+                "restart_safe": open_positions == 0,
+            },
+        )
+    )
+    return snap, sell, buy, str(acquired["reaction_key"])
+
+
+def test_flat_prezone_liquidity_owner_releases_during_interzone_transit(tmp_path, monkeypatch):
+    snap, sell, buy, key = _seed_interzone_liquidity_owner(
+        tmp_path,
+        monkeypatch,
+        open_positions=0,
+    )
+    current = Analysis(
+        analysis_id="A_INTERZONE_CURRENT",
+        generated_at=10_001,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id=sell.zone_id,
+    )
+
+    owner_zone = policy.apply_thesis_ownership(current, snap)
+
+    assert owner_zone is None
+    assert current.selected_zone_id == sell.zone_id
+    assert current.execution_policy["active_thesis"]["locked"] is False
+    release = current.execution_policy["interzone_owner_release"]
+    assert release["released"] is True
+    assert release["reason"] == policy.INTERZONE_OWNER_RELEASE_REASON
+    assert release["interzone_transit"]["origin_zone_id"] == buy.zone_id
+    assert release["interzone_transit"]["destination_zone_id"] == sell.zone_id
+
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_acquired_at,last_reason FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert int(row["ownership_acquired_at"] or 0) == 0
+    assert policy.INTERZONE_OWNER_RELEASE_REASON in str(row["last_reason"])
+
+
+def test_prezone_liquidity_owner_stays_fail_closed_with_open_positions(tmp_path, monkeypatch):
+    snap, sell, buy, key = _seed_interzone_liquidity_owner(
+        tmp_path,
+        monkeypatch,
+        open_positions=1,
+    )
+    current = Analysis(
+        analysis_id="A_INTERZONE_OPEN_POSITION",
+        generated_at=10_001,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id=sell.zone_id,
+    )
+
+    owner_zone = policy.apply_thesis_ownership(current, snap)
+
+    assert owner_zone is not None
+    assert owner_zone.zone_id == sell.zone_id
+    assert current.execution_policy["active_thesis"]["locked"] is True
+    assert "interzone_owner_release" not in current.execution_policy
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_acquired_at FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert int(row["ownership_acquired_at"] or 0) == 10_000
