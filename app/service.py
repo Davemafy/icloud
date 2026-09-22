@@ -52,7 +52,7 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
     zone_map["prompt_contract_ref"] = PROMPT_SELECTION_CONTRACT
     zone_map["selection_priority"] = [
         "STRUCTURAL_VALIDITY",
-        "A_OR_A_PLUS_EXECUTION_TIER",
+        "GRADE_SCALED_EXECUTION_TIER",
         "CORRECT_SIDE_OF_CURRENT_PRICE",
         "INTRADAY_REACHABILITY",
         "FRESHNESS",
@@ -61,6 +61,8 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
         "CONFLUENCE_QUALITY",
     ]
     zone_map["nearer_valid_a_zone_can_outrank_remote_fresher_a_zone"] = True
+    zone_map["bplus_is_reduced_risk_not_watch_only"] = True
+    zone_map["grade_risk_pct"] = {"A+": 1.00, "A": 0.75, "B+": 0.25}
     policy["public_zone_map"] = zone_map
     a.execution_policy = policy
 
@@ -267,8 +269,8 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         register_analysis_zones(a)
     # PAPER/DEMO ONLY: after a confirmed directional expansion, allow a fresh
     # displacement/FVG retest with nearby structural liquidity to replace a remote
-    # same-direction primary. Exhausted B+/multi-touch countertrend zones are kept
-    # as lifecycle/context truth but removed from the execution map. An already-
+    # same-direction primary. Only genuinely exhausted three-plus-touch countertrend
+    # zones are removed from the execution map; eligible B+ remains reduced-risk. An already-
     # acquired thesis is protected and disables this re-ranking.
     apply_dynamic_continuation_rezone(a, s)
     # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
