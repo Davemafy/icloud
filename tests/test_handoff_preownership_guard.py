@@ -220,3 +220,45 @@ def test_buy_prezone_handoff_is_blocked_while_price_is_between_sell_and_buy_zone
     assert handoff["reason"] == "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
     assert handoff["interzone_transit"]["origin_zone_id"] == "SELL_ORIGIN"
     assert handoff["interzone_transit"]["destination_zone_id"] == "BUY_REMOTE"
+
+
+def test_sell_prezone_handoff_is_blocked_while_price_is_still_inside_lower_buy_zone():
+    sell = _sell_zone(target1=90.0)
+    # Mirrors the live failure shape: current price is inside the lower BUY
+    # envelope, while the higher SELL envelope has not been reached yet.
+    buy = Zone(
+        zone_id="BUY_INTERACTING_ORIGIN",
+        original_direction=Direction.BUY,
+        flip_direction=Direction.SELL,
+        setup_type="REVERSAL",
+        source_tf="H4>H1",
+        grade=Grade.B_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=99.0,
+        core_high=101.0,
+        core_method="INTERACTING|TEST",
+        location_score=7.0,
+        zone_low=96.0,
+        zone_high=115.0,
+        touch_count=11,
+        independent_confluence_count=3,
+        confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE"],
+        source_ts=20,
+        invalidation_level=96.0,
+        invalidation_rule="M15 accepted invalidation",
+        original_target1=118.0,
+        clear_run=5.0,
+    )
+    analysis = _analysis(sell)
+    analysis.zones = [sell, buy]
+
+    handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
+
+    assert handoff["active"] is False
+    assert handoff["authority"] == "NONE"
+    assert handoff["reason"] == "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
+    transit = handoff["interzone_transit"]
+    assert transit["origin_zone_id"] == buy.zone_id
+    assert transit["destination_zone_id"] == sell.zone_id
+    assert buy.zone_low <= transit["current_price"] <= buy.zone_high
+    assert transit["current_price"] < sell.zone_low
