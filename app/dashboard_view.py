@@ -11,8 +11,8 @@ _EXECUTION_CONTRACT_BINDING = "$('policy').textContent=JSON.stringify(a.executio
 _EXECUTION_POLICY_BINDING = "window.tradeZoneExecutionPolicy=a.execution_policy||{};"
 _FRESHNESS_LABEL_BINDING = "fresh_zone:'Fresh zone (0–1 touch)'"
 _FRESHNESS_LABEL_REPLACEMENT = (
-    "fresh_zone:(z.zone_id?(z.zone_id+' freshness (0–1 touch)'):"
-    "'Selected-zone freshness (0–1 touch)')"
+    "fresh_zone:(z.zone_id?(z.zone_id+' touch eligibility (A+/A ≤1 • B+ ≤2)'):"
+    "'Selected-zone touch eligibility (A+/A ≤1 • B+ ≤2)')"
 )
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
 _JOURNAL_CONTEXT_CARD = (
