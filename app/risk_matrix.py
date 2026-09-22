@@ -10,8 +10,8 @@ RISK_CONTEXT_TREND = "TREND"
 RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
 
 # Professional research contract:
-# - quality grade stays independent from D1 alignment;
-# - context changes capital at risk, not the structural grade;
+# - TREND and COUNTERTREND use different structural qualification models;
+# - the resulting A+/A label then maps to the context-specific risk budget below;
 # - B+ remains visible research context but cannot acquire NEW execution authority.
 EXECUTION_GRADES = {Grade.A_PLUS, Grade.A}
 
@@ -80,6 +80,10 @@ def matrix_payload() -> dict[str, Any]:
         "B+": 0.0,
         "bplus_execution_authority": False,
         "touch_limits": {"A+": 1, "A": 2, "B+": 0},
+        "grading_contract": {
+            "TREND": "continuation-source strength + freshness",
+            "COUNTERTREND": "HTF extremity + structural liquidity sweep/rejection + reversal-response quality",
+        },
         "note": "Base thesis risk is context x grade before entry-share and model-specific multipliers.",
     }
 
