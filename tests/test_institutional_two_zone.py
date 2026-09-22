@@ -147,3 +147,41 @@ def test_m15_accepted_invalidation_removes_zone(monkeypatch):
     assert zones == []
     diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
     assert diag["rejection_code"] == "M15_ACCEPTED_INVALIDATION"
+
+
+def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_contact(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=1)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=4.0)
+    ])
+    snap = _snapshot(mid=103.95)
+
+    zones = policy.apply_two_zone_institutional_map(analysis, snap)
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert snap.ask < zone.core_low
+    assert policy.primary_zone_approaching(zone, snap) is True
+    assert policy.primary_zone_interacting(zone, snap) is False
+    assert zone.core_method.startswith("ARMED|")
+    assert analysis.execution_policy["public_zone_map"]["sell"]["state"] == "ARMED"
+
+
+def test_live_quote_overlap_with_core_labels_zone_interacting(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=1)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=4.0)
+    ])
+    snap = _snapshot(mid=104.50)
+
+    zones = policy.apply_two_zone_institutional_map(analysis, snap)
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert snap.ask >= zone.core_low
+    assert snap.bid <= zone.core_high
+    assert policy.primary_zone_interacting(zone, snap) is True
+    assert zone.core_method.startswith("INTERACTING|")
+    assert analysis.execution_policy["public_zone_map"]["sell"]["state"] == "INTERACTING"
