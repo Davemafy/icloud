@@ -267,7 +267,7 @@ def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict
         return False, meta
     if str(meta.get("direction") or "") != zone.original_direction.value:
         return False, meta
-    if zone.grade not in {Grade.A_PLUS, Grade.A} or zone.state != ZoneState.ACTIVE:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or zone.state != ZoneState.ACTIVE:
         return False, meta
     if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
         fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
