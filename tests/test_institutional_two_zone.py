@@ -263,3 +263,27 @@ def test_core_edge_chop_is_one_qualified_mitigation_until_envelope_exit():
         100.0, 101.0, 98.0, 103.0, 100, bars, raw_touch_episodes=4
     )
     assert mitigations == 2
+
+
+def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_execution_grade(monkeypatch):
+    candidate = _buy_reversal_candidate()
+    _patch_common(monkeypatch, candidate, touches=8)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_SSL", price=92.0, side="BELOW", source_tf="H4", distance=3.0)
+    ])
+    analysis.overall_bias = Direction.SELL
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot(mid=100.0))
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert zone.grade == Grade.B_PLUS
+    assert zone.touch_count == 8
+    assert "structural_grade:A+" in zone.notes
+    assert "current_execution_grade:B+" in zone.notes
+    assert "grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS" in zone.notes
+    public = analysis.execution_policy["public_zone_map"]["buy"]
+    assert public["structural_grade"] == "A+"
+    assert public["grade"] == "B+"
+    assert public["qualified_mitigations"] == 8
+    assert public["grade_degrade_reason"] == "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
