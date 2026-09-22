@@ -4,6 +4,7 @@ from typing import Any
 
 from .config import SETTINGS
 from .engine import atr, liquidity_map
+from .execution_safety import has_live_directional_target
 from .models import Analysis, Direction, Grade, MarketSnapshot, ZoneState
 
 LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6519"
@@ -128,6 +129,8 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
         return _inactive("NO_SAME_DIRECTION_A_TIER_CONTEXT_ZONE")
     if str(zone.dxy_support).upper() == "CONFLICT":
         return _inactive("DXY_CONFLICT")
+    if not has_live_directional_target(zone, snapshot):
+        return _inactive("NO_LIVE_DIRECTIONAL_TARGET")
 
     bars = list(snapshot.xau_m15)
     if len(bars) < 12:

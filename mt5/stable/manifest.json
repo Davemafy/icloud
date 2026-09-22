@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.25",
+  "release": "6.3.26",
   "repository": "Davemafy/icloud",
-  "ref": "23e378091859fbf3fabc9224528134316e32603a",
-  "data_bridge_version": "1.44",
+  "ref": "f1411ceed7b9b26bae9ba2328acf5089231fcef1",
+  "data_bridge_version": "1.45",
   "sequence_ea_version": "3.36",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -131,16 +131,20 @@
     "post_handoff_target_already_traded_guard",
     "minimum_rr_enforced_at_order_gate",
     "entry_decision_rr_audit",
-    "sequence_336_truth_overlay"
+    "sequence_336_truth_overlay",
+    "liquidity_handoff_live_target_preownership_guard",
+    "ownership_brief_lifecycle_truth",
+    "journal_immediate_resync_on_cloud_version_change",
+    "journal_periodic_continuity_resync"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_44_Sequence336Truth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_45_JournalContinuity.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_45_JournalContinuity.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_45_JournalContinuity.mq5",
       "requires_reload": true,
-      "sha256": "f1e180f6990e4213baa73fda4e7df4abf871da405f9f1be13a2d120f7f4f8906"
+      "sha256": "d56bd2f066eb8af77b503d68fff78122e2576ec0fe96a3828c5b24732a24cd0a"
     },
     {
       "role": "sequence_ea",

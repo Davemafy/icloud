@@ -404,10 +404,9 @@ def acquire_execution_ownership(
         f"thesis_owner:{zone.original_direction.value}:{owner.get('status','INTERACTING')}",
         *[n for n in zone.notes if not str(n).startswith("thesis_owner:")],
     ]
-    analysis.trader_brief += (
-        f" Execution ownership acquired by {authority} for {zone.original_direction.value} {zone.zone_id}; "
-        "ordinary WATCH interaction alone cannot create this lock."
-    )
+    # Do not bake a point-in-time "ownership acquired" statement into the long
+    # institutional brief. The persisted row is audit truth, while active_thesis is
+    # the authoritative CURRENT lock state and may legitimately release later.
     return owner
 
 
