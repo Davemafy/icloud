@@ -278,7 +278,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # PAPER/DEMO ONLY: after a confirmed directional expansion, allow a fresh
     # displacement/FVG retest with nearby structural liquidity to replace a remote
     # same-direction primary. Only genuinely exhausted three-plus-touch countertrend
-    # zones are removed from the execution map; eligible B+ remains reduced-risk. An already-
+    # zones are removed from the execution map; B+ remains visible research context but cannot acquire new execution authority. An already-
     # acquired thesis is protected and disables this re-ranking.
     apply_dynamic_continuation_rezone(a, s)
     # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
