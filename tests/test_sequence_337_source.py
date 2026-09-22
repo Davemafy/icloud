@@ -21,6 +21,9 @@ def test_v337_grade_scaled_fixed_capital_risk_contract():
     assert 'if(grade=="B+")return ResearchRiskPctBPlus;' in text
     assert "return MathMin(cap,bal);" in text
     assert "GRADE_SCALED_INITIAL_CAPITAL_V1" in text
+    assert \'"risk_model\\":\\"%s\\"\' in text
+    assert \'"grade_risk_pct\\":%.4f\' in text
+    assert \'"risk_money\\":%.2f\' in text
 
 
 def test_v337_lot_sizing_floors_and_never_rounds_subminimum_up():
