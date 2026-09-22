@@ -22,7 +22,7 @@ DYNAMIC_CONTINUATION_CONTRACT = "DYNAMIC_CONTINUATION_REZONE_V6521"
 MAX_H1_EVENT_AGE_BARS = 8
 MAX_H4_EVENT_AGE_BARS = 3
 REPLACE_ADVANTAGE_H1_ATR = 0.35
-COUNTERTREND_DEMOTE_TOUCHES = 2
+COUNTERTREND_DEMOTE_TOUCHES = 3
 STRONG_EVENT_MIN_STRENGTH = 1.80
 STRONG_EVENT_MAX_AGE_BARS = 3
 
@@ -365,8 +365,8 @@ def _sync_public_map(analysis: Analysis) -> None:
 def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
     """Re-rank fresh trend-continuation locations after a strong displacement leg.
 
-    Historical countertrend demand/supply remains lifecycle truth, but an exhausted
-    B+/multi-touch countertrend zone is removed from the *execution map* during a
+    Historical countertrend demand/supply remains lifecycle truth, but only an exhausted
+    three-plus-touch countertrend zone is removed from the *execution map* during a
     confirmed same-direction expansion. A nearer continuation FVG can replace a
     remote primary only when it comes from a recent BOS displacement and has nearby
     structural BSL/SSL inside a V659 liquidity-centered core. This function never
@@ -406,20 +406,20 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     if not expansion["aligned"]:
         return analysis
 
-    # Demote only exhausted countertrend locations. Fresh A/A+ reversal zones still
-    # remain visible because a strong trend does not prove that every opposing HTF
-    # source is invalid.
+    # Demote only genuinely exhausted countertrend locations. A structurally valid B+
+    # second-touch zone remains eligible for reduced-risk research execution; trend
+    # alignment alone does not prove that the opposing HTF source is invalid.
     kept: list[Zone] = []
     for zone in analysis.zones:
         exhausted_countertrend = bool(
             zone.original_direction != context
-            and (zone.grade == Grade.B_PLUS or int(zone.touch_count) >= COUNTERTREND_DEMOTE_TOUCHES)
+            and int(zone.touch_count) >= COUNTERTREND_DEMOTE_TOUCHES
         )
         if exhausted_countertrend:
             audit_meta["demoted_context_zones"].append(
                 {
                     **_zone_payload(zone),
-                    "reason": "COUNTERTREND_BPLUS_OR_MULTI_TOUCH_DURING_ALIGNED_EXPANSION",
+                    "reason": "COUNTERTREND_EXHAUSTED_THREE_PLUS_TOUCHES_DURING_ALIGNED_EXPANSION",
                     "execution_authority": False,
                 }
             )
@@ -472,7 +472,7 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
             z
             for z in analysis.zones
             if z.original_direction == context
-            and z.grade in {Grade.A_PLUS, Grade.A}
+            and z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
             and z.state == ZoneState.ACTIVE
         ),
         None,

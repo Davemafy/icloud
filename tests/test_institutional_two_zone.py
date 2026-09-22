@@ -127,7 +127,7 @@ def test_repeated_mitigation_keeps_zone_visible_but_downgrades_execution(monkeyp
     assert len(zones) == 1
     assert zones[0].grade == Grade.B_PLUS
     assert zones[0].core_method.startswith("WATCH|")
-    assert analysis.selected_zone_id == ""
+    assert analysis.selected_zone_id == zones[0].zone_id
 
 
 def test_m15_accepted_invalidation_removes_zone(monkeypatch):

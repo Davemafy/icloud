@@ -97,6 +97,8 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "vwap_is_tick_volume_proxy_not_centralized_comex_volume": True,
             "order_flow_disabled_without_centralized_feed": True,
             "risk": "AI never sets lot size",
+            "grade_risk_contract": "A+=1.00%, A=0.75%, B+=0.25% of non-compounding validation capital before entry-share multipliers",
+            "bplus_execution_requires_same_structural_and_m1_gates": True,
         },
     }
 
@@ -132,9 +134,9 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    replace the required structural liquidity.
 8. Mitigation count measures strength. Fresh zones rank higher within comparable intraday relevance;
    repeated mitigation downgrades quality rather than moving the zone or manufacturing a different zone.
-9. After structural validity and A/A+ execution quality, intraday reachability ranks today's alert candidates
-   before freshness and remote HTF authority. A much nearer A/A+ valid zone should outrank a remote
-   equally-executable candidate solely because the remote zone has one fewer touch. Distance NEVER
+9. After structural validity, grade is a risk tier rather than a binary execution ban: A+ uses full validation risk, A uses reduced risk, and an eligible B+ uses the smallest reduced-risk tier. Intraday reachability ranks today's alert candidates
+   before freshness and remote HTF authority. A much nearer structurally valid zone may outrank a remote
+   higher-grade candidate only under the deterministic ranking contract; grade remains an explicit quality/risk input. Distance NEVER
    manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
 10. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
     liquidity raid does not invalidate it.

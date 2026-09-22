@@ -167,7 +167,7 @@ def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
     """Allow deterministic PAPER authority to survive an external AI outage."""
     if not SETTINGS.paper_only or not bool(analysis.approved):
         return False
-    if zone.grade not in {Grade.A_PLUS, Grade.A} or zone.state != ZoneState.ACTIVE:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or zone.state != ZoneState.ACTIVE:
         return False
     fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
     if not bool(fallback.get("active")):
@@ -267,7 +267,7 @@ def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict
         return False, meta
     if str(meta.get("direction") or "") != zone.original_direction.value:
         return False, meta
-    if zone.grade not in {Grade.A_PLUS, Grade.A} or zone.state != ZoneState.ACTIVE:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or zone.state != ZoneState.ACTIVE:
         return False, meta
     if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
         fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
@@ -350,6 +350,17 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["paper_ai_fallback_active"] = "1" if paper_ai_fallback else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
+    grade_risk_pct = (
+        SETTINGS.research_risk_pct_a_plus if zone.grade == Grade.A_PLUS
+        else SETTINGS.research_risk_pct_a if zone.grade == Grade.A
+        else SETTINGS.research_risk_pct_b_plus if zone.grade == Grade.B_PLUS
+        else 0.0
+    )
+    kv["risk_model"] = "GRADE_SCALED_INITIAL_CAPITAL_V1"
+    kv["risk_epoch"] = SETTINGS.research_risk_epoch
+    kv["validation_initial_capital"] = f"{SETTINGS.research_validation_initial_capital:.2f}"
+    kv["grade_risk_pct"] = f"{float(grade_risk_pct):.2f}"
+    kv["bplus_reduced_risk"] = "1" if zone.grade == Grade.B_PLUS else "0"
 
     handoff_ts = 0
     if owner_continuation_ready:

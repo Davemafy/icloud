@@ -18,6 +18,7 @@ from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 MAX_READY_TOUCHES = 1
+BPLUS_MAX_READY_TOUCHES = 2
 READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
 READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
@@ -72,6 +73,11 @@ def _structural_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
 
 def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
     return bool(_structural_zone_health(zone, snapshot) and _core_ready(zone, snapshot))
+
+
+def _execution_touch_limit(zone: Zone) -> int:
+    """B+ is a reduced-risk research tier, not a permission to ignore exhaustion."""
+    return BPLUS_MAX_READY_TOUCHES if zone.grade == Grade.B_PLUS else MAX_READY_TOUCHES
 
 
 def _reaction_key(zone: Zone) -> str:
@@ -175,7 +181,7 @@ def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if zone.grade not in {Grade.A_PLUS, Grade.A} or int(zone.touch_count) > MAX_READY_TOUCHES:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or int(zone.touch_count) > _execution_touch_limit(zone):
         return {}
     label, liquidity_price = _attached_liquidity(zone)
     if liquidity_price <= 0:
@@ -230,7 +236,7 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if zone.grade not in {Grade.A_PLUS, Grade.A} or int(zone.touch_count) > MAX_READY_TOUCHES:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or int(zone.touch_count) > _execution_touch_limit(zone):
         return {}
 
     row = _lifecycle_row(zone)
@@ -295,9 +301,9 @@ def watch_zone_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
         return False
     if _readiness(zone) not in READY_INPUT_STATES:
         return False
-    if zone.grade not in {Grade.A_PLUS, Grade.A}:
+    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}:
         return False
-    if int(zone.touch_count) > MAX_READY_TOUCHES:
+    if int(zone.touch_count) > _execution_touch_limit(zone):
         return False
     if _common_zone_health(zone, snapshot):
         return True
@@ -435,7 +441,7 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
 
     def rank(z: Zone) -> tuple:
         distance = _distance_to_range(float(snapshot.mid), float(z.core_low), float(z.core_high))
-        grade_rank = 0 if z.grade == Grade.A_PLUS else 1
+        grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2}.get(z.grade, 9)
         bias_rank = 0 if z.original_direction == analysis.overall_bias else 1
         tf_rank = 0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2
         return (

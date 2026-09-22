@@ -29,9 +29,10 @@ This release separates historical zone truth from current execution relevance.
 
 During an aligned directional expansion:
 
-- A countertrend B+ zone or a countertrend zone with two or more touches is removed from the current execution map.
+- A countertrend zone is removed from the current execution map only after genuine exhaustion at three or more core touches.
 - It is not deleted from historical lifecycle truth.
-- Fresh A/A+ opposing reversal locations remain visible because trend direction does not prove that every opposing HTF source is invalid.
+- A structurally valid B+ second-touch zone remains eligible for the reduced-risk execution tier; trend direction alone does not prove that the opposing HTF source is invalid.
+- Fresh A/A+ opposing reversal locations remain visible under the same principle.
 
 ## Continuation sequence
 

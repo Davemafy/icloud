@@ -509,7 +509,7 @@ def _set_readiness(zone: Zone, readiness: str) -> None:
 
 
 def primary_zone_interacting(zone: Zone, snapshot: MarketSnapshot) -> bool:
-    if zone.state != ZoneState.ACTIVE or zone.grade not in {Grade.A_PLUS, Grade.A}:
+    if zone.state != ZoneState.ACTIVE or zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}:
         return False
     if evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15) != ZoneState.ACTIVE:
         return False
@@ -556,7 +556,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     for zone in analysis.zones:
         _set_readiness(zone, "INTERACTING" if primary_zone_interacting(zone, snapshot) else _readiness(zone))
 
-    executable = [z for z in analysis.zones if z.grade in {Grade.A_PLUS, Grade.A} and z.state == ZoneState.ACTIVE]
+    executable = [z for z in analysis.zones if z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} and z.state == ZoneState.ACTIVE]
     preferred = next((z for z in executable if z.original_direction == context), None)
     if preferred is None and executable:
         preferred = min(executable, key=lambda z: _distance(snapshot.mid, z.core_low, z.core_high))

@@ -462,7 +462,7 @@ def _journal_snapshot():
         "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
         "clear_run": bool(z and z.clear_run > 0),
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
-        "grade_executable": bool(z and z.grade.value in {"A+", "A"}),
+        "grade_executable": bool(z and z.grade.value in {"A+", "A", "B+"}),
         "m1_handoff_ready": bool(z and readiness == "M1_READY"),
         "live_data_safe": bool(
             s

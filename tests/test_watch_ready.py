@@ -283,7 +283,7 @@ def test_confirmed_thesis_can_continue_from_same_core_after_display_downgrade():
     assert "execution_role:THESIS_CONTINUATION" in z.notes
 
 
-def test_same_bplus_second_touch_zone_has_no_new_primary_authority_without_thesis():
+def test_bplus_second_touch_zone_can_receive_reduced_risk_primary_authority():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=2)
     a = Analysis(
@@ -293,4 +293,12 @@ def test_same_bplus_second_touch_zone_has_no_new_primary_authority_without_thesi
         zones=[z],
         selected_zone_id="Z1",
     )
-    assert promote_watch_to_m1_ready(a, s) is None
+    selected = promote_watch_to_m1_ready(a, s)
+    assert selected is z
+    assert z.core_method.startswith("M1_READY|")
+
+
+def test_bplus_third_touch_is_still_exhausted_and_blocked():
+    s = _snapshot(100.0)
+    z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=3)
+    assert watch_zone_ready(z, s) is False

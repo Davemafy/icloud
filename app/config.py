@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.48"
+    app_version: str = "6.5.49"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -83,6 +83,14 @@ class Settings:
     max_spread_points: float = _f("MAX_SPREAD_POINTS", 35.0)
     news_entry_lock_minutes: int = _i("NEWS_ENTRY_LOCK_MINUTES", 15)
     news_post_revalidate_minutes: int = _i("NEWS_POST_REVALIDATE_MINUTES", 10)
+
+    # DEMO/PAPER grade-scaled risk validation. The research capital does not
+    # compound upward; live equity below the anchor reduces the sizing base.
+    research_validation_initial_capital: float = _f("RESEARCH_VALIDATION_INITIAL_CAPITAL", 10000.0)
+    research_risk_pct_a_plus: float = _f("RESEARCH_RISK_PCT_A_PLUS", 1.00)
+    research_risk_pct_a: float = _f("RESEARCH_RISK_PCT_A", 0.75)
+    research_risk_pct_b_plus: float = _f("RESEARCH_RISK_PCT_B_PLUS", 0.25)
+    research_risk_epoch: str = os.getenv("RESEARCH_RISK_EPOCH", "RISK_NORMALIZED_10000_V1")
 
     # M15 outer-envelope acceptance -> flip candidate.
     m15_single_accept_body_fraction: float = _f("M15_SINGLE_ACCEPT_BODY_FRACTION", 0.60)
