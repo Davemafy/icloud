@@ -149,7 +149,7 @@ double TZ38_ThesisBudget(bool flip,string grade)
    double pct=0.0;
    if(flip)
    {
-      pct=(g_tzFlipPlanStored&&g_tzAcceptedFlipRiskPct>0?g_tzAcceptedFlipRiskPct:g_tzFlipRiskPct);
+      pct=(g_tzAcceptedFlipRiskPct>0?g_tzAcceptedFlipRiskPct:g_tzFlipRiskPct);
       if(pct<=0)pct=TZ38_DefaultContextRiskPct(grade,TZ38_OppositeRiskContext(g_tzRiskContext));
    }
    else
