@@ -316,23 +316,110 @@ def _psy_in_zone(low: float, high: float, liq) -> bool:
     return any(str(x.label).upper() == "PSY" and float(low) <= float(x.price) <= float(high) for x in liq)
 
 
-def _grade(candidate: PromptCandidate, touches: int, location_score: float) -> Grade:
+def _qualified_mitigations(
+    core_low: float,
+    core_high: float,
+    zone_low: float,
+    zone_high: float,
+    source_ts: int,
+    bars: list[Bar],
+    raw_touch_episodes: int,
+) -> int:
+    """Count distinct mitigation cycles, not every core-edge oscillation.
+
+    A new mitigation is counted only after price has first interacted with the
+    tactical core, then closed outside the full institutional envelope, and later
+    re-enters the core. Continuous chop/absorption inside one envelope therefore
+    remains one mitigation campaign instead of being counted many times.
+    """
+    if not bars:
+        return int(raw_touch_episodes)
+    count = 0
+    can_count = True
+    for bar in bars:
+        if int(bar.ts) <= int(source_ts):
+            continue
+        hit_core = float(bar.high) >= float(core_low) and float(bar.low) <= float(core_high)
+        outside_envelope = float(bar.close) < float(zone_low) or float(bar.close) > float(zone_high)
+        if hit_core and can_count:
+            count += 1
+            can_count = False
+        elif outside_envelope:
+            can_count = True
+    return count
+
+
+def _grade(
+    candidate: PromptCandidate,
+    mitigations: int,
+    location_score: float,
+    *,
+    countertrend: bool,
+    structural_liquidity_tf: str,
+    psy_confluence: bool,
+) -> Grade:
+    """Context-specific structural grade using only information available pre-entry.
+
+    Trend setups are rewarded for continuation-source quality and freshness.
+    Countertrend setups are graded by reversal-location quality: HTF overlap,
+    external structural liquidity, sweep/rejection evidence, displacement/volume
+    quality, and premium/discount extremity. Later profit after leaving the zone
+    never upgrades the historical grade; that would introduce look-ahead bias.
+    """
+    tf = str(candidate.source_tf).upper()
+    liq_tf = str(structural_liquidity_tf).upper()
+    htf_liquidity = liq_tf in {"D1", "H4"}
+    sweep_rejection = "SWEEP_REJECTION" in str(candidate.source_kind).upper()
+    displacement = "DISPLACEMENT_BOS_SOURCE" in str(candidate.source_kind).upper()
+
+    if countertrend:
+        reversal_evidence = sum(
+            (
+                1 if sweep_rejection else 0,
+                1 if candidate.fvg else 0,
+                1 if candidate.volume_expansion else 0,
+                1 if candidate.strength >= 2.0 else 0,
+                1 if psy_confluence else 0,
+            )
+        )
+        # Countertrend A+ is not a weaker version of trend A+. It is a different
+        # pattern: extreme HTF location + structural liquidity raid/rejection +
+        # strong source response. Capital remains lower through the risk matrix.
+        if (
+            tf == "H4>H1"
+            and htf_liquidity
+            and location_score >= 7.0
+            and candidate.strength >= 2.0
+            and sweep_rejection
+            and reversal_evidence >= 2
+            and mitigations <= 1
+        ):
+            return Grade.A_PLUS
+        if (
+            tf in {"H4>H1", "H4"}
+            and htf_liquidity
+            and location_score >= 6.0
+            and candidate.strength >= 1.6
+            and (sweep_rejection or displacement)
+            and reversal_evidence >= 1
+            and mitigations <= 2
+        ):
+            return Grade.A
+        return Grade.B_PLUS
+
     score = 0
-    score += 3 if candidate.source_tf == "H4>H1" else 2 if candidate.source_tf == "H4" else 1
+    score += 3 if tf == "H4>H1" else 2 if tf == "H4" else 1
     score += 2 if candidate.strength >= 2.0 else 1 if candidate.strength >= 1.6 else 0
     score += 1 if candidate.fvg else 0
-    score += 1 if "SWEEP_REJECTION" in candidate.source_kind else 0
+    score += 1 if displacement else 0
     score += 1 if candidate.volume_expansion else 0
-    score += 2 if touches == 0 else 1 if touches == 1 else 0 if touches == 2 else -3
+    score += 2 if mitigations == 0 else 1 if mitigations == 1 else 0 if mitigations == 2 else -3
     score += 1 if location_score >= 7.0 else 0
-    # Quality grade remains independent from trend/countertrend context. A strong
-    # second-touch source may remain A and trade at the A risk tier. Three-plus
-    # mitigations are B+ research context only.
-    if touches >= 3:
+    if mitigations >= 3:
         return Grade.B_PLUS
-    if score >= 8 and touches <= 1:
+    if score >= 8 and mitigations <= 1:
         return Grade.A_PLUS
-    if score >= 5:
+    if score >= 5 and mitigations <= 2:
         return Grade.A
     return Grade.B_PLUS
 
@@ -401,10 +488,28 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         }
 
     zone_low, zone_high, sweep_room = geometry
-    touches = _touches(core_low, core_high, int(candidate.source_ts), snapshot.xau_m15)
+    raw_touch_episodes = _touches(core_low, core_high, int(candidate.source_ts), snapshot.xau_m15)
+    touches = _qualified_mitigations(
+        core_low,
+        core_high,
+        zone_low,
+        zone_high,
+        int(candidate.source_ts),
+        snapshot.xau_m15,
+        raw_touch_episodes,
+    )
     core_mid = (core_low + core_high) / 2.0
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
-    grade = _grade(candidate, touches, loc)
+    countertrend = context not in (Direction.NEUTRAL, candidate.direction)
+    psy_confluence = _psy_in_zone(zone_low, zone_high, liq)
+    grade = _grade(
+        candidate,
+        touches,
+        loc,
+        countertrend=countertrend,
+        structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
+        psy_confluence=psy_confluence,
+    )
     conf = {"LIQUIDITY_IN_MARKED_ZONE", f"{required}_IN_MARKED_ZONE", "SOURCE_CANDLE_ANCHORED", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "SWEEP_ROOM_RESERVED"}
     if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
         conf.add("INSTITUTIONAL_DISPLACEMENT")
@@ -416,7 +521,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         conf.add("HISTORICAL_DISPLACEMENT_FVG")
     if candidate.volume_expansion:
         conf.add("TICK_VOLUME_EXPANSION")
-    if _psy_in_zone(zone_low, zone_high, liq):
+    if psy_confluence:
         conf.add("PSYCHOLOGICAL_LEVEL_CONFLUENCE")
     if loc >= 7:
         conf.add("PREMIUM_DISCOUNT_EXTREMITY")
@@ -428,7 +533,6 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     vals = original_targets + [0.0] * (4 - len(original_targets))
     fvals = flip_targets + [0.0] * (4 - len(flip_targets))
     clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
-    countertrend = context not in (Direction.NEUTRAL, candidate.direction)
     readiness = "ARMED" if ((grade == Grade.A_PLUS and touches <= 1) or (grade == Grade.A and touches <= 2)) else "WATCH"
 
     zone = Zone(
@@ -471,8 +575,12 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"core_width_points:{_to_points(core_high - core_low, snapshot):.1f}",
             f"envelope_width_points:{_to_points(zone_high - zone_low, snapshot):.1f}",
             f"sweep_room_points:{_to_points(sweep_room, snapshot):.1f}",
-            f"mitigations:{touches}",
+            f"raw_core_touch_episodes:{raw_touch_episodes}",
+            f"qualified_mitigations:{touches}",
+            f"grade_context:{'COUNTERTREND_REVERSAL' if countertrend else 'TREND_CONTINUATION'}",
             "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
+            "Touch count means distinct envelope-exit/re-entry mitigations; core-edge chop inside one envelope is one campaign.",
+            "Grade uses only pre-entry structural evidence. Momentum after price leaves the zone validates execution quality but cannot retroactively upgrade the zone.",
             "D1 gives context. H4 is primary. H1 refines/falls back. M15 validates health. M1 only times entry.",
         ],
     )
@@ -484,6 +592,8 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "zone_high": round(zone_high, 5),
         "envelope_width_points": round(_to_points(zone_high - zone_low, snapshot), 1),
         "touches": touches,
+        "raw_touch_episodes": raw_touch_episodes,
+        "grade_context": "COUNTERTREND_REVERSAL" if countertrend else "TREND_CONTINUATION",
         "attached_liquidity": f"{attached.label}@{float(attached.price):.5f}",
         "sweep_room_points": round(_to_points(sweep_room, snapshot), 1),
         "distance_h1_atr": round(_distance(snapshot.mid, zone_low, zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
@@ -653,13 +763,19 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         "psy_is_confluence_not_qualification": True,
         "dxy_is_confirmation_not_qualification": True,
         "mitigation_count_affects_grade_not_zone_geometry": True,
+        "touch_count_semantics": "DISTINCT_ENVELOPE_EXIT_REENTRY_MITIGATIONS",
+        "context_specific_grade_models": {
+            "TREND": "CONTINUATION_SOURCE_STRENGTH_FRESHNESS",
+            "COUNTERTREND": "HTF_EXTREMITY_LIQUIDITY_SWEEP_REJECTION_RESPONSE",
+        },
+        "post_reaction_profit_never_upgrades_historical_grade": True,
         "wick_only_does_not_invalidate": True,
         "rejected_diagnostics": rejected_summary,
         **public,
     }
     analysis.execution_policy = policy
     summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only."
+    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. Touches are distinct envelope-exit/re-entry mitigations, not every core-edge oscillation. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
     return analysis.zones
 
 
