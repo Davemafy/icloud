@@ -18,9 +18,9 @@ OWNER_MIN_BUFFER_POINTS = 5.0
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
-    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. WATCH/B+ or repeatedly mitigated
-    zones may remain visible and may have lifecycle reactions, but they cannot block the opposite side
-    merely because price interacted with them. Once a qualified handoff has acquired ownership, that
+    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. WATCH state alone or an exhausted
+    repeatedly mitigated zone may remain visible, but cannot block the opposite side merely because price interacted with it.
+    An eligible B+ zone may own execution only after a deterministic core/zone-sweep handoff and remains reduced-risk. Once a qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
     completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
     from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
