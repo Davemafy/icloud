@@ -36,12 +36,12 @@ def test_read_only_map_execution_context_is_injected_without_execution_calls():
 
     assert 'id="journalContext"' in cleaned
     assert 'id="ownershipState"' in cleaned
-    assert "Map / execution ownership" in cleaned
+    assert "Map / thesis ownership &amp; M1 authority" in cleaned
     assert "READ ONLY" in cleaned
     assert 'id="journal-context-readonly-script"' in cleaned
-    assert "EXECUTION OWNER" in cleaned
-    assert "WATCH ONLY • NO M1 AUTHORITY" in cleaned
-    assert "No acquired thesis lock and no M1-authorized zone" in cleaned
+    assert "THESIS OWNER • DIRECTION LOCK" in cleaned
+    assert "WATCH ONLY • BLOCKED BY ACTIVE THESIS" in cleaned
+    assert "No acquired thesis lock and no current M1-authorized zone" in cleaned
     assert "/mt5/plan" not in cleaned
     # The dashboard recovery layer may use read-only REST fetches, but the
     # ownership panel itself must never call the executable MT5 plan/order path.
@@ -77,6 +77,11 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert "This is not a location failure." in cleaned
     assert "HTF location/source quality only" in cleaned
     assert "Do not chase the existing move" in cleaned
+    assert "there is no current M1 location handoff or new-entry authority" in cleaned
+    assert "Current M1 location handoff " in cleaned
+    assert "Cloud execution authority " in cleaned
+    assert "Sequence authority " in cleaned
+    assert "matches the active thesis owner" in cleaned
     assert "This is not entry authorization" in cleaned
     assert "live Sequence EA must still complete sweep" in cleaned
     assert "thesis origin/ownership anchor" in cleaned
