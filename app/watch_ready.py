@@ -235,7 +235,7 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
     """
     if not _structural_zone_health(zone, snapshot):
         return {}
-    if !execution_grade_eligible(zone):
+    if not execution_grade_eligible(zone):
         return {}
 
     row = _lifecycle_row(zone)
