@@ -24,10 +24,11 @@ def _zone(
     readiness="WATCH",
     direction=Direction.BUY,
     touches=1,
+    zone_id="Z1",
 ) -> Zone:
     required = "SSL_IN_MARKED_ZONE" if direction == Direction.BUY else "BSL_IN_MARKED_ZONE"
     return Zone(
-        zone_id="Z1",
+        zone_id=zone_id,
         original_direction=direction,
         flip_direction=direction.opposite(),
         setup_type="REVERSAL",
@@ -107,6 +108,82 @@ def test_promote_sets_selected_zone_and_m1_ready_marker():
     assert z.core_method.startswith("M1_READY|")
     assert "readiness:M1_READY" in z.notes
     assert a.execution_policy["execution_window"]["mode"] == "CORE_NOW"
+
+
+def test_no_owner_countertrend_interaction_can_override_remote_d1_plan_selection():
+    s = _snapshot(100.0)
+    sell = _zone(
+        zone_id="SELL_REMOTE",
+        core_low=110.0,
+        core_high=111.0,
+        source_tf="H4>H1",
+        grade=Grade.A_PLUS,
+        readiness="ARMED",
+        direction=Direction.SELL,
+    )
+    buy = _zone(
+        zone_id="BUY_LOCAL",
+        core_low=99.5,
+        core_high=100.5,
+        source_tf="H1",
+        grade=Grade.A,
+        readiness="INTERACTING",
+        direction=Direction.BUY,
+    )
+    a = Analysis(
+        analysis_id="A_COUNTER",
+        generated_at=1,
+        snapshot_at=1,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id="SELL_REMOTE",
+    )
+
+    selected = promote_watch_to_m1_ready(a, s)
+
+    assert selected is buy
+    assert a.selected_zone_id == "BUY_LOCAL"
+    assert buy.core_method.startswith("M1_READY|")
+    competition = a.execution_policy["m1_authority_competition"]
+    assert competition["initial_selected_zone_id"] == "SELL_REMOTE"
+    assert competition["winner_zone_id"] == "BUY_LOCAL"
+    assert competition["winner_direction"] == "BUY"
+    assert competition["winner_overrode_plan_selection"] is True
+
+
+def test_d1_context_breaks_tie_only_after_live_location_and_grade():
+    s = _snapshot(100.0)
+    sell = _zone(
+        zone_id="SELL_LOCAL",
+        core_low=99.5,
+        core_high=100.5,
+        source_tf="H1",
+        grade=Grade.A,
+        readiness="INTERACTING",
+        direction=Direction.SELL,
+    )
+    buy = _zone(
+        zone_id="BUY_LOCAL",
+        core_low=99.5,
+        core_high=100.5,
+        source_tf="H1",
+        grade=Grade.A,
+        readiness="INTERACTING",
+        direction=Direction.BUY,
+    )
+    a = Analysis(
+        analysis_id="A_TIE",
+        generated_at=1,
+        snapshot_at=1,
+        overall_bias=Direction.SELL,
+        zones=[buy, sell],
+        selected_zone_id="BUY_LOCAL",
+    )
+
+    selected = promote_watch_to_m1_ready(a, s)
+
+    assert selected is sell
+    assert a.selected_zone_id == "SELL_LOCAL"
 
 
 def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
