@@ -455,7 +455,7 @@ def test_global_execution_authority_precedes_bplus_shadow_key_for_sequence_v338(
     analysis = _analysis(zone)
     snap = _snapshot(4306.50, spread_points=16.0)
     raw = (
-        "ea_mode=WATCH_ONLY\n"
+        "ea_mode=DUAL_BRANCH\n"
         "zone_state=ACTIVE\n"
         "original_direction=SELL\n"
         "bplus_execution_authority=0\n"
