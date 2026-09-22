@@ -197,6 +197,8 @@ Lifecycle:
 - If accepted invalidation occurs only after a valid reaction, history becomes `INVALIDATED_AFTER_REACTION`; the prior successful reaction remains preserved.
 - A historical reaction record is observation/journal truth only. It grants no automatic execution authority to an old zone.
 - A fresh continuation/re-entry still requires the normal live execution contract and thesis validity.
+- Context-grade V2 migration rule: a historical owner whose frozen zone is no longer execution-eligible (notably a pre-V2 B+ owner) must not monopolize execution forever after its campaign is flat. Its execution lock may be retired only when a fresh Sequence heartbeat explicitly reports zero open positions. If Sequence position truth is stale/unavailable or positions remain open, keep the lock fail-closed. Retiring the execution lock must preserve the reaction lifecycle, objective history and audit trail.
+- After such a flat legacy lock is retired, the normal no-owner A+/A two-sided authority rules resume; no opposite trade is created automatically and fresh location plus the full M1 sequence remain mandatory.
 
 ## Directional target safety
 
