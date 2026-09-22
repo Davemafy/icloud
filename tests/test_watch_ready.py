@@ -86,10 +86,10 @@ def test_wrong_liquidity_side_blocks_ready():
     assert watch_zone_ready(z, s) is False
 
 
-def test_second_mitigation_blocks_ready():
+def test_second_mitigation_a_grade_remains_ready():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4>H1", readiness="INTERACTING", touches=2)
-    assert watch_zone_ready(z, s) is False
+    assert watch_zone_ready(z, s) is True
 
 
 def test_armed_zone_stays_not_ready_until_core_interaction():
