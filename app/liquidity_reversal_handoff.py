@@ -5,7 +5,8 @@ from typing import Any
 from .config import SETTINGS
 from .engine import atr, liquidity_map
 from .execution_safety import has_live_directional_target
-from .models import Analysis, Direction, Grade, MarketSnapshot, ZoneState
+from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
+from .risk_matrix import execution_grade_eligibleState
 
 LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6519"
 LOOKBACK_M15_BARS = 8
@@ -88,13 +89,13 @@ def _context_zone(analysis: Analysis, direction: Direction):
         z for z in analysis.zones
         if z.state == ZoneState.ACTIVE
         and z.original_direction == direction
-        and z.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
+        and execution_grade_eligible(z)
     ]
     if not candidates:
         return None
     candidates.sort(
         key=lambda z: (
-            {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2}.get(z.grade, 9),
+            {Grade.A_PLUS: 0, Grade.A: 1}.get(z.grade, 9),
             0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2,
             -float(z.location_score),
             int(z.touch_count),
