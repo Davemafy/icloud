@@ -349,6 +349,114 @@ def _qualified_mitigations(
     return count
 
 
+def _grade_audit(
+    candidate: PromptCandidate,
+    mitigations: int,
+    location_score: float,
+    *,
+    countertrend: bool,
+    structural_liquidity_tf: str,
+    psy_confluence: bool,
+) -> dict:
+    """Return the deterministic grade plus the exact criteria that produced it."""
+    tf = str(candidate.source_tf).upper()
+    liq_tf = str(structural_liquidity_tf).upper()
+    htf_liquidity = liq_tf in {"D1", "H4"}
+    sweep_rejection = "SWEEP_REJECTION" in str(candidate.source_kind).upper()
+    displacement = "DISPLACEMENT_BOS_SOURCE" in str(candidate.source_kind).upper()
+    reversal_evidence = sum(
+        (
+            1 if sweep_rejection else 0,
+            1 if candidate.fvg else 0,
+            1 if candidate.volume_expansion else 0,
+            1 if candidate.strength >= 2.0 else 0,
+            1 if psy_confluence else 0,
+        )
+    )
+
+    if countertrend:
+        aplus_checks = {
+            "h4_h1_source": tf == "H4>H1",
+            "htf_structural_liquidity": htf_liquidity,
+            "location_ge_7": location_score >= 7.0,
+            "strength_ge_2": candidate.strength >= 2.0,
+            "sweep_rejection": sweep_rejection,
+            "reversal_evidence_ge_2": reversal_evidence >= 2,
+            "mitigations_le_1": mitigations <= 1,
+        }
+        a_checks = {
+            "h4_or_h4_h1_source": tf in {"H4>H1", "H4"},
+            "htf_structural_liquidity": htf_liquidity,
+            "location_ge_6": location_score >= 6.0,
+            "strength_ge_1_6": candidate.strength >= 1.6,
+            "sweep_or_displacement": sweep_rejection or displacement,
+            "reversal_evidence_ge_1": reversal_evidence >= 1,
+            "mitigations_le_2": mitigations <= 2,
+        }
+        if all(aplus_checks.values()):
+            grade = Grade.A_PLUS
+        elif all(a_checks.values()):
+            grade = Grade.A
+        else:
+            grade = Grade.B_PLUS
+        return {
+            "grade": grade,
+            "model": "COUNTERTREND_REVERSAL",
+            "source_tf": tf,
+            "structural_liquidity_tf": liq_tf,
+            "location_score": round(float(location_score), 4),
+            "source_strength": round(float(candidate.strength), 4),
+            "reversal_evidence_count": int(reversal_evidence),
+            "sweep_rejection": bool(sweep_rejection),
+            "displacement": bool(displacement),
+            "fvg": bool(candidate.fvg),
+            "volume_expansion": bool(candidate.volume_expansion),
+            "psy_confluence": bool(psy_confluence),
+            "mitigations": int(mitigations),
+            "aplus_checks": aplus_checks,
+            "a_checks": a_checks,
+            "aplus_missing": [name for name, ok in aplus_checks.items() if not ok],
+            "a_missing": [name for name, ok in a_checks.items() if not ok],
+        }
+
+    score_parts = {
+        "source_tf": 3 if tf == "H4>H1" else 2 if tf == "H4" else 1,
+        "strength": 2 if candidate.strength >= 2.0 else 1 if candidate.strength >= 1.6 else 0,
+        "fvg": 1 if candidate.fvg else 0,
+        "displacement": 1 if displacement else 0,
+        "volume_expansion": 1 if candidate.volume_expansion else 0,
+        "freshness": 2 if mitigations == 0 else 1 if mitigations == 1 else 0 if mitigations == 2 else -3,
+        "location": 1 if location_score >= 7.0 else 0,
+    }
+    score = int(sum(score_parts.values()))
+    if mitigations >= 3:
+        grade = Grade.B_PLUS
+    elif score >= 8 and mitigations <= 1:
+        grade = Grade.A_PLUS
+    elif score >= 5 and mitigations <= 2:
+        grade = Grade.A
+    else:
+        grade = Grade.B_PLUS
+    return {
+        "grade": grade,
+        "model": "TREND_CONTINUATION",
+        "source_tf": tf,
+        "location_score": round(float(location_score), 4),
+        "source_strength": round(float(candidate.strength), 4),
+        "score": score,
+        "score_parts": score_parts,
+        "mitigations": int(mitigations),
+        "aplus_threshold": "score>=8 and mitigations<=1",
+        "a_threshold": "score>=5 and mitigations<=2",
+        "aplus_missing": (
+            ["mitigations_le_1"] if mitigations > 1 else []
+        ) + (["score_ge_8"] if score < 8 else []),
+        "a_missing": (
+            ["mitigations_le_2"] if mitigations > 2 else []
+        ) + (["score_ge_5"] if score < 5 else []),
+    }
+
+
 def _grade(
     candidate: PromptCandidate,
     mitigations: int,
@@ -358,70 +466,15 @@ def _grade(
     structural_liquidity_tf: str,
     psy_confluence: bool,
 ) -> Grade:
-    """Context-specific structural grade using only information available pre-entry.
-
-    Trend setups are rewarded for continuation-source quality and freshness.
-    Countertrend setups are graded by reversal-location quality: HTF overlap,
-    external structural liquidity, sweep/rejection evidence, displacement/volume
-    quality, and premium/discount extremity. Later profit after leaving the zone
-    never upgrades the historical grade; that would introduce look-ahead bias.
-    """
-    tf = str(candidate.source_tf).upper()
-    liq_tf = str(structural_liquidity_tf).upper()
-    htf_liquidity = liq_tf in {"D1", "H4"}
-    sweep_rejection = "SWEEP_REJECTION" in str(candidate.source_kind).upper()
-    displacement = "DISPLACEMENT_BOS_SOURCE" in str(candidate.source_kind).upper()
-
-    if countertrend:
-        reversal_evidence = sum(
-            (
-                1 if sweep_rejection else 0,
-                1 if candidate.fvg else 0,
-                1 if candidate.volume_expansion else 0,
-                1 if candidate.strength >= 2.0 else 0,
-                1 if psy_confluence else 0,
-            )
-        )
-        # Countertrend A+ is not a weaker version of trend A+. It is a different
-        # pattern: extreme HTF location + structural liquidity raid/rejection +
-        # strong source response. Capital remains lower through the risk matrix.
-        if (
-            tf == "H4>H1"
-            and htf_liquidity
-            and location_score >= 7.0
-            and candidate.strength >= 2.0
-            and sweep_rejection
-            and reversal_evidence >= 2
-            and mitigations <= 1
-        ):
-            return Grade.A_PLUS
-        if (
-            tf in {"H4>H1", "H4"}
-            and htf_liquidity
-            and location_score >= 6.0
-            and candidate.strength >= 1.6
-            and (sweep_rejection or displacement)
-            and reversal_evidence >= 1
-            and mitigations <= 2
-        ):
-            return Grade.A
-        return Grade.B_PLUS
-
-    score = 0
-    score += 3 if tf == "H4>H1" else 2 if tf == "H4" else 1
-    score += 2 if candidate.strength >= 2.0 else 1 if candidate.strength >= 1.6 else 0
-    score += 1 if candidate.fvg else 0
-    score += 1 if displacement else 0
-    score += 1 if candidate.volume_expansion else 0
-    score += 2 if mitigations == 0 else 1 if mitigations == 1 else 0 if mitigations == 2 else -3
-    score += 1 if location_score >= 7.0 else 0
-    if mitigations >= 3:
-        return Grade.B_PLUS
-    if score >= 8 and mitigations <= 1:
-        return Grade.A_PLUS
-    if score >= 5 and mitigations <= 2:
-        return Grade.A
-    return Grade.B_PLUS
+    """Context-specific grade using only information available before entry."""
+    return _grade_audit(
+        candidate,
+        mitigations,
+        location_score,
+        countertrend=countertrend,
+        structural_liquidity_tf=structural_liquidity_tf,
+        psy_confluence=psy_confluence,
+    )["grade"]
 
 
 def _dxy(snapshot: MarketSnapshot) -> Direction:
@@ -502,7 +555,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
     countertrend = context not in (Direction.NEUTRAL, candidate.direction)
     psy_confluence = _psy_in_zone(zone_low, zone_high, liq)
-    structural_grade = _grade(
+    structural_audit = _grade_audit(
         candidate,
         0,
         loc,
@@ -510,7 +563,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
         psy_confluence=psy_confluence,
     )
-    grade = _grade(
+    current_audit = _grade_audit(
         candidate,
         touches,
         loc,
@@ -518,6 +571,8 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
         psy_confluence=psy_confluence,
     )
+    structural_grade = structural_audit["grade"]
+    grade = current_audit["grade"]
     grade_degrade_reason = ""
     if structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
         grade_degrade_reason = "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
@@ -595,6 +650,10 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"structural_grade:{structural_grade.value}",
             f"current_execution_grade:{grade.value}",
             f"grade_degrade_reason:{grade_degrade_reason or 'NONE'}",
+            f"structural_aplus_missing:{','.join(structural_audit.get('aplus_missing') or []) or 'NONE'}",
+            f"structural_a_missing:{','.join(structural_audit.get('a_missing') or []) or 'NONE'}",
+            f"grade_location_score:{float(loc):.4f}",
+            f"grade_source_strength:{float(candidate.strength):.4f}",
             f"grade_context:{'COUNTERTREND_REVERSAL' if countertrend else 'TREND_CONTINUATION'}",
             "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
             "Touch count means distinct envelope-exit/re-entry mitigations; core-edge chop inside one envelope is one campaign.",
@@ -614,6 +673,14 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "structural_grade": structural_grade.value,
         "current_execution_grade": grade.value,
         "grade_degrade_reason": grade_degrade_reason or "NONE",
+        "structural_grade_audit": {
+            **{k: v for k, v in structural_audit.items() if k != "grade"},
+            "grade": structural_grade.value,
+        },
+        "current_grade_audit": {
+            **{k: v for k, v in current_audit.items() if k != "grade"},
+            "grade": grade.value,
+        },
         "grade_context": "COUNTERTREND_REVERSAL" if countertrend else "TREND_CONTINUATION",
         "attached_liquidity": f"{attached.label}@{float(attached.price):.5f}",
         "sweep_room_points": round(_to_points(sweep_room, snapshot), 1),
@@ -743,6 +810,10 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "structural_grade": structural_grade,
             "grade": zone.grade.value,
             "grade_degrade_reason": degrade_reason,
+            "structural_aplus_missing": next((str(n).split(":",1)[1] for n in zone.notes if str(n).startswith("structural_aplus_missing:")), "NONE"),
+            "structural_a_missing": next((str(n).split(":",1)[1] for n in zone.notes if str(n).startswith("structural_a_missing:")), "NONE"),
+            "grade_location_score": _note_float(zone, "grade_location_score:"),
+            "grade_source_strength": _note_float(zone, "grade_source_strength:"),
             "low": zone.zone_low,
             "high": zone.zone_high,
             "core_low": zone.core_low,
