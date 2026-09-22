@@ -149,6 +149,12 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
     it can become primary. Do not manufacture a reserve if no second independent institutional source qualifies.
 13. M1 cannot redefine the HTF zone. Once any zone becomes primary, execution still requires the existing
     sweep -> MSS/BOS -> displacement -> new dealing range -> value/OTE/PD-array sequence.
+14. When there is NO acquired thesis owner, a valid PRIMARY BUY and PRIMARY SELL are independent execution
+    candidates. The zone currently at a qualifying M1 handoff location may receive execution authority even
+    when it is counter to D1. D1 remains context and a tie-breaker; it must not monopolize authority merely
+    because the D1-aligned zone was pre-selected. After one side earns a valid handoff and ownership, normal
+    thesis ownership blocks the opposite side until release. Countertrend authority never bypasses the full
+    M1 sequence, safety guards, target-direction checks, news/spread guards, or minimum-RR gate.
 
 This contract comes from the user's institutional XAU framework: identify the MOST IMPORTANT levels where
 price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15 structure,
