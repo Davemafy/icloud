@@ -84,6 +84,8 @@ This is mandatory for the intraday alert map:
 - Countertrend is not downgraded merely because D1 points the other way; instead it must satisfy the dedicated reversal rubric.
 - Base thesis risk uses the context x grade matrix before sequence-share/model multipliers: TREND A+ = 1.00%, TREND A = 0.75%, COUNTERTREND A+ = 0.50%, COUNTERTREND A = 0.25%.
 - Historical profit after price leaves a zone must never retroactively upgrade that zone's grade. Strong post-reaction momentum validates lifecycle/execution quality and future re-entry research, not the original pre-entry classification.
+- Dashboard grade truth is dual-axis: **Structural grade** describes source quality before reuse/freshness penalty, while **Current execution grade** applies qualified mitigation/freshness degradation for a new entry now. Example: a structurally A+ countertrend reversal may later display `A+ -> B+` after three-plus qualified mitigations. That means the source was strong but is exhausted for fresh execution; it does not rewrite the original setup quality.
+- Once the tactical core first interacts, the lifecycle record freezes the grade that existed at that interaction so later re-analysis cannot rewrite historical setup quality.
 - Among already-valid execution-grade candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
 - A nearer valid zone may outrank a remote fresher zone under the deterministic ranking contract; grade remains an explicit quality/risk tiebreaker.
 - Freshness remains important after intraday reachability is established; repeated mitigation still downgrades quality.

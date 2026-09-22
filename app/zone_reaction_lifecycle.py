@@ -25,7 +25,7 @@ def register_analysis_zones(analysis: Analysis) -> None:
     """Persist the institutional identity of every published primary zone.
 
     Before first core interaction, a repeated analysis may refresh geometry/targets.
-    Once the core has interacted, the historical geometry and objective ladder are
+    Once the core has interacted, the historical grade, geometry and objective ladder are
     frozen so later re-analysis cannot rewrite what the market actually reacted to.
     Execution ownership is separate and is never acquired merely by registration or
     interaction.
@@ -63,7 +63,7 @@ def register_analysis_zones(analysis: Analysis) -> None:
                     latest_analysis_id=?,
                     latest_zone_id=CASE WHEN ownership_acquired_at=0 THEN ? ELSE latest_zone_id END,
                     last_seen_at=?,
-                    grade=CASE WHEN ownership_acquired_at=0 THEN ? ELSE grade END,
+                    grade=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE grade END,
                     core_low=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE core_low END,
                     core_high=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE core_high END,
                     zone_low=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE zone_low END,

@@ -182,3 +182,41 @@ def test_prezone_owner_counts_only_targets_live_beyond_ownership_anchor(tmp_path
     assert int(row["target2_hit_at"] or 0) == progress.sent_at
     assert int(row["target3_hit_at"] or 0) == 0
     assert row["status"] == "OBJECTIVE_IN_PROGRESS"
+
+
+def test_lifecycle_grade_freezes_after_first_core_interaction(tmp_path, monkeypatch):
+    path = tmp_path / "reaction_grade_freeze.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _zone()
+    register_analysis_zones(_analysis([zone]))
+
+    update_zone_reactions(_snapshot(
+        2100, 100.5, [
+            Bar(ts=1800, open=99.5, high=100.2, low=99.0, close=99.8),
+            Bar(ts=2000, open=100.2, high=101.1, low=99.8, close=100.4),
+        ],
+    ))
+
+    downgraded = _zone()
+    downgraded.grade = Grade.B_PLUS
+    downgraded.touch_count = 8
+    later = Analysis(
+        analysis_id="A_REUSE",
+        generated_at=2200,
+        snapshot_at=2200,
+        overall_bias=Direction.SELL,
+        zones=[downgraded],
+        selected_zone_id=downgraded.zone_id,
+    )
+    register_analysis_zones(later)
+
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT grade,core_touched_at FROM zone_reactions WHERE reaction_key=?",
+            ("SELL|H4>H1|1000",),
+        ).fetchone()
+
+    assert int(row["core_touched_at"] or 0) == 2100
+    assert row["grade"] == "A+"
