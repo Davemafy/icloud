@@ -34,7 +34,7 @@ def test_professional_release_contract_is_self_consistent():
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert digest == seq["sha256"] == "34939dfd3fe41462bcdb003ddc74aa4aa6de128a6bb97a7fe43be23924ce56ef"
+    assert digest == seq["sha256"] == "51f1600ab5958a8530d19ec7df4506dc1465bed873398de044bf01f3845a986d"
 
     required = {
         "outer_zone_liquidity_sweep_execution_authority",
