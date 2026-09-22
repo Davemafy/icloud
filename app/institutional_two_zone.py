@@ -502,6 +502,14 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
     countertrend = context not in (Direction.NEUTRAL, candidate.direction)
     psy_confluence = _psy_in_zone(zone_low, zone_high, liq)
+    structural_grade = _grade(
+        candidate,
+        0,
+        loc,
+        countertrend=countertrend,
+        structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
+        psy_confluence=psy_confluence,
+    )
     grade = _grade(
         candidate,
         touches,
@@ -510,6 +518,13 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
         psy_confluence=psy_confluence,
     )
+    grade_degrade_reason = ""
+    if structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
+        grade_degrade_reason = "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
+    elif structural_grade == Grade.A_PLUS and grade == Grade.A:
+        grade_degrade_reason = "FRESHNESS_REDUCED"
+    elif structural_grade == Grade.B_PLUS:
+        grade_degrade_reason = "STRUCTURAL_QUALITY_BELOW_A"
     conf = {"LIQUIDITY_IN_MARKED_ZONE", f"{required}_IN_MARKED_ZONE", "SOURCE_CANDLE_ANCHORED", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "SWEEP_ROOM_RESERVED"}
     if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
         conf.add("INSTITUTIONAL_DISPLACEMENT")
@@ -577,6 +592,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"sweep_room_points:{_to_points(sweep_room, snapshot):.1f}",
             f"raw_core_touch_episodes:{raw_touch_episodes}",
             f"qualified_mitigations:{touches}",
+            f"structural_grade:{structural_grade.value}",
+            f"current_execution_grade:{grade.value}",
+            f"grade_degrade_reason:{grade_degrade_reason or 'NONE'}",
             f"grade_context:{'COUNTERTREND_REVERSAL' if countertrend else 'TREND_CONTINUATION'}",
             "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
             "Touch count means distinct envelope-exit/re-entry mitigations; core-edge chop inside one envelope is one campaign.",
@@ -593,6 +611,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "envelope_width_points": round(_to_points(zone_high - zone_low, snapshot), 1),
         "touches": touches,
         "raw_touch_episodes": raw_touch_episodes,
+        "structural_grade": structural_grade.value,
+        "current_execution_grade": grade.value,
+        "grade_degrade_reason": grade_degrade_reason or "NONE",
         "grade_context": "COUNTERTREND_REVERSAL" if countertrend else "TREND_CONTINUATION",
         "attached_liquidity": f"{attached.label}@{float(attached.price):.5f}",
         "sweep_room_points": round(_to_points(sweep_room, snapshot), 1),
@@ -706,11 +727,22 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         core_points = _to_points(float(zone.core_high) - float(zone.core_low), snapshot)
         envelope_points = _to_points(float(zone.zone_high) - float(zone.zone_low), snapshot)
         sweep_points = _note_float(zone, "sweep_room_points:")
+        structural_grade = next(
+            (str(n).split(":", 1)[1] for n in zone.notes if str(n).startswith("structural_grade:")),
+            zone.grade.value,
+        )
+        raw_touch_episodes = int(_note_float(zone, "raw_core_touch_episodes:"))
+        degrade_reason = next(
+            (str(n).split(":", 1)[1] for n in zone.notes if str(n).startswith("grade_degrade_reason:")),
+            "NONE",
+        )
         public[zone.original_direction.value.lower()] = {
             "zone_id": zone.zone_id,
             "state": _readiness(zone),
             "source_tf": zone.source_tf,
+            "structural_grade": structural_grade,
             "grade": zone.grade.value,
+            "grade_degrade_reason": degrade_reason,
             "low": zone.zone_low,
             "high": zone.zone_high,
             "core_low": zone.core_low,
@@ -719,12 +751,20 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "envelope_width_points": round(envelope_points, 1),
             "sweep_room_points": round(sweep_points, 1),
             "touches": zone.touch_count,
+            "qualified_mitigations": zone.touch_count,
+            "raw_core_touch_episodes": raw_touch_episodes,
             "required_liquidity": required,
             "liquidity_in_zone": True,
             "attached_liquidity": attached,
             "source_ts": zone.source_ts,
         }
-        labels.append(f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} (core={zone.core_low:.2f}-{zone.core_high:.2f},{zone.source_tf},{zone.grade.value},{_readiness(zone)},touches={zone.touch_count},{required}=IN_ZONE,sweep_room={sweep_points:.0f}pt)")
+        labels.append(
+            f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} "
+            f"(core={zone.core_low:.2f}-{zone.core_high:.2f},{zone.source_tf},"
+            f"structural={structural_grade},current={zone.grade.value},{_readiness(zone)},"
+            f"mitigations={zone.touch_count},raw_contacts={raw_touch_episodes},"
+            f"{required}=IN_ZONE,sweep_room={sweep_points:.0f}pt)"
+        )
 
     rejected_summary: dict[str, dict] = {}
     for direction in (Direction.SELL, Direction.BUY):
@@ -769,13 +809,18 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "COUNTERTREND": "HTF_EXTREMITY_LIQUIDITY_SWEEP_REJECTION_RESPONSE",
         },
         "post_reaction_profit_never_upgrades_historical_grade": True,
+        "dual_grade_truth": {
+            "structural_grade": "SOURCE_QUALITY_BEFORE_REUSE_FRESHNESS_PENALTY",
+            "current_execution_grade": "STRUCTURAL_GRADE_AFTER_QUALIFIED_MITIGATION_FRESHNESS",
+            "execution_uses_current_execution_grade_only": True,
+        },
         "wick_only_does_not_invalidate": True,
         "rejected_diagnostics": rejected_summary,
         **public,
     }
     analysis.execution_policy = policy
     summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. Touches are distinct envelope-exit/re-entry mitigations, not every core-edge oscillation. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
+    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. The map now reports structural grade separately from current execution grade: a structurally A+/A zone can become current B+ after repeated qualified reuse without rewriting what the source quality was. Touches are distinct envelope-exit/re-entry mitigations, not every core-edge oscillation. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
     return analysis.zones
 
 
