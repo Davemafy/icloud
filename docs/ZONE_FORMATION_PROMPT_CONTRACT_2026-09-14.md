@@ -77,9 +77,10 @@ This is mandatory for the intraday alert map:
 - If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
 - If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
-- A/A+ execution quality is preferred over B+ WATCH quality.
-- Among already-valid A/A+ candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
-- A nearer valid A/A+ zone must be allowed to outrank a remote valid A/A+ zone even when the remote zone has 0 touches and the nearer one has 1 touch.
+- Grade is an execution-risk tier after structural validity: A+ = 1.00%, A = 0.75%, B+ = 0.25% of the non-compounding validation-capital anchor before sequence-share multipliers.
+- B+ is not automatically WATCH-only. It may receive M1 authority when it passes the same source/liquidity/M15/location/M1/target/RR gates; it remains lowest priority and lowest risk.
+- Among already-valid execution-grade candidates on the correct side of price, TODAY'S REACHABILITY is ranked before freshness and remote HTF authority.
+- A nearer valid zone may outrank a remote fresher zone under the deterministic ranking contract; grade remains an explicit quality/risk tiebreaker.
 - Freshness remains important after intraday reachability is established; repeated mitigation still downgrades quality.
 - H4/H4>H1 authority remains a quality tiebreaker, not permission to ignore a much nearer valid institutional location.
 - Distance never creates a zone and never excuses missing BSL/SSL.
@@ -118,6 +119,19 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 - Closed M15 body acceptance beyond the outer envelope invalidates the original zone.
 - A wick-only liquidity raid does not invalidate.
 - Invalidation creates only a flip candidate; it is not an instant reverse entry.
+
+## Grade-scaled research risk
+
+DEMO / PAPER validation sizing uses a fixed validation-capital anchor rather than upward compounding.
+
+- Validation initial capital = 10,000.
+- A+ thesis budget = 1.00% of the sizing base.
+- A thesis budget = 0.75%.
+- B+ thesis budget = 0.25%.
+- Sizing base = the lesser of current realized account balance and the 10,000 validation anchor, so losses reduce future size but gains do not compound the experiment.
+- Existing primary/re-entry/flip share multipliers still apply inside that thesis budget.
+- Lot calculation must use the actual entry-to-stop monetary loss per lot when available, floor to broker volume step, and return no trade if the calculated size is below broker minimum. It must never round a sub-minimum risk upward.
+- On hedging accounts, TP1/TP2/runner splitting must never create more aggregate volume than the risk-sized total.
 
 ## M1 execution handoff
 
@@ -196,7 +210,7 @@ When there is no acquired thesis lock, the published PRIMARY BUY and PRIMARY SEL
 institutional candidates. A D1-aligned plan selection is a planning preference, not exclusive execution
 authority.
 
-- A currently interacting/qualified A or A+ primary may earn M1 authority even when it is counter to D1.
+- A currently interacting/qualified A+, A, or eligible reduced-risk B+ primary may earn M1 authority even when it is counter to D1.
 - Current executable location ranks before D1 preference. D1 remains context and a tie-breaker when
   otherwise comparable candidates are simultaneously executable.
 - The countertrend side must still pass the same HTF source, liquidity, geometry, M15 health, M1
