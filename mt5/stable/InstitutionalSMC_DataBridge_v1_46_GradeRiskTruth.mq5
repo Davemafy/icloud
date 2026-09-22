@@ -223,7 +223,7 @@ void TZ_WriteBridgeState()
    FileClose(h);
 }
 
-void TZ_SendHeartbeatV145()
+void TZ_SendHeartbeatV146()
 {
    string updater=TZ_ReadLocalKV("updater_status.txt","updater_version");
    string stable=TZ_ReadLocalKV("updater_status.txt","stable_release");
@@ -338,7 +338,7 @@ int OnInit()
 {
    int rc=TZ_BridgeCore_OnInit();
    if(rc!=INIT_SUCCEEDED)return rc;
-   TZ_SendSnapshotCycle("V145_VERIFY");
+   TZ_SendSnapshotCycle("V146_VERIFY");
    RefreshPlanContext();
    BackfillJournalHistory(true);
    g_tzLastJournalContinuitySync=TimeTradeServer();
@@ -346,7 +346,7 @@ int OnInit()
    TZR_RefreshAndRender();
    TZ_RenderTwoZoneMap();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV145();
+   TZ_SendHeartbeatV146();
    Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: journal continuity recovery + compile-safe tester guard + execution-truth overlay + V659 zones + ownership visualization.");
    return INIT_SUCCEEDED;
 }
@@ -368,7 +368,7 @@ void OnTimer()
    TZ_RenderTwoZoneMap();
    MarkPositions();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV145();
+   TZ_SendHeartbeatV146();
 }
 
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
