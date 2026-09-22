@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from .engine import atr
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
+from .risk_matrix import execution_grade_eligible
 
 SECONDARY_ZONE_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V659_SECONDARY_RESERVE"
 XAU_POINTS_PER_PIP = 10.0
-MAX_RESERVE_TOUCHES = 1
 RESERVE_GRADES = {Grade.A_PLUS, Grade.A}
 
 
@@ -33,7 +33,7 @@ def _clean_level_two(primary: Zone, reserve: Zone) -> bool:
         return False
     if reserve.grade not in RESERVE_GRADES:
         return False
-    if int(reserve.touch_count) > MAX_RESERVE_TOUCHES:
+    if not execution_grade_eligible(reserve):
         return False
 
     if primary.original_direction == Direction.SELL:
@@ -118,7 +118,7 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
     accepted: dict[Direction, list[Zone]] = {Direction.SELL: [], Direction.BUY: []}
     for index, candidate in enumerate(candidates, 1):
         zone, _ = zoning._candidate_zone(candidate, snapshot, analysis.liquidity_map, analysis.overall_bias, index)
-        if zone is not None and zone.grade in RESERVE_GRADES and int(zone.touch_count) <= MAX_RESERVE_TOUCHES:
+        if zone is not None and zone.grade in RESERVE_GRADES and execution_grade_eligible(zone):
             accepted[zone.original_direction].append(zone)
 
     primary_by_side = {z.original_direction: z for z in analysis.zones}
@@ -169,7 +169,7 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         )
     else:
         analysis.trader_brief += (
-            " Secondary reserve map: none currently qualifies. No backup level is forced; a reserve must be a separate A/A+ source beyond the primary invalidation side."
+            " Secondary reserve map: none currently qualifies. No backup level is forced; a reserve must be a separate execution-grade A+/A source beyond the primary invalidation side."
         )
 
     return analysis
