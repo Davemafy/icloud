@@ -5,6 +5,13 @@ from typing import Any
 from .config import SETTINGS
 from .engine import atr
 from .models import Analysis, Feedback, Grade, MarketSnapshot, Zone, ZoneState
+from .risk_matrix import (
+    RISK_MODEL,
+    execution_grade_eligible,
+    flip_risk_pct,
+    original_risk_pct,
+    zone_risk_context,
+)
 
 # DEMO/PAPER execution safety contract. Primary M1 SEARCH authority may begin at
 # the tactical core OR after a qualified outer-envelope interaction proves the
@@ -134,40 +141,15 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
 
 
 def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state: str) -> bool:
-    if not SETTINGS.paper_only:
-        return False
-    if zone.grade != Grade.B_PLUS or zone.state != ZoneState.ACTIVE:
-        return False
-    if str(plan_state).upper() != ZoneState.ACTIVE.value:
-        return False
-    if _readiness(zone) != "M1_READY":
-        return False
-    if "THESIS_CONTINUATION" not in str(zone.core_method or ""):
-        return False
-    if not bool(analysis.approved):
-        return False
-    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
-        fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
-        if not bool(fallback.get("active")):
-            return False
-
-    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
-    return bool(
-        meta.get("locked")
-        and meta.get("continuation_authority")
-        and str(meta.get("status") or "") in THESIS_CONTINUATION_STATUSES
-        and str(meta.get("owner_zone_id") or "") == zone.zone_id
-        and str(meta.get("direction") or "") == zone.original_direction.value
-        and bool(meta.get("owner_zone_present", True))
-        and bool(meta.get("objective_open", True))
-    )
+    """Legacy compatibility seam. B+ is context-only in the V2 risk matrix."""
+    return False
 
 
 def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
     """Allow deterministic PAPER authority to survive an external AI outage."""
     if not SETTINGS.paper_only or not bool(analysis.approved):
         return False
-    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or zone.state != ZoneState.ACTIVE:
+    if not execution_grade_eligible(zone) or zone.state != ZoneState.ACTIVE:
         return False
     fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
     if not bool(fallback.get("active")):
@@ -191,7 +173,7 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
     authority = str(meta.get("ownership_authority") or "")
     if not SETTINGS.paper_only or not bool(analysis.approved):
         return False, authority, meta
-    if zone.state != ZoneState.ACTIVE or zone.grade == Grade.REJECT:
+    if zone.state != ZoneState.ACTIVE or not execution_grade_eligible(zone):
         return False, authority, meta
     if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
         fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
@@ -267,7 +249,7 @@ def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict
         return False, meta
     if str(meta.get("direction") or "") != zone.original_direction.value:
         return False, meta
-    if zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} or zone.state != ZoneState.ACTIVE:
+    if not execution_grade_eligible(zone) or zone.state != ZoneState.ACTIVE:
         return False, meta
     if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
         fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
@@ -350,17 +332,16 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["paper_ai_fallback_active"] = "1" if paper_ai_fallback else "0"
     kv["thesis_continuation_bplus_override"] = "1" if thesis_bplus_override else "0"
     kv["zone_setup_type_original"] = str(zone.setup_type)
-    grade_risk_pct = (
-        SETTINGS.research_risk_pct_a_plus if zone.grade == Grade.A_PLUS
-        else SETTINGS.research_risk_pct_a if zone.grade == Grade.A
-        else SETTINGS.research_risk_pct_b_plus if zone.grade == Grade.B_PLUS
-        else 0.0
-    )
-    kv["risk_model"] = "GRADE_SCALED_INITIAL_CAPITAL_V1"
+    base_risk_pct = original_risk_pct(zone)
+    kv["risk_model"] = RISK_MODEL
     kv["risk_epoch"] = SETTINGS.research_risk_epoch
     kv["validation_initial_capital"] = f"{SETTINGS.research_validation_initial_capital:.2f}"
-    kv["grade_risk_pct"] = f"{float(grade_risk_pct):.2f}"
-    kv["bplus_reduced_risk"] = "1" if zone.grade == Grade.B_PLUS else "0"
+    kv["risk_context"] = zone_risk_context(zone)
+    kv["grade_risk_pct"] = f"{float(base_risk_pct):.2f}"
+    kv["original_risk_pct"] = f"{float(base_risk_pct):.2f}"
+    kv["flip_risk_pct"] = f"{float(flip_risk_pct(zone)):.2f}"
+    kv["bplus_reduced_risk"] = "0"
+    kv["bplus_execution_authority"] = "0"
 
     handoff_ts = 0
     if owner_continuation_ready:
