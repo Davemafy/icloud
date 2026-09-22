@@ -88,6 +88,9 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "displacement_bos_source_is_valid_htf_source": True,
             "fvg_is_quality_confluence_not_mandatory": True,
             "mitigation_count_affects_strength_and_grade": True,
+            "touch_count_semantics": "distinct envelope-exit/re-entry mitigations, not every core-edge oscillation",
+            "trend_countertrend_use_separate_grade_models": True,
+            "post_reaction_profit_never_upgrades_historical_grade": True,
             "m15_closed_body_acceptance_beyond_outer_envelope_invalidates": True,
             "wick_only_liquidity_raid_does_not_invalidate": True,
             "dxy_d1_h1_is_confirmation_not_zone_authority": True,
@@ -133,9 +136,17 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 7. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-8. Mitigation count measures strength. Fresh zones rank higher within comparable intraday relevance;
-   repeated mitigation downgrades quality rather than moving the zone or manufacturing a different zone.
-9. After structural validity, quality grade and D1 alignment are separate axes. A+ and A are execution grades; B+ is research context/watch only. Base thesis risk is TREND A+=1.00%, TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25% of the non-compounding validation capital before entry-share/model multipliers. Intraday reachability ranks today's alert candidates
+8. Mitigation count measures distinct institutional re-use, not every small core-edge oscillation. A new
+   mitigation requires price to leave the full envelope and later re-enter the core. Continuous chop or
+   absorption inside one envelope is one interaction campaign. Repeated qualified mitigation downgrades
+   quality rather than moving the zone or manufacturing a different zone.
+9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
+   strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/
+   rejection, reversal-source strength, displacement/FVG/volume evidence and qualified mitigation. A
+   countertrend zone is not downgraded merely because D1 points the other way; it must instead satisfy the
+   stricter reversal-location model. Never upgrade a historical zone because price later moved strongly
+   away from it; post-reaction momentum is execution/lifecycle evidence, not permission for look-ahead
+   grading. A+ and A are execution grades; B+ is research context/watch only. Base thesis risk is TREND A+=1.00%, TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25% of the non-compounding validation capital before entry-share/model multipliers. Intraday reachability ranks today's alert candidates
    before freshness and remote HTF authority. A much nearer structurally valid zone may outrank a remote
    higher-grade candidate only under the deterministic ranking contract; grade remains an explicit quality/risk input. Distance NEVER
    manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
