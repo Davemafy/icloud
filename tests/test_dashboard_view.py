@@ -91,8 +91,8 @@ def test_freshness_check_is_scoped_to_selected_zone():
         '</body>'
     )
     cleaned = compact_dashboard_html(html)
-    assert "z.zone_id+' touch eligibility (A+/A ≤1 • B+ ≤2)'" in cleaned
-    assert "Selected-zone touch eligibility (A+/A ≤1 • B+ ≤2)" in cleaned
+    assert "z.zone_id+' touch eligibility (A+ ≤1 • A ≤2 • B+ watch-only)'" in cleaned
+    assert "Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ watch-only)" in cleaned
 
 
 def test_dashboard_transform_is_idempotent():
