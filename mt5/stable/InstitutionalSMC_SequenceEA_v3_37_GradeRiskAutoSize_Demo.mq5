@@ -120,7 +120,11 @@ double TZ37_RiskBase()
 double TZ37_ThesisBudget(bool flip,string grade)
 {
    double pct=TZ37_DefaultGradeRiskPct(grade);
-   if(grade==g_plan.grade&&g_tzGradeRiskPct>0)pct=g_tzGradeRiskPct;
+   if(grade==g_plan.grade)
+   {
+      if(g_tzGradeRiskPct>0)pct=g_tzGradeRiskPct;
+      else g_tzGradeRiskPct=pct;
+   }
    double base=TZ37_RiskBase();
    g_tzLastRiskBase=base;
    double x=base*pct/100.0;
@@ -1231,6 +1235,7 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       "\"ote_low\":%.5f,\"ote_high\":%.5f,\"pd_low\":%.5f,\"pd_high\":%.5f,"
       "\"entry_low\":%.5f,\"entry_high\":%.5f,\"entry_price\":%.5f,\"stop_price\":%.5f,"
       "\"m1_atr\":%.5f,\"lots\":%.4f,\"reentries_before\":%d,"
+      "\"risk_model\":\"%s\",\"risk_epoch\":\"%s\",\"risk_base\":%.2f,\"grade_risk_pct\":%.4f,\"risk_money\":%.2f,"
       "\"nearest_open_target\":%.5f,\"rr_at_entry\":%.4f,\"min_rr_required\":%.4f,"
       "\"closed_m1_value_reaction_required\":%d,\"closed_m1_value_reaction_confirmed\":%d}",
       TZ_JsonEscape(campaign),TZ_JsonEscape(setup),TZ_JsonEscape(tag),(s.buy?"BUY":"SELL"),
@@ -1238,6 +1243,7 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       (long)breakTs,(long)pdTs,(long)reactionTs,
       s.anchor_price,s.break_level,s.impulse_extreme,s.ote_low,s.ote_high,s.pd_low,s.pd_high,
       s.entry_low,s.entry_high,entry,sl,a,lots,g_reentries,
+      TZ_JsonEscape(g_tzRiskModel),TZ_JsonEscape(g_tzRiskEpoch),g_tzLastRiskBase,g_tzGradeRiskPct,g_tzLastRiskMoney,
       openTarget,rr,rrRequired,(reactionRequired?1:0),(reactionIdx>=1?1:0));
    string body=StringFormat(
       "{\"ts\":%I64d,\"event\":\"ENTRY_DECISION\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",
