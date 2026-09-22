@@ -94,7 +94,7 @@ def _context_zone(analysis: Analysis, direction: Direction):
         return None
     candidates.sort(
         key=lambda z: (
-            0 if z.grade == Grade.A_PLUS else 1,
+            {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2}.get(z.grade, 9),
             0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2,
             -float(z.location_score),
             int(z.touch_count),
