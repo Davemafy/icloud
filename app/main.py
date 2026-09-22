@@ -457,7 +457,7 @@ def _journal_snapshot():
         }
 
     checks = {
-        "fresh_zone": bool(z and z.touch_count <= 1),
+        "fresh_zone": bool(z and z.touch_count <= (2 if z.grade.value == "B+" else 1)),
         "liquidity_in_marked_zone": bool(z and "LIQUIDITY_IN_MARKED_ZONE" in set(z.confluences)),
         "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
         "clear_run": bool(z and z.clear_run > 0),
