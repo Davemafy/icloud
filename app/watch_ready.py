@@ -409,22 +409,51 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
             return _mark_ready(analysis, current, snapshot, thesis_continuation=False)
         return None
 
-    if analysis.selected_zone_id:
-        current = next((z for z in analysis.zones if z.zone_id == analysis.selected_zone_id), None)
-        if current is None or not watch_zone_ready(current, snapshot):
-            return None
-        candidates = [current]
-    else:
-        candidates = [z for z in analysis.zones if watch_zone_ready(z, snapshot)]
+    # With no acquired thesis owner, BOTH independently qualified A/A+ primary
+    # sides are allowed to compete for M1 authority. The pre-selected zone is a
+    # planning preference (normally D1-aligned), not an execution monopoly.
+    # Current executable location comes first; D1 context is retained only as a
+    # tie-breaker after location and grade. Once a handoff acquires ownership,
+    # the active-thesis branch above remains sticky and blocks the opposite side.
+    initial_selected = str(analysis.selected_zone_id or "")
+    candidates = [z for z in analysis.zones if watch_zone_ready(z, snapshot)]
 
+    policy = dict(analysis.execution_policy or {})
+    competition = {
+        "contract": "NO_OWNER_TWO_SIDED_M1_AUTHORITY_V1",
+        "mode": "LOCATION_FIRST_D1_TIEBREAK",
+        "initial_selected_zone_id": initial_selected,
+        "daily_context": analysis.overall_bias.value,
+        "ready_candidates": [z.zone_id for z in candidates],
+        "winner_zone_id": "",
+        "paper_only": True,
+    }
     if not candidates:
+        policy["m1_authority_competition"] = competition
+        analysis.execution_policy = policy
         return None
 
     def rank(z: Zone) -> tuple:
         distance = _distance_to_range(float(snapshot.mid), float(z.core_low), float(z.core_high))
         grade_rank = 0 if z.grade == Grade.A_PLUS else 1
+        bias_rank = 0 if z.original_direction == analysis.overall_bias else 1
         tf_rank = 0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2
-        return (distance, grade_rank, tf_rank, -float(z.location_score), int(z.touch_count))
+        return (
+            distance,
+            grade_rank,
+            bias_rank,
+            tf_rank,
+            -float(z.location_score),
+            int(z.touch_count),
+        )
 
     candidates.sort(key=rank)
-    return _mark_ready(analysis, candidates[0], snapshot, thesis_continuation=False)
+    winner = candidates[0]
+    competition["winner_zone_id"] = winner.zone_id
+    competition["winner_direction"] = winner.original_direction.value
+    competition["winner_overrode_plan_selection"] = bool(
+        initial_selected and initial_selected != winner.zone_id
+    )
+    policy["m1_authority_competition"] = competition
+    analysis.execution_policy = policy
+    return _mark_ready(analysis, winner, snapshot, thesis_continuation=False)

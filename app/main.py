@@ -354,7 +354,7 @@ def _sequence_debug_snapshot() -> dict:
 
 def _journal_target_progress(a, z) -> dict:
     if a is None or z is None:
-        return {"next_open": None, "remaining": [], "completed": []}
+        return {"next_open": None, "remaining": [], "completed": [], "scope": "NONE"}
 
     targets = [
         float(z.original_target1 or 0.0),
@@ -369,10 +369,15 @@ def _journal_target_progress(a, z) -> dict:
         and str(meta.get("direction") or "") == z.original_direction.value
     )
     if not is_owner:
+        # These are map/plan objectives only. Calling target1 the "next open
+        # thesis objective" before ownership exists makes the dashboard look as
+        # if a live thesis is already active. Keep the ladder visible, but do not
+        # publish an active-thesis objective until a handoff actually owns it.
         return {
-            "next_open": targets[0] if targets else None,
+            "next_open": None,
             "remaining": targets,
             "completed": [],
+            "scope": "PLAN",
         }
 
     best = float(meta.get("best_price") or 0.0)
@@ -393,6 +398,7 @@ def _journal_target_progress(a, z) -> dict:
         "next_open": remaining[0] if remaining else None,
         "remaining": remaining,
         "completed": completed,
+        "scope": "ACTIVE_THESIS",
     }
 
 
@@ -489,6 +495,7 @@ def _journal_snapshot():
         "next_open_thesis_objective": target_progress["next_open"],
         "remaining_thesis_targets": target_progress["remaining"],
         "completed_thesis_targets": target_progress["completed"],
+        "target_scope": target_progress["scope"],
         "trader_brief": a.trader_brief if a else "",
         "execution_policy": a.execution_policy if a else {},
         "zone": zone,
