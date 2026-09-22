@@ -8,7 +8,8 @@ from .execution_safety import has_live_directional_target
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from .risk_matrix import execution_grade_eligible
 
-LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6519"
+LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6555"
+INTERZONE_TRANSIT_REASON = "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
 LOOKBACK_M15_BARS = 8
 MAX_EVENT_AGE_BARS = 4
 MIN_SWEEP_BUFFER_M15_ATR = 0.05
@@ -27,7 +28,9 @@ _AI_RULE = """
     liquidity object; it must never be relabeled or rendered as an institutional zone. This handoff is
     not an entry. MT5 must still produce the full M1 sweep/internal-sweep -> MSS/BOS -> displacement ->
     dealing-range -> OTE/PD-array value sequence. It uses reduced paper risk and never bypasses spread,
-    news, snapshot, target-direction, or account-safety guards.
+    news, snapshot, target-direction, or account-safety guards. When price is clearly between an
+    opposite-side mapped origin zone and the remote same-direction destination zone, inter-zone transit
+    has priority: the remote destination may not acquire liquidity-reversal ownership before zone contact.
 """
 
 
@@ -84,6 +87,57 @@ def _structure_break(bars, index: int, direction: Direction) -> bool:
     return close > max(float(b.high) for b in prior)
 
 
+def interzone_transit_guard(
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+    destination_zone: Zone,
+) -> dict[str, Any]:
+    """Block remote opposite-direction ownership while price is between mapped zones.
+
+    Example: price has left a lower BUY zone and is still below a higher SELL zone.
+    In that corridor the SELL zone is a destination, not an already-acquired SELL
+    thesis. The mirror rule applies while price travels down from SELL toward BUY.
+    B+ may act as contextual origin evidence even though it is not executable.
+    """
+    px = float(snapshot.mid)
+    direction = destination_zone.original_direction
+    if direction == Direction.SELL:
+        destination_ahead = px < float(destination_zone.zone_low)
+        origins = [
+            z for z in analysis.zones
+            if z.state == ZoneState.ACTIVE
+            and z.original_direction == Direction.BUY
+            and float(z.zone_high) < px
+        ]
+        origin = max(origins, key=lambda z: float(z.zone_high), default=None)
+    elif direction == Direction.BUY:
+        destination_ahead = px > float(destination_zone.zone_high)
+        origins = [
+            z for z in analysis.zones
+            if z.state == ZoneState.ACTIVE
+            and z.original_direction == Direction.SELL
+            and float(z.zone_low) > px
+        ]
+        origin = min(origins, key=lambda z: float(z.zone_low), default=None)
+    else:
+        destination_ahead = False
+        origin = None
+
+    blocked = bool(destination_ahead and origin is not None)
+    return {
+        "blocked": blocked,
+        "reason": INTERZONE_TRANSIT_REASON if blocked else "",
+        "origin_zone_id": origin.zone_id if origin is not None else "",
+        "origin_direction": origin.original_direction.value if origin is not None else "",
+        "origin_grade": origin.grade.value if origin is not None else "",
+        "destination_zone_id": destination_zone.zone_id,
+        "destination_direction": destination_zone.original_direction.value,
+        "current_price": px,
+        "destination_zone_low": float(destination_zone.zone_low),
+        "destination_zone_high": float(destination_zone.zone_high),
+    }
+
+
 def _context_zone(analysis: Analysis, direction: Direction):
     candidates = [
         z for z in analysis.zones
@@ -132,6 +186,17 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
         return _inactive("DXY_CONFLICT")
     if not has_live_directional_target(zone, snapshot):
         return _inactive("NO_LIVE_DIRECTIONAL_TARGET")
+
+    transit = interzone_transit_guard(analysis, snapshot, zone)
+    if bool(transit.get("blocked")):
+        out = _inactive(INTERZONE_TRANSIT_REASON)
+        out.update({
+            "context_zone_id": zone.zone_id,
+            "direction": direction.value,
+            "interzone_transit": transit,
+            "requires_destination_zone_contact": True,
+        })
+        return out
 
     bars = list(snapshot.xau_m15)
     if len(bars) < 12:
