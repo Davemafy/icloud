@@ -539,3 +539,43 @@ def test_prezone_liquidity_owner_stays_fail_closed_with_open_positions(tmp_path,
             (key,),
         ).fetchone()
     assert int(row["ownership_acquired_at"] or 0) == 10_000
+
+
+def test_flat_prezone_owner_releases_while_price_is_inside_lower_buy_origin(tmp_path, monkeypatch):
+    snap, sell, buy, key = _seed_interzone_liquidity_owner(
+        tmp_path,
+        monkeypatch,
+        open_positions=0,
+    )
+    # Move the lower BUY envelope up around current price to reproduce the live
+    # v6.5.55 condition: BUY is INTERACTING and SELL remains above market.
+    buy.zone_low = 96.0
+    buy.zone_high = 115.0
+    buy.core_low = 99.0
+    buy.core_high = 101.0
+    buy.core_method = "INTERACTING|TEST"
+
+    current = Analysis(
+        analysis_id="A_INTERZONE_INSIDE_ORIGIN",
+        generated_at=10_001,
+        snapshot_at=10_000,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id=sell.zone_id,
+    )
+
+    owner_zone = policy.apply_thesis_ownership(current, snap)
+
+    assert owner_zone is None
+    assert current.execution_policy["active_thesis"]["locked"] is False
+    release = current.execution_policy["interzone_owner_release"]
+    assert release["released"] is True
+    assert release["interzone_transit"]["origin_zone_id"] == buy.zone_id
+    assert release["interzone_transit"]["destination_zone_id"] == sell.zone_id
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_acquired_at,last_reason FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert int(row["ownership_acquired_at"] or 0) == 0
+    assert policy.INTERZONE_OWNER_RELEASE_REASON in str(row["last_reason"])
