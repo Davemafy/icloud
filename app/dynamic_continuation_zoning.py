@@ -14,6 +14,7 @@ from .engine import (
     structure_bias,
 )
 from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from .mitigation_audit import audit_directional_mitigations
 from .prompt_contract import prompt_dxy_direction
 from .thesis_ownership_policy import active_owner_snapshot
 from .zone_runtime_policy import MIN_SWEEP_ROOM_POINTS, XAU_POINTS_PER_PIP, _geometry_points
@@ -201,7 +202,19 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
     if geometry is None:
         return None
     core_low, core_high, zone_low, zone_high = geometry
-    touches = _touches(core_low, core_high, event.displacement_ts, snapshot.xau_m15)
+    raw_touch_episodes = _touches(core_low, core_high, event.displacement_ts, snapshot.xau_m15)
+    mitigation_audit = audit_directional_mitigations(
+        event.direction,
+        core_low,
+        core_high,
+        zone_low,
+        zone_high,
+        event.displacement_ts,
+        snapshot.xau_m15,
+    )
+    if int(mitigation_audit.get("invalidated_at") or 0) > 0:
+        return None
+    touches = int(mitigation_audit.get("qualified_mitigations") or 0)
     if touches > 1:
         return None
 
@@ -261,6 +274,7 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
         zone_low=round(zone_low, 5),
         zone_high=round(zone_high, 5),
         touch_count=int(touches),
+        mitigation_audit=mitigation_audit,
         confluences=sorted(confluences),
         independent_confluence_count=len(confluences),
         requires_sweep=True,
@@ -289,6 +303,8 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
             f"envelope_width_points:{(zone_high-zone_low)/point:.1f}",
             f"sweep_room_points:{sweep_points:.1f}",
             f"mitigations:{touches}",
+            f"raw_core_touch_episodes:{raw_touch_episodes}",
+            "Mitigation freshness is directional: SELL below->core->below; BUY above->core->above. Wrong-side contacts do not count.",
             "The FVG is not a standalone zone. A recent BOS displacement plus nearby structural liquidity is mandatory.",
             "The structural liquidity sits inside a balanced tactical core with buffer on both sides; M1 confirmation remains mandatory.",
         ],
