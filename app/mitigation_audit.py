@@ -195,6 +195,7 @@ def audit_directional_mitigations(
 
         # A previously valid approach has already touched the core. The cycle is
         # only completed by a closed return to the expected reaction side.
+        had_campaign = campaign is not None
         if campaign is not None:
             if close_side == expected_side:
                 qualified += 1
@@ -231,7 +232,7 @@ def audit_directional_mitigations(
 
         # Start a new interaction only on the first core-overlap bar after an
         # outside-envelope reset. Continuous chop remains one campaign.
-        if campaign is None and hit_core and not interaction_open:
+        if not had_campaign and campaign is None and hit_core and not interaction_open:
             interaction_open = True
             approach_side = last_outside_side or "UNARMED"
             touch_reference = float(core_low) if direction == Direction.SELL else float(core_high)
