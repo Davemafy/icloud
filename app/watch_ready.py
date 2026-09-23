@@ -103,7 +103,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
                 """
                 SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                        target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
-                       objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
+                       objective_complete_at,invalidated_at,last_seen_at,best_price,
+                       ownership_acquired_at,ownership_authority
                 FROM zone_reactions
                 WHERE ownership_acquired_at>0 AND ownership_zone_id=?
                   AND invalidated_at=0 AND objective_complete_at=0
@@ -116,7 +117,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
                     """
                     SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                            target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
-                           objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
+                           objective_complete_at,invalidated_at,last_seen_at,best_price,
+                       ownership_acquired_at,ownership_authority
                     FROM zone_reactions WHERE reaction_key=?
                     """,
                     (_reaction_key(zone),),
