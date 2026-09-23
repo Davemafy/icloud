@@ -96,9 +96,19 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       const audit=z.mitigation_audit||{};
       const events=Array.isArray(audit.events)?audit.events:[];
       const expected=String(audit.expected_approach_side||z.mitigation_expected_approach_side||'—');
+      const historyComplete=audit.history_complete===true || z.mitigation_history_complete===true;
       const cycle=(String(side).toUpperCase()==='SELL')
         ? 'BELOW → CORE → BELOW'
         : 'ABOVE → CORE → ABOVE';
+      if(!historyComplete){
+        rows.push(
+          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td><b class="warn">FRESHNESS HISTORY INCOMPLETE</b></td>'+
+          '<td>'+auditText(expected)+'</td><td>'+auditTime(audit.history_start_ts||z.mitigation_history_start_ts)+'</td>'+
+          '<td>—</td><td>Required from '+auditTime(audit.history_required_from_ts||z.mitigation_history_required_from_ts)+'</td>'+
+          '<td><b>NO</b></td><td>'+auditText(audit.history_gap_reason||z.mitigation_history_gap_reason||'M15 history cannot prove full freshness')+
+          ' • New A/A+ execution authority is blocked.</td></tr>'
+        );
+      }
       if(!events.length){
         rows.push(
           '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
