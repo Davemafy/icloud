@@ -27,6 +27,8 @@ COUNTERTREND_DEMOTE_TOUCHES = 3
 STRONG_EVENT_MIN_STRENGTH = 1.80
 STRONG_EVENT_MAX_AGE_BARS = 3
 
+TF_SECONDS = {"H1": 3600, "H4": 14400}
+
 
 @dataclass(frozen=True)
 class ContinuationEvent:
@@ -38,6 +40,10 @@ class ContinuationEvent:
     fvg_low: float
     fvg_high: float
     age_bars: int
+
+
+def _event_ready_ts(event: ContinuationEvent) -> int:
+    return int(event.displacement_ts) + int(TF_SECONDS.get(str(event.source_tf).upper(), 0))
 
 
 def _point(snapshot: MarketSnapshot) -> float:
@@ -202,16 +208,19 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
     if geometry is None:
         return None
     core_low, core_high, zone_low, zone_high = geometry
-    raw_touch_episodes = _touches(core_low, core_high, event.displacement_ts, snapshot.xau_m15)
+    mitigation_start_ts = _event_ready_ts(event)
+    raw_touch_episodes = _touches(core_low, core_high, mitigation_start_ts, snapshot.xau_m15)
     mitigation_audit = audit_directional_mitigations(
         event.direction,
         core_low,
         core_high,
         zone_low,
         zone_high,
-        event.displacement_ts,
+        mitigation_start_ts,
         snapshot.xau_m15,
     )
+    if not bool(mitigation_audit.get("history_complete")):
+        return None
     if int(mitigation_audit.get("invalidated_at") or 0) > 0:
         return None
     touches = int(mitigation_audit.get("qualified_mitigations") or 0)
@@ -296,6 +305,7 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
             "readiness:ARMED",
             f"dynamic_continuation_contract:{DYNAMIC_CONTINUATION_CONTRACT}",
             f"displacement_source:{event.source_tf}:{event.displacement_ts}",
+            f"source_ready_ts:{mitigation_start_ts}",
             f"parent_ob_source_ts:{event.source_ts}",
             f"fvg:{event.fvg_low:.5f}-{event.fvg_high:.5f}",
             f"attached_liquidity:{required}:{attached.label}@{liquidity_price:.5f}",
