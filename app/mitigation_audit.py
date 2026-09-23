@@ -114,11 +114,18 @@ def audit_directional_mitigations(
     expected_side = "BELOW" if direction == Direction.SELL else "ABOVE"
     distal_side = "ABOVE" if direction == Direction.SELL else "BELOW"
 
-    ordered = sorted((bar for bar in bars if int(bar.ts) > int(source_ts)), key=lambda b: int(b.ts))
+    all_ordered = sorted(bars, key=lambda b: int(b.ts))
+    history_start_ts = int(all_ordered[0].ts) if all_ordered else 0
+    history_complete = bool(all_ordered and history_start_ts <= int(source_ts))
+    ordered = [bar for bar in all_ordered if int(bar.ts) >= int(source_ts)]
     if not ordered:
         return {
             "qualified_mitigations": 0,
             "raw_core_contact_episodes_before_invalidation": 0,
+            "history_complete": history_complete,
+            "history_start_ts": history_start_ts,
+            "history_required_from_ts": int(source_ts),
+            "history_gap_reason": "" if history_complete else "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
             "events": [],
             "invalidated_at": 0,
             "invalidation_reason": "",
@@ -128,7 +135,6 @@ def audit_directional_mitigations(
             "counting_stopped": False,
         }
 
-    all_ordered = sorted(bars, key=lambda b: int(b.ts))
     absolute_index = {int(bar.ts): i for i, bar in enumerate(all_ordered)}
 
     qualified = 0
@@ -316,6 +322,10 @@ def audit_directional_mitigations(
     return {
         "qualified_mitigations": qualified,
         "raw_core_contact_episodes_before_invalidation": raw_core_contacts,
+        "history_complete": history_complete,
+        "history_start_ts": history_start_ts,
+        "history_required_from_ts": int(source_ts),
+        "history_gap_reason": "" if history_complete else "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
         "events": events,
         "invalidated_at": invalidated_at,
         "invalidation_reason": invalidation_reason,
