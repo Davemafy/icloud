@@ -311,23 +311,37 @@ def update_zone_publication_contacts(snapshot: MarketSnapshot, analysis: Analysi
                 current = Analysis.model_validate_json(latest["payload"])
             except Exception:
                 current = None
-    if current is None or not current.zones:
-        return
-
-    keys = [_publication_key(zone) for zone in current.zones if zone.state == ZoneState.ACTIVE]
-    if not keys:
-        return
-    placeholders = ",".join("?" for _ in keys)
     with connect() as db:
-        rows = db.execute(
-            f"""
-            SELECT * FROM zone_publications
-            WHERE publication_key IN ({placeholders})
-              AND COALESCE(live_core_touched_at,0)=0
-            ORDER BY last_seen_at DESC
-            """,
-            tuple(keys),
-        ).fetchall()
+        if current is not None and current.zones:
+            keys = [_publication_key(zone) for zone in current.zones if zone.state == ZoneState.ACTIVE]
+            if not keys:
+                return
+            placeholders = ",".join("?" for _ in keys)
+            rows = db.execute(
+                f"""
+                SELECT * FROM zone_publications
+                WHERE publication_key IN ({placeholders})
+                  AND COALESCE(live_core_touched_at,0)=0
+                ORDER BY last_seen_at DESC
+                """,
+                tuple(keys),
+            ).fetchall()
+            current_analysis_id = current.analysis_id
+        else:
+            latest_pub = db.execute(
+                "SELECT latest_analysis_id FROM zone_publications ORDER BY last_seen_at DESC LIMIT 1"
+            ).fetchone()
+            current_analysis_id = str(latest_pub["latest_analysis_id"] or "") if latest_pub is not None else ""
+            if not current_analysis_id:
+                return
+            rows = db.execute(
+                """
+                SELECT * FROM zone_publications
+                WHERE latest_analysis_id=? AND COALESCE(live_core_touched_at,0)=0
+                ORDER BY last_seen_at DESC
+                """,
+                (current_analysis_id,),
+            ).fetchall()
         for row in rows:
             touched, basis, price = _publication_contact(row, snapshot)
             if not touched:
@@ -340,7 +354,7 @@ def update_zone_publication_contacts(snapshot: MarketSnapshot, analysis: Analysi
                 WHERE publication_key=? AND COALESCE(live_core_touched_at,0)=0
                 """,
                 (
-                    int(snapshot.sent_at),basis,float(price),current.analysis_id,int(snapshot.sent_at),
+                    int(snapshot.sent_at),basis,float(price),current_analysis_id,int(snapshot.sent_at),
                     row["publication_key"],
                 ),
             )
