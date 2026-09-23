@@ -3,7 +3,7 @@
   "channel": "stable",
   "release": "6.3.29",
   "repository": "Davemafy/icloud",
-  "ref": "aad0d6a973c459363b6bb560d026158dcea34b05",
+  "ref": "e393a1a4fce74614670cfdbd3ee9bdc7fa078576",
   "data_bridge_version": "1.48",
   "sequence_ea_version": "3.39",
   "updater_min_version": "2.7.0",
@@ -172,7 +172,7 @@
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
       "requires_reload": true,
-      "sha256": "2f0cfb8b3a6b1071a767efc7865d9903f0e621b658bfaba5f9704c6063d119a2"
+      "sha256": "7be166d30d0dc292e1e92409f216661a0660c85d6e03207bcbefefbecf7e7a40"
     }
   ],
   "support_files": [
