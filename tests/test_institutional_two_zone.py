@@ -56,6 +56,11 @@ def _patch_common(monkeypatch, candidate, touches=0):
         "audit_directional_mitigations",
         lambda *args, **kwargs: {
             "qualified_mitigations": touches,
+            "raw_core_contact_episodes_before_invalidation": touches,
+            "history_complete": True,
+            "history_start_ts": candidate.source_ts,
+            "history_required_from_ts": candidate.source_ts,
+            "history_gap_reason": "",
             "events": [],
             "invalidated_at": 0,
             "invalidation_reason": "",
@@ -171,6 +176,11 @@ def test_historical_accepted_invalidation_stops_old_zone_before_latest_state_che
         "audit_directional_mitigations",
         lambda *args, **kwargs: {
             "qualified_mitigations": 1,
+            "raw_core_contact_episodes_before_invalidation": 1,
+            "history_complete": True,
+            "history_start_ts": 100,
+            "history_required_from_ts": 100,
+            "history_gap_reason": "",
             "events": [
                 {
                     "event_type": "INVALIDATION",
@@ -432,6 +442,77 @@ def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
     assert ledger["events"][1]["grade_before"] == "A+"
     assert ledger["events"][1]["grade_after"] == "A"
     assert ledger["events"][1]["grade_changed"] is True
+
+
+def test_incomplete_m15_freshness_history_forces_structural_a_plus_to_watch_only(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=0)
+    monkeypatch.setattr(
+        policy,
+        "audit_directional_mitigations",
+        lambda *args, **kwargs: {
+            "qualified_mitigations": 0,
+            "raw_core_contact_episodes_before_invalidation": 0,
+            "history_complete": False,
+            "history_start_ts": candidate.source_ts + 7200,
+            "history_required_from_ts": candidate.source_ts,
+            "history_gap_reason": "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
+            "events": [],
+            "invalidated_at": 0,
+            "invalidation_reason": "",
+            "expected_approach_side": "BELOW",
+            "expected_reaction_exit_side": "BELOW",
+            "distal_invalidation_side": "ABOVE",
+            "counting_stopped": False,
+        },
+    )
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=13.0)
+    ])
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert "structural_grade:A+" in zone.notes
+    assert zone.grade == Grade.B_PLUS
+    assert zone.core_method.startswith("WATCH|")
+    assert "grade_degrade_reason:FRESHNESS_HISTORY_INCOMPLETE" in zone.notes
+    public = analysis.execution_policy["public_zone_map"]["sell"]
+    assert public["mitigation_history_complete"] is False
+    assert public["grade"] == "B+"
+
+
+def test_source_ready_time_is_after_source_candle_close():
+    h1 = policy.PromptSource(
+        direction=Direction.BUY,
+        tf="H1",
+        source_ts=1_000,
+        core_low=90,
+        core_high=91,
+        zone_low=89,
+        zone_high=92,
+        strength=2.0,
+        fvg=False,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+    )
+    h4 = policy.PromptSource(
+        direction=Direction.SELL,
+        tf="H4",
+        source_ts=2_000,
+        core_low=100,
+        core_high=101,
+        zone_low=99,
+        zone_high=102,
+        strength=2.0,
+        fvg=False,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+    )
+
+    assert policy._source_ready_ts(h1) == 1_000 + 3600
+    assert policy._source_ready_ts(h4) == 2_000 + 14400
 
 
 def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus():
