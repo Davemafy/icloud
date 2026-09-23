@@ -577,7 +577,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         }
 
     zone_low, zone_high, sweep_room = geometry
-    raw_touch_episodes = _touches(core_low, core_high, int(candidate.source_ts), snapshot.xau_m15)
+    raw_touch_episodes_all_history = _touches(
+        core_low, core_high, int(candidate.source_ts), snapshot.xau_m15
+    )
     core_mid = (core_low + core_high) / 2.0
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
     countertrend = context not in (Direction.NEUTRAL, candidate.direction)
@@ -592,6 +594,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         snapshot.xau_m15,
     )
     touches = int(mitigation_audit.get("qualified_mitigations") or 0)
+    raw_touch_episodes = int(
+        mitigation_audit.get("raw_core_contact_episodes_before_invalidation") or 0
+    )
     structural_audit = _grade_audit(
         candidate,
         0,
@@ -692,6 +697,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"envelope_width_points:{_to_points(zone_high - zone_low, snapshot):.1f}",
             f"sweep_room_points:{_to_points(sweep_room, snapshot):.1f}",
             f"raw_core_touch_episodes:{raw_touch_episodes}",
+            f"raw_core_touch_episodes_all_history:{raw_touch_episodes_all_history}",
             f"qualified_mitigations:{touches}",
             f"structural_grade:{structural_grade.value}",
             f"current_execution_grade:{grade.value}",
@@ -716,6 +722,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "envelope_width_points": round(_to_points(zone_high - zone_low, snapshot), 1),
         "touches": touches,
         "raw_touch_episodes": raw_touch_episodes,
+        "raw_touch_episodes_all_history": raw_touch_episodes_all_history,
         "structural_grade": structural_grade.value,
         "current_execution_grade": grade.value,
         "grade_degrade_reason": grade_degrade_reason or "NONE",
@@ -879,6 +886,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "touches": zone.touch_count,
             "qualified_mitigations": zone.touch_count,
             "raw_core_touch_episodes": raw_touch_episodes,
+            "raw_core_touch_episodes_all_history": int(_note_float(zone, "raw_core_touch_episodes_all_history:")),
             "mitigation_audit": dict(zone.mitigation_audit or {}),
             "mitigation_expected_approach_side": str((zone.mitigation_audit or {}).get("expected_approach_side") or ""),
             "mitigation_counting_stopped": bool((zone.mitigation_audit or {}).get("counting_stopped")),
