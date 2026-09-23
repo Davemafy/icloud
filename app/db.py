@@ -128,11 +128,15 @@ def save_snapshot(s: MarketSnapshot) -> None:
         db.execute("INSERT INTO snapshots(ts,payload) VALUES(?,?)", (s.sent_at, s.model_dump_json()))
         db.execute("DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY id DESC LIMIT 6)")
 
-    # PAPER/DEMO ONLY: persist the institutional lifecycle of a zone after it has
-    # interacted, even if a later analysis no longer publishes it as today's
-    # primary alert. This is historical state only and grants no execution authority.
+    # PAPER/DEMO ONLY: exact-geometry publication truth is updated first. Only
+    # post-publication contact with the currently published map can later create
+    # an M1 handoff; older source history remains research context only.
     try:
-        from .zone_reaction_lifecycle import update_zone_reactions
+        from .zone_reaction_lifecycle import (
+            update_zone_publication_contacts,
+            update_zone_reactions,
+        )
+        update_zone_publication_contacts(s)
         update_zone_reactions(s)
     except Exception as exc:
         audit(s.sent_at, "zone_reaction.update.error", f"{type(exc).__name__}:{exc}")
