@@ -14,13 +14,23 @@ from typing import Callable
 
 _INSTALLED = False
 
-_ZONES_OBSERVER = r'''  const zones=document.getElementById('zones');
+_ZONES_OBSERVERS = (
+    r'''  const zones=document.getElementById('zones');
   if(zones){
     new MutationObserver(function(){
       refreshJournalContext();
     }).observe(zones,{childList:true,subtree:true});
   }
-'''
+''',
+    r'''  const zones=document.getElementById('zones');
+  if(zones){
+    new MutationObserver(function(){
+      refreshJournalContext();
+      refreshMitigationAudit();
+    }).observe(zones,{childList:true,subtree:true});
+  }
+''',
+)
 
 _RECOVERY_SCRIPT = r'''
 <script id="dashboard-recovery-polling-script">
@@ -143,7 +153,8 @@ def _dashboard_factory(original: Callable[[str], str]) -> Callable[[str], str]:
         # The ownership view already refreshes on a 3-second timer. Observing the
         # same zone subtree while also writing ownership tags into that subtree can
         # create a self-triggering MutationObserver loop on some browsers.
-        cleaned = cleaned.replace(_ZONES_OBSERVER, "")
+        for observer in _ZONES_OBSERVERS:
+            cleaned = cleaned.replace(observer, "")
 
         if 'id="dashboard-recovery-polling-script"' not in cleaned and "</body>" in cleaned:
             cleaned = cleaned.replace("</body>", _RECOVERY_SCRIPT + "\n</body>", 1)
