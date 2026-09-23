@@ -41,10 +41,16 @@ _RECOVERY_SCRIPT = r'''
     el.textContent=ok?'LIVE':'RECONNECTING';
     el.className='badge '+(ok?'ok':'warn');
   }
-  async function getJson(url){
-    const r=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'}});
-    if(!r.ok)throw new Error(url+' HTTP '+r.status);
-    return await r.json();
+  async function getJson(url,timeoutMs=1800){
+    const ctl=new AbortController();
+    const timer=setTimeout(()=>ctl.abort(),timeoutMs);
+    try{
+      const r=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'},signal:ctl.signal});
+      if(!r.ok)throw new Error(url+' HTTP '+r.status);
+      return await r.json();
+    }finally{
+      clearTimeout(timer);
+    }
   }
   function renderAnalysisRecovery(a){
     if(!a || typeof a!=='object')return;
@@ -71,23 +77,37 @@ _RECOVERY_SCRIPT = r'''
     inFlight=true;
     let success=0;
 
+    // Primary observability path: one short-timeout, query-only endpoint that
+    // bypasses the normal process-wide database lock and heavy aggregators.
     try{
-      const sys=await getJson('/system/status');
-      if(typeof renderSystem==='function')renderSystem(sys);
-      success++;
+      const ro=await getJson('/dashboard/read-only-state',1500);
+      if(ro?.system && typeof renderSystem==='function')renderSystem(ro.system);
+      if(ro?.analysis)renderAnalysisRecovery(ro.analysis);
+      if(ro?.system || ro?.analysis)success++;
     }catch(e){}
 
+    // Journal is useful but optional. It must never be able to freeze version
+    // truth or mitigation-audit visibility.
     try{
-      const j=await getJson('/journal/current');
+      const j=await getJson('/journal/current',1200);
       if(typeof renderJournal==='function')renderJournal(j);
       success++;
     }catch(e){}
 
-    try{
-      const a=await getJson('/analysis');
-      renderAnalysisRecovery(a);
-      success++;
-    }catch(e){}
+    // Compatibility fallbacks for older/degraded deployments. Every request is
+    // bounded so one blocked endpoint cannot leave inFlight stuck forever.
+    if(success===0){
+      try{
+        const sys=await getJson('/system/status',1200);
+        if(typeof renderSystem==='function')renderSystem(sys);
+        success++;
+      }catch(e){}
+      try{
+        const a=await getJson('/analysis',1200);
+        renderAnalysisRecovery(a);
+        success++;
+      }catch(e){}
+    }
 
     if(success>0){
       lastSuccess=Date.now();
