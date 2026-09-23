@@ -1,7 +1,17 @@
+import pytest
+from app import db
 from app.execution_safety import has_live_directional_target
 from app.liquidity_reversal_handoff import detect_liquidity_reversal_handoff
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from app.service import _acquire_final_ownership
+from app.zone_reaction_lifecycle import register_analysis_zones
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    path = tmp_path / "handoff_guard.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
 
 
 def _snapshot(mid: float = 100.0) -> MarketSnapshot:
@@ -144,6 +154,7 @@ def test_sell_prezone_handoff_is_blocked_while_price_is_between_buy_and_sell_zon
     )
     analysis = _analysis(sell)
     analysis.zones = [sell, buy]
+    register_analysis_zones(analysis)
 
     handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
 
@@ -212,6 +223,7 @@ def test_buy_prezone_handoff_is_blocked_while_price_is_between_sell_and_buy_zone
         approved=True,
         ai_approved=True,
     )
+    register_analysis_zones(analysis)
 
     handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
 
@@ -251,6 +263,7 @@ def test_sell_prezone_handoff_is_blocked_while_price_is_still_inside_lower_buy_z
     )
     analysis = _analysis(sell)
     analysis.zones = [sell, buy]
+    register_analysis_zones(analysis)
 
     handoff = detect_liquidity_reversal_handoff(analysis, _snapshot(100.0))
 

@@ -28,8 +28,10 @@ from .thesis_ownership_policy import (
 )
 from .watch_ready import promote_watch_to_m1_ready
 from .zone_reaction_lifecycle import (
+    apply_publication_truth,
     attach_lifecycle,
     register_analysis_zones,
+    update_zone_publication_contacts,
     update_zone_reactions,
 )
 from .zone_runtime_policy import (
@@ -301,7 +303,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # ownership_acquired_at=0 and therefore cannot inherit a stale execution lock.
     if SETTINGS.paper_only:
         register_analysis_zones(a)
+        update_zone_publication_contacts(s, a)
         update_zone_reactions(s)
+        apply_publication_truth(a)
         hard_release_stale_thesis(s)
 
     # Only a thesis that previously acquired an explicit execution handoff may
@@ -391,6 +395,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
 
     # save_analysis re-registers idempotently; the pre-registration above is only
     # to make lifecycle truth available before ownership/M1 selection in this run.
+    apply_publication_truth(a)
     save_analysis(a)
     attach_lifecycle(a)
     if SETTINGS.ml_data_enabled:

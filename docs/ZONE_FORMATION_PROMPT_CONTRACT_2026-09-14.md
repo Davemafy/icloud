@@ -147,6 +147,16 @@ DEMO / PAPER validation sizing uses a fixed validation-capital anchor rather tha
 - Lot calculation must use the actual entry-to-stop monetary loss per lot when available, floor to broker volume step, and return no trade if the calculated size is below broker minimum. It must never round a sub-minimum risk upward.
 - On hedging accounts, TP1/TP2/runner splitting must never create more aggregate volume than the risk-sized total.
 
+## Exact publication-time execution truth
+
+- Structural history and live execution truth are separate. Historical touches used for freshness/grading may pre-date the moment an exact zone geometry was first published.
+- Every exact user-facing geometry (zone id + source identity + core + envelope) receives its own publication timestamp and touch baseline.
+- Historical contacts that occurred before that exact geometry was published remain research/freshness evidence only. They must never create `M1_READY`, a reaction window, thesis ownership, or execution authority.
+- A normal core handoff requires actual live bid/ask overlap with the tactical core after publication, or a later M15 bar whose own open timestamp is after publication and whose range intersects the core.
+- An M15 bar already in progress when a new geometry is first published is not trusted for retrospective core contact because its high/low may contain pre-publication price action.
+- A requalified/reselected geometry starts a new publication clock even when it shares the same underlying source candle/liquidity identity.
+- Outer-zone sweep and pre-zone liquidity-reversal handoffs must also use events that occurred after the exact context geometry was published.
+- Dashboard truth must show the publication timestamp, touch baseline at publication, and whether a genuine post-publication live core contact has occurred. `RETEST_ONLY_NO_LIVE_CONTACT` means the zone is structurally valid but cannot claim a historical touch as execution authority.
 ## M1 execution handoff
 
 The outer envelope is institutional location and sweep room. It is NOT an M1 execution trigger.

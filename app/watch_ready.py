@@ -7,6 +7,7 @@ from .db import connect
 from .engine import atr, evaluate_zone_state
 from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
 from .risk_matrix import execution_grade_eligible, execution_touch_limit
+from .zone_reaction_lifecycle import publication_state_for_zone
 
 # Public primary zones stay analysis-only until either (a) live price reaches the
 # tactical core, or (b) price enters the qualified outer envelope and a closed M15
@@ -16,7 +17,6 @@ from .risk_matrix import execution_grade_eligible, execution_touch_limit
 # A temporary reaction window never survives M15 invalidation, deepest-objective completion,
 # or age. After TP1, an OBJECTIVE_IN_PROGRESS thesis may re-arm from its frozen owner
 # location toward the next still-open objective.
-CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 MAX_CORE_WIDTH_M15_ATR = 3.00
 READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
 READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
@@ -45,13 +45,17 @@ def _m15_atr(snapshot: MarketSnapshot) -> float:
 
 
 def _core_ready(zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """Core handoff requires actual live overlap after this exact geometry was published."""
+    publication = publication_state_for_zone(zone)
+    published_at = int(publication.get("first_published_at") or 0)
+    if published_at <= 0 or int(snapshot.sent_at) < published_at:
+        return False
     m15a = _m15_atr(snapshot)
     core_width = max(0.0, float(zone.core_high) - float(zone.core_low))
     if core_width / m15a > MAX_CORE_WIDTH_M15_ATR:
         return False
-    buffer_price = max(float(snapshot.point) * 5.0, CORE_INTERACTION_BUFFER_M15_ATR * m15a)
-    core_distance = _distance_to_range(float(snapshot.mid), float(zone.core_low), float(zone.core_high))
-    return core_distance <= buffer_price
+    lo, hi = sorted((float(zone.core_low), float(zone.core_high)))
+    return float(snapshot.ask) >= lo and float(snapshot.bid) <= hi
 
 
 def _structural_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
@@ -99,7 +103,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
                 """
                 SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                        target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
-                       objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
+                       objective_complete_at,invalidated_at,last_seen_at,best_price,
+                       ownership_acquired_at,ownership_authority
                 FROM zone_reactions
                 WHERE ownership_acquired_at>0 AND ownership_zone_id=?
                   AND invalidated_at=0 AND objective_complete_at=0
@@ -112,7 +117,8 @@ def _lifecycle_row(zone: Zone) -> dict[str, Any]:
                     """
                     SELECT reaction_key,status,first_seen_at,core_touched_at,reaction_confirmed_at,
                            target1,target2,target3,target1_hit_at,target2_hit_at,target3_hit_at,
-                           objective_complete_at,invalidated_at,last_seen_at,best_price,ownership_authority
+                           objective_complete_at,invalidated_at,last_seen_at,best_price,
+                       ownership_acquired_at,ownership_authority
                     FROM zone_reactions WHERE reaction_key=?
                     """,
                     (_reaction_key(zone),),
@@ -186,9 +192,12 @@ def _zone_sweep_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
     if liquidity_price <= 0:
         return {}
     row = _lifecycle_row(zone)
+    publication = publication_state_for_zone(zone)
+    published_at = int(publication.get("first_published_at") or 0)
+    if published_at <= 0:
+        return {}
     now = int(snapshot.sent_at)
-    first_seen = int(row.get("first_seen_at") or zone.source_ts or 0)
-    earliest = max(first_seen, now - EXECUTION_WINDOW_SECONDS)
+    earliest = max(published_at, now - EXECUTION_WINDOW_SECONDS)
     point = max(float(snapshot.point or 0.01), 1e-9)
     min_raid = max(point * ZONE_SWEEP_MIN_POINTS, point * float(snapshot.spread_points or 0.0) * 0.10)
     bars = list(snapshot.xau_m15)[-ZONE_SWEEP_LOOKBACK_BARS:]
@@ -239,7 +248,18 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
         return {}
 
     row = _lifecycle_row(zone)
-    touched_at = int(row.get("core_touched_at") or 0)
+    publication = publication_state_for_zone(zone)
+    touched_at = int(publication.get("live_core_touched_at") or 0)
+    # Preserve an already-acquired explicit HTF core owner across the V6561
+    # migration. This is not a retrospective WATCH touch: ownership_acquired_at
+    # proves the old pipeline had already granted deterministic authority.
+    if (
+        touched_at <= 0
+        and int(row.get("ownership_acquired_at") or 0) > 0
+        and str(row.get("ownership_authority") or "") == "HTF_CORE_HANDOFF"
+        and int(row.get("core_touched_at") or 0) > 0
+    ):
+        touched_at = int(row.get("core_touched_at") or 0)
     now = int(snapshot.sent_at)
     age = now - touched_at if touched_at else 10**9
     if touched_at <= 0 or age < 0 or age > EXECUTION_WINDOW_SECONDS:

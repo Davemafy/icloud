@@ -7,6 +7,7 @@ from .engine import atr, liquidity_map
 from .execution_safety import has_live_directional_target
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from .risk_matrix import execution_grade_eligible
+from .zone_reaction_lifecycle import publication_state_for_zone
 
 LIQUIDITY_REVERSAL_CONTRACT = "LIQUIDITY_REVERSAL_HANDOFF_V6556"
 INTERZONE_TRANSIT_REASON = "INTERZONE_TRANSIT_REQUIRES_DESTINATION_ZONE_CONTACT"
@@ -195,6 +196,10 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
         return _inactive("DXY_CONFLICT")
     if not has_live_directional_target(zone, snapshot):
         return _inactive("NO_LIVE_DIRECTIONAL_TARGET")
+    publication = publication_state_for_zone(zone)
+    published_at = int(publication.get("first_published_at") or 0)
+    if published_at <= 0:
+        return _inactive("ZONE_PUBLICATION_NOT_ESTABLISHED")
 
     transit = interzone_transit_guard(analysis, snapshot, zone)
     if bool(transit.get("blocked")):
@@ -236,6 +241,8 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
         price = float(level.price)
         for i in range(max(0, len(bars) - LOOKBACK_M15_BARS), len(bars) - 1):
             bar = bars[i]
+            if int(bar.ts) < published_at:
+                continue
             swept = (
                 float(bar.high) >= price + sweep_buffer and float(bar.close) < price
                 if direction == Direction.SELL
@@ -245,6 +252,8 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
                 continue
 
             for j in range(i + 1, len(bars)):
+                if int(bars[j].ts) < published_at:
+                    continue
                 if not _strong_displacement(bars[j], m15a, direction):
                     continue
                 if not _structure_break(bars, j, direction):
@@ -270,6 +279,8 @@ def detect_liquidity_reversal_handoff(analysis: Analysis, snapshot: MarketSnapsh
                     "requires_full_m1_sequence": True,
                     "liquidity_remains_object_only": True,
                     "zone_not_reached": True,
+                    "context_geometry_published_at": published_at,
+                    "publication_time_guard": "EVENTS_AFTER_EXACT_GEOMETRY_PUBLICATION_ONLY",
                     "reason": "STRUCTURAL_LIQUIDITY_SWEEP_M15_DISPLACEMENT_MSS",
                 }
                 if best is None or int(candidate["displacement_ts"]) > int(best["displacement_ts"]):
