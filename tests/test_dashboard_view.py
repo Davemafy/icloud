@@ -65,6 +65,8 @@ def test_directional_mitigation_audit_is_visible_and_read_only():
     assert "SELL = below envelope" in cleaned
     assert "BUY = above envelope" in cleaned
     assert "Wrong-side contact never downgrades a zone" in cleaned
+    assert "FRESHNESS HISTORY INCOMPLETE" in cleaned
+    assert "New A/A+ execution authority is blocked" in cleaned
     assert "refreshMitigationAudit" in cleaned
     assert "WRONG_APPROACH_SIDE" not in cleaned  # reason is runtime data, not fabricated UI text
     assert "OrderSend" not in cleaned
