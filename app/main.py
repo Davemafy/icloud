@@ -301,7 +301,7 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return "WAITING FOR SEQUENCE AUTHORITY" if status == "M1 READY" else status
     if stage == "ORDER_SENT":
         return "ORDER SENT"
-    if stage in {"REENTRY_CONFIRMATION", "HANDOFF_CONFIRMATION"}:
+    if stage in {"ENTRY_CONFIRMATION", "REENTRY_CONFIRMATION", "HANDOFF_CONFIRMATION", "FLIP_CONFIRMATION"}:
         return "WAITING FOR M1 VALUE REACTION"
     if stage == "TARGET" and "MIN_RR_NOT_MET" in reason:
         return "ENTRY BLOCKED: MIN RR"
