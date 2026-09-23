@@ -610,21 +610,51 @@ def system_status_endpoint():
 
 
 def _dashboard_payload(event: str) -> str:
-    try:
-        s = latest_snapshot()
-        a = active_analysis()
-        payload = {
-            "event": event,
-            "ts": int(datetime.now(timezone.utc).timestamp()),
-            "snapshot": s.model_dump() if s else None,
-            "analysis": a.model_dump() if a else None,
-            "journal": _journal_snapshot(),
-            "scheduler": scheduler_status(),
-            "system": system_status(),
-        }
-    except Exception as exc:
-        payload = {"event": "degraded", "error": f"{type(exc).__name__}:{exc}"}
-    return json.dumps(payload, separators=(",", ":"))
+    """Build dashboard transport without allowing one read-only section to blank the page.
+
+    The dashboard is observational only. Snapshot, analysis, journal, scheduler and
+    system-status aggregation are intentionally isolated so a failure in one section
+    cannot suppress healthy telemetry from the others. This is especially important
+    for the system/version card and mitigation audit during forensic review.
+    """
+    payload = {
+        "event": event,
+        "ts": int(datetime.now(timezone.utc).timestamp()),
+        "snapshot": None,
+        "analysis": None,
+        "journal": None,
+        "scheduler": None,
+        "system": None,
+    }
+    errors: dict[str, str] = {}
+
+    def capture(name: str, fn):
+        try:
+            payload[name] = fn()
+        except Exception as exc:
+            errors[name] = f"{type(exc).__name__}:{exc}"
+
+    capture(
+        "snapshot",
+        lambda: (lambda s: s.model_dump() if s else None)(latest_snapshot()),
+    )
+    capture(
+        "analysis",
+        lambda: (lambda a: a.model_dump() if a else None)(active_analysis()),
+    )
+    capture("journal", _journal_snapshot)
+    capture("scheduler", scheduler_status)
+    capture("system", system_status)
+
+    if errors:
+        payload["degraded"] = True
+        payload["errors"] = errors
+    else:
+        payload["degraded"] = False
+
+    # default=str is a final read-only transport guard. It must never be able to
+    # break execution logic because this payload is dashboard-only.
+    return json.dumps(payload, separators=(",", ":"), default=str)
 
 
 @app.post("/dashboard/session")
