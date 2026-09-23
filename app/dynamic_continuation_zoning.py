@@ -370,6 +370,10 @@ def _sync_public_map(analysis: Analysis) -> None:
             "core_low": zone.core_low,
             "core_high": zone.core_high,
             "touches": zone.touch_count,
+            "qualified_mitigations": zone.touch_count,
+            "mitigation_audit": dict(zone.mitigation_audit or {}),
+            "mitigation_expected_approach_side": str((zone.mitigation_audit or {}).get("expected_approach_side") or ""),
+            "mitigation_counting_stopped": bool((zone.mitigation_audit or {}).get("counting_stopped")),
             "source_ts": zone.source_ts,
             "dynamic_continuation": "DYNAMIC_CONTINUATION_REZONE" in set(zone.confluences),
         }
