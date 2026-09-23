@@ -626,6 +626,12 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     )
     structural_grade = structural_audit["grade"]
     grade = current_audit["grade"]
+    freshness_history_complete = bool(mitigation_audit.get("history_complete"))
+    if not freshness_history_complete and structural_grade in {Grade.A_PLUS, Grade.A}:
+        # Never infer freshness from a truncated M15 window. Keep the institutional
+        # source visible, but fail closed for fresh execution until its reuse
+        # history can be proven.
+        grade = Grade.B_PLUS
     mitigation_audit = _mitigation_grade_ledger(
         mitigation_audit,
         candidate,
@@ -635,7 +641,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         psy_confluence=psy_confluence,
     )
     grade_degrade_reason = ""
-    if structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
+    if not freshness_history_complete and structural_grade in {Grade.A_PLUS, Grade.A}:
+        grade_degrade_reason = "FRESHNESS_HISTORY_INCOMPLETE"
+    elif structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
         grade_degrade_reason = "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
     elif structural_grade == Grade.A_PLUS and grade == Grade.A:
         grade_degrade_reason = "FRESHNESS_REDUCED"
@@ -711,6 +719,10 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"raw_core_touch_episodes:{raw_touch_episodes}",
             f"raw_core_touch_episodes_all_history:{raw_touch_episodes_all_history}",
             f"qualified_mitigations:{touches}",
+            f"mitigation_history_complete:{1 if freshness_history_complete else 0}",
+            f"mitigation_history_start_ts:{int(mitigation_audit.get('history_start_ts') or 0)}",
+            f"mitigation_history_required_from_ts:{int(mitigation_audit.get('history_required_from_ts') or 0)}",
+            f"mitigation_history_gap_reason:{str(mitigation_audit.get('history_gap_reason') or 'NONE')}",
             f"structural_grade:{structural_grade.value}",
             f"current_execution_grade:{grade.value}",
             f"grade_degrade_reason:{grade_degrade_reason or 'NONE'}",
@@ -752,6 +764,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "distance_h1_atr": round(_distance(snapshot.mid, zone_low, zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
         "grade": grade.value,
         "mitigation_audit": mitigation_audit,
+        "mitigation_history_complete": freshness_history_complete,
         "mitigation_invalidated_at": int(mitigation_audit.get("invalidated_at") or 0),
         "mitigation_invalidation_reason": str(mitigation_audit.get("invalidation_reason") or ""),
     }
@@ -900,6 +913,10 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "raw_core_touch_episodes": raw_touch_episodes,
             "raw_core_touch_episodes_all_history": int(_note_float(zone, "raw_core_touch_episodes_all_history:")),
             "mitigation_audit": dict(zone.mitigation_audit or {}),
+            "mitigation_history_complete": bool((zone.mitigation_audit or {}).get("history_complete")),
+            "mitigation_history_start_ts": int((zone.mitigation_audit or {}).get("history_start_ts") or 0),
+            "mitigation_history_required_from_ts": int((zone.mitigation_audit or {}).get("history_required_from_ts") or 0),
+            "mitigation_history_gap_reason": str((zone.mitigation_audit or {}).get("history_gap_reason") or ""),
             "mitigation_expected_approach_side": str((zone.mitigation_audit or {}).get("expected_approach_side") or ""),
             "mitigation_counting_stopped": bool((zone.mitigation_audit or {}).get("counting_stopped")),
             "required_liquidity": required,
@@ -958,6 +975,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         "buy_mitigation_cycle": "ABOVE_ENVELOPE_TO_CORE_TO_ABOVE_ENVELOPE",
         "wrong_side_core_contact_consumes_freshness": False,
         "accepted_invalidation_stops_original_zone_counting": True,
+        "incomplete_m15_freshness_history_is_watch_only": True,
         "context_specific_grade_models": {
             "TREND": "CONTINUATION_SOURCE_STRENGTH_FRESHNESS",
             "COUNTERTREND": "HTF_EXTREMITY_LIQUIDITY_SWEEP_REJECTION_RESPONSE",
