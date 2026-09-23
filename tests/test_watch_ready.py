@@ -343,3 +343,17 @@ def test_bplus_third_touch_is_still_exhausted_and_blocked():
     s = _snapshot(100.0)
     z = _zone(source_tf="H4>H1", grade=Grade.B_PLUS, readiness="WATCH", touches=3)
     assert watch_zone_ready(z, s) is False
+
+
+def test_legacy_source_core_touch_without_exact_publication_touch_cannot_open_window():
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING", direction=Direction.SELL)
+    a = _publish([z], ts=1000, analysis_id="A_LEGACY", bias=Direction.SELL)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE zone_reactions SET core_touched_at=?,status='INTERACTING',target1=? WHERE reaction_key=?",
+            (1000, 90.0, "SELL|H4>H1|777"),
+        )
+
+    assert watch_zone_ready(z, _snapshot(97.0, ts=1120)) is False
+    selected = promote_watch_to_m1_ready(a, _snapshot(97.0, ts=1120))
+    assert selected is None
