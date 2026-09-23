@@ -248,6 +248,16 @@ def _execution_window_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, A
     row = _lifecycle_row(zone)
     publication = publication_state_for_zone(zone)
     touched_at = int(publication.get("live_core_touched_at") or 0)
+    # Preserve an already-acquired explicit HTF core owner across the V6561
+    # migration. This is not a retrospective WATCH touch: ownership_acquired_at
+    # proves the old pipeline had already granted deterministic authority.
+    if (
+        touched_at <= 0
+        and int(row.get("ownership_acquired_at") or 0) > 0
+        and str(row.get("ownership_authority") or "") == "HTF_CORE_HANDOFF"
+        and int(row.get("core_touched_at") or 0) > 0
+    ):
+        touched_at = int(row.get("core_touched_at") or 0)
     now = int(snapshot.sent_at)
     age = now - touched_at if touched_at else 10**9
     if touched_at <= 0 or age < 0 or age > EXECUTION_WINDOW_SECONDS:
