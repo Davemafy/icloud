@@ -342,6 +342,55 @@ def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_exe
     assert public["grade_degrade_reason"] == "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
 
 
+def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
+    candidate = _sell_candidate()
+    base_audit = {
+        "qualified_mitigations": 2,
+        "invalidated_at": 0,
+        "invalidation_reason": "",
+        "events": [
+            {
+                "event_type": "MITIGATION",
+                "qualified": True,
+                "qualified_index": 1,
+                "qualified_count_before": 0,
+                "armed_at": 200,
+                "approach_side": "BELOW",
+                "core_touched_at": 300,
+                "qualified_at": 400,
+                "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE",
+            },
+            {
+                "event_type": "MITIGATION",
+                "qualified": True,
+                "qualified_index": 2,
+                "qualified_count_before": 1,
+                "armed_at": 500,
+                "approach_side": "BELOW",
+                "core_touched_at": 600,
+                "qualified_at": 700,
+                "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE",
+            },
+        ],
+    }
+
+    ledger = policy._mitigation_grade_ledger(
+        base_audit,
+        candidate,
+        8.0,
+        countertrend=False,
+        structural_liquidity_tf="H4",
+        psy_confluence=True,
+    )
+
+    assert ledger["events"][0]["grade_before"] == "A+"
+    assert ledger["events"][0]["grade_after"] == "A+"
+    assert ledger["events"][0]["grade_changed"] is False
+    assert ledger["events"][1]["grade_before"] == "A+"
+    assert ledger["events"][1]["grade_after"] == "A"
+    assert ledger["events"][1]["grade_changed"] is True
+
+
 def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus():
     candidate = _buy_reversal_candidate()
     candidate.strength = 1.8
