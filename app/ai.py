@@ -94,6 +94,8 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "buy_mitigation_cycle": "above envelope -> core -> above envelope",
             "wrong_side_contact_consumes_freshness": False,
             "accepted_invalidation_stops_original_zone_counter": True,
+            "mitigation_clock_starts_after_source_candle_close": True,
+            "incomplete_m15_freshness_history_is_watch_only": True,
             "trend_countertrend_use_separate_grade_models": True,
             "post_reaction_profit_never_upgrades_historical_grade": True,
             "m15_closed_body_acceptance_beyond_outer_envelope_invalidates": True,
@@ -146,7 +148,10 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    BUY mitigation = CLOSED M15 above envelope -> later tactical-core overlap -> CLOSED M15 back above envelope.
    Wrong-side contacts consume zero freshness: SELL approached from above and BUY approached from below are
    interactions only. The first touch does not change grade; freshness changes only when the expected-side
-   M15 exit closes. Continuous chop inside one envelope remains one campaign. Accepted distal M15 invalidation
+   M15 exit closes. Continuous chop inside one envelope remains one campaign. The mitigation clock starts only
+   after the H1/H4 source candle (and any H1 refinement) has CLOSED and the exact source is causally knowable.
+   If the supplied M15 history does not reach back to that source-ready timestamp, freshness is UNVERIFIED and
+   the zone must be WATCH/B+ for new execution rather than assumed fresh. Accepted distal M15 invalidation
    terminates the original zone's mitigation history permanently; later crossings belong to flip/reclaim logic.
 9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
    strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/
