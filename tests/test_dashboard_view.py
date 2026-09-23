@@ -177,3 +177,78 @@ def test_dashboard_client_renders_system_before_optional_sections():
     handler = html.split("es.addEventListener('state'", 1)[1]
     assert handler.index("if(d.system)renderSystem(d.system)") < handler.index("const a=d.analysis")
     assert "try{if(d.journal)renderJournal(d.journal)}catch(err){}" in handler
+
+
+def test_dashboard_recovery_uses_bounded_query_only_observability_path():
+    cleaned = compact_dashboard_html("<body></body>")
+
+    assert "/dashboard/read-only-state" in cleaned
+    assert "AbortController" in cleaned
+    assert "timeoutMs=1800" in cleaned
+    assert "getJson('/dashboard/read-only-state',1500)" in cleaned
+    assert "getJson('/journal/current',1200)" in cleaned
+    assert "one blocked endpoint cannot leave inFlight stuck forever" in cleaned
+
+
+def test_read_only_dashboard_payload_bypasses_heavy_aggregators(monkeypatch):
+    import json
+    import sqlite3
+    import time
+    from app import main
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(
+        """
+        CREATE TABLE snapshots(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
+        CREATE TABLE analyses(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
+        CREATE TABLE heartbeat(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            ea TEXT,
+            version TEXT,
+            symbol TEXT,
+            payload TEXT
+        );
+        """
+    )
+    now = int(time.time())
+    conn.execute(
+        "INSERT INTO snapshots(payload) VALUES(?)",
+        (json.dumps({"sent_at": now, "spread_points": 16}),),
+    )
+    conn.execute(
+        "INSERT INTO analyses(payload) VALUES(?)",
+        (json.dumps({"analysis_id": "A1", "zones": [], "execution_policy": {}}),),
+    )
+    conn.execute(
+        "INSERT INTO heartbeat(ts,ea,version,symbol,payload) VALUES(?,?,?,?,?)",
+        (
+            now,
+            "InstitutionalSMC_DataBridge",
+            "1.48",
+            "XAUUSD",
+            json.dumps({"details": {"installed_bridge_version": "1.48"}}),
+        ),
+    )
+    conn.execute(
+        "INSERT INTO heartbeat(ts,ea,version,symbol,payload) VALUES(?,?,?,?,?)",
+        (
+            now,
+            "InstitutionalSMC_SequenceEA",
+            "3.39",
+            "XAUUSD",
+            json.dumps({"details": {"installed_sequence_version": "3.39", "restart_safe": True}}),
+        ),
+    )
+    conn.commit()
+
+    monkeypatch.setattr(main, "_dashboard_ro_connect", lambda: conn)
+    payload = main._dashboard_read_only_payload()
+
+    assert payload["ok"] is True
+    assert payload["analysis"]["analysis_id"] == "A1"
+    assert payload["snapshot"]["spread_points"] == 16
+    assert payload["source"] == "SQLITE_QUERY_ONLY_SHORT_TIMEOUT"
+    assert payload["system"]["components"]["components"]["data_bridge"]["running"] == "1.48"
+    assert payload["system"]["components"]["components"]["sequence_ea"]["running"] == "3.39"
