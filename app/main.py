@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +50,208 @@ def home():
     if not p.exists():
         return "<h1>Institutional SMC AI Cloud</h1>"
     return compact_dashboard_html(p.read_text(encoding="utf-8"))
+
+
+def _dashboard_ro_db_path() -> Path:
+    """Resolve the deployed SQLite file without taking the process-wide DB lock."""
+    configured = Path(SETTINGS.db_path)
+    if configured.exists():
+        return configured
+    fallback = Path.cwd() / "smc_cloud.db"
+    return fallback
+
+
+def _dashboard_ro_connect() -> sqlite3.Connection:
+    """Short-timeout, query-only connection used only for human observability.
+
+    It deliberately avoids db.connect(), whose process-wide lock and WAL setup are
+    appropriate for normal application writes but must never be able to freeze the
+    dashboard. Execution endpoints do not use this connection.
+    """
+    path = _dashboard_ro_db_path()
+    conn = sqlite3.connect(
+        f"file:{path}?mode=ro",
+        uri=True,
+        timeout=0.25,
+        check_same_thread=False,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    conn.execute("PRAGMA busy_timeout=250")
+    return conn
+
+
+def _dashboard_component_state(desired: str, installed: str, running: str, age: int | None) -> str:
+    if age is None or age > 180:
+        return "OFFLINE"
+    if desired and installed and installed != desired:
+        return "UPDATE_PENDING"
+    if desired and running and running != desired:
+        return "RESTART_REQUIRED"
+    if desired and not installed:
+        return "CURRENT" if running == desired else "INSTALL_STATUS_UNKNOWN"
+    if desired and running == desired:
+        return "CURRENT"
+    return "UNKNOWN"
+
+
+def _dashboard_read_only_payload() -> dict:
+    """Return enough live truth for the dashboard without touching heavy aggregators."""
+    now = int(datetime.now(timezone.utc).timestamp())
+    snapshot = None
+    analysis = None
+    heartbeats: list[dict] = []
+    errors: dict[str, str] = {}
+
+    try:
+        with _dashboard_ro_connect() as db:
+            try:
+                row = db.execute("SELECT payload FROM snapshots ORDER BY id DESC LIMIT 1").fetchone()
+                snapshot = json.loads(row["payload"]) if row else None
+            except Exception as exc:
+                errors["snapshot"] = f"{type(exc).__name__}:{exc}"
+
+            try:
+                row = db.execute("SELECT payload FROM analyses ORDER BY id DESC LIMIT 1").fetchone()
+                analysis = json.loads(row["payload"]) if row else None
+            except Exception as exc:
+                errors["analysis"] = f"{type(exc).__name__}:{exc}"
+
+            try:
+                rows = db.execute(
+                    "SELECT ts,ea,version,symbol,payload FROM heartbeat ORDER BY id DESC LIMIT 50"
+                ).fetchall()
+                for row in rows:
+                    item = dict(row)
+                    try:
+                        item["payload"] = json.loads(item.get("payload") or "{}")
+                    except Exception:
+                        pass
+                    heartbeats.append(item)
+            except Exception as exc:
+                errors["heartbeats"] = f"{type(exc).__name__}:{exc}"
+    except Exception as exc:
+        errors["database"] = f"{type(exc).__name__}:{exc}"
+
+    manifest = {}
+    try:
+        manifest = json.loads((ROOT / "mt5" / "stable" / "manifest.json").read_text(encoding="utf-8"))
+    except Exception as exc:
+        errors["manifest"] = f"{type(exc).__name__}:{exc}"
+
+    def latest_hb(name: str):
+        return next((x for x in heartbeats if str(x.get("ea") or "") == name), None)
+
+    def hb_details(row):
+        if not isinstance(row, dict):
+            return {}
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            return {}
+        details = payload.get("details")
+        return details if isinstance(details, dict) else {}
+
+    bridge_hb = latest_hb("InstitutionalSMC_DataBridge")
+    seq_hb = latest_hb("InstitutionalSMC_SequenceEA")
+    bridge_d = hb_details(bridge_hb)
+    seq_d = hb_details(seq_hb)
+    telemetry = bridge_d if bridge_d.get("updater_version") else seq_d
+
+    desired_bridge = str(manifest.get("data_bridge_version") or "")
+    desired_seq = str(manifest.get("sequence_ea_version") or "")
+    running_bridge = str((bridge_hb or {}).get("version") or "")
+    running_seq = str((seq_hb or {}).get("version") or "")
+    installed_bridge = str(telemetry.get("installed_bridge_version") or "")
+    installed_seq = str(telemetry.get("installed_sequence_version") or "")
+    bridge_age = now - int((bridge_hb or {}).get("ts") or 0) if bridge_hb else None
+    seq_age = now - int((seq_hb or {}).get("ts") or 0) if seq_hb else None
+
+    # A desired version visibly running in MT5 is authoritative runtime truth even
+    # if old installer text on disk has not caught up.
+    if desired_bridge and running_bridge == desired_bridge and installed_bridge != desired_bridge:
+        installed_bridge = running_bridge
+    if desired_seq and running_seq == desired_seq and installed_seq != desired_seq:
+        installed_seq = running_seq
+
+    bridge_state = _dashboard_component_state(desired_bridge, installed_bridge, running_bridge, bridge_age)
+    seq_state = _dashboard_component_state(desired_seq, installed_seq, running_seq, seq_age)
+    restart_safe = str(seq_d.get("restart_safe") or "").strip().lower() in {"1","true","yes","on"}
+    open_positions = int(seq_d.get("open_positions") or bridge_d.get("sequence_open_positions") or 0)
+    pending_reload = str(telemetry.get("pending_reload") or "").strip().lower() in {"1","true","yes","on"}
+    if bridge_state == "CURRENT" and seq_state == "CURRENT":
+        pending_reload = False
+    restart_manager = (
+        "SAFE_RELOAD_ARMED" if pending_reload and restart_safe and seq_age is not None and seq_age <= 45
+        else "WAITING_FOR_SAFE_STATE" if pending_reload and seq_hb
+        else "FIRST_RELOAD_REQUIRED" if pending_reload
+        else "NOT_NEEDED"
+    )
+
+    sent_at = int((snapshot or {}).get("sent_at") or 0)
+    snapshot_age = now - sent_at if sent_at else None
+    spread = (snapshot or {}).get("spread_points")
+    alerts = []
+    if snapshot is None:
+        alerts.append({"level":"RED","code":"NO_SNAPSHOT","message":"No market snapshot could be read by the dashboard."})
+    elif snapshot_age is not None and snapshot_age > SETTINGS.max_snapshot_age_seconds:
+        alerts.append({"level":"RED","code":"SNAPSHOT_STALE","message":"Market snapshot is stale."})
+    if spread is not None and float(spread) > SETTINGS.max_spread_points:
+        alerts.append({"level":"AMBER","code":"SPREAD_HIGH","message":"Spread is above the configured demo guard."})
+    for key,label,state in (
+        ("DATA_BRIDGE","DataBridge",bridge_state),
+        ("SEQUENCE_EA","Sequence EA",seq_state),
+    ):
+        if state == "OFFLINE":
+            alerts.append({"level":"RED","code":f"{key}_OFFLINE","message":f"{label} heartbeat is offline/stale."})
+
+    system = {
+        "cloud_version": SETTINGS.app_version,
+        "paper_only": SETTINGS.paper_only,
+        "snapshot_age_seconds": snapshot_age,
+        "spread_points": spread,
+        "alerts": alerts,
+        "healthy": not any(x.get("level") == "RED" for x in alerts),
+        "components": {
+            "stable_release": str(manifest.get("release") or ""),
+            "updater_version": str(telemetry.get("updater_version") or ""),
+            "update_result": str(telemetry.get("update_result") or ""),
+            "pending_reload": pending_reload,
+            "restart_manager": restart_manager,
+            "restart_safe": restart_safe,
+            "sequence_open_positions": open_positions,
+            "components": {
+                "data_bridge": {
+                    "desired": desired_bridge,
+                    "installed": installed_bridge,
+                    "running": running_bridge,
+                    "status": bridge_state,
+                    "heartbeat_age_seconds": bridge_age,
+                },
+                "sequence_ea": {
+                    "desired": desired_seq,
+                    "installed": installed_seq,
+                    "running": running_seq,
+                    "status": seq_state,
+                    "heartbeat_age_seconds": seq_age,
+                },
+            },
+        },
+    }
+    return {
+        "ok": True,
+        "ts": now,
+        "system": system,
+        "snapshot": snapshot,
+        "analysis": analysis,
+        "degraded": bool(errors),
+        "errors": errors,
+        "source": "SQLITE_QUERY_ONLY_SHORT_TIMEOUT",
+    }
+
+
+@app.get("/dashboard/read-only-state")
+def dashboard_read_only_state():
+    return _dashboard_read_only_payload()
 
 
 @app.get("/health")
