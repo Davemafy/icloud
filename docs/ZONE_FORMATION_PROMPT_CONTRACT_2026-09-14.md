@@ -121,14 +121,22 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 
 ## Mitigation and invalidation
 
-- Touch count means distinct institutional mitigation cycles, not every M15 bar or every small core-edge oscillation.
-- The first core interaction starts one mitigation campaign. A second mitigation is counted only after price closes outside the full envelope and later re-enters the tactical core.
-- Continuous chop/absorption inside one valid envelope remains one mitigation campaign; raw core-contact episodes may still be retained as diagnostics.
+- Raw core contact and qualified mitigation are different facts. Raw contact is diagnostic only and must never downgrade a zone by itself.
+- A freshness-degrading mitigation is a completed, directionally correct institutional re-use cycle:
+  - SELL = a CLOSED M15 bar below the full envelope arms the cycle -> price later overlaps the tactical core -> a CLOSED M15 bar returns below the full envelope and completes the reaction.
+  - BUY = a CLOSED M15 bar above the full envelope arms the cycle -> price later overlaps the tactical core -> a CLOSED M15 bar returns above the full envelope and completes the reaction.
+- The core-touch timestamp and the mitigation-qualified timestamp are separate. Grade/freshness changes only at the completed expected-side exit, never at the first wick/contact.
+- A SELL core contact approached from ABOVE is not a SELL mitigation. A BUY core contact approached from BELOW is not a BUY mitigation. Wrong-side interactions remain auditable but consume zero freshness.
+- Continuous chop/absorption inside one envelope remains one interaction campaign. Repeated core-edge oscillations inside that campaign cannot create additional mitigations.
+- A contact with no prior expected-side closed-envelope arm is not a qualified mitigation.
+- The mitigation clock starts only after the source is causally available: H1 source at H1 candle close, H4 source at H4 candle close, and H4>H1 refinement after both parent and refinement candles are closed.
+- If supplied M15 history begins after that source-ready timestamp, freshness is UNVERIFIED. The structural source may remain visible, but a structural A/A+ source is capped to B+ / WATCH for new execution until full freshness can be proven; the engine must never infer zero touches from missing history.
+- Closed M15 accepted invalidation on the distal side terminates the original zone's mitigation ledger permanently. Any later crossing belongs to flip/reclaim lifecycle and cannot resume or change the old zone's freshness count.
+- Historical mitigation grading must therefore retain an audit ledger containing approach side, arm time, core-touch time, qualification/exit time, counted YES/NO reason and grade effect.
 - A+ execution eligibility is limited to 0–1 qualified mitigation.
 - A execution eligibility may persist through a second qualified mitigation at the reduced A risk tier.
 - Three-plus qualified mitigations are B+ research context / WATCH ONLY and must not obtain new execution authority.
 - Repeated qualified mitigation downgrades quality; it must not move or manufacture the zone.
-- Closed M15 body acceptance beyond the outer envelope invalidates the original zone.
 - A wick-only liquidity raid does not invalidate.
 - Invalidation creates only a flip candidate; it is not an instant reverse entry.
 

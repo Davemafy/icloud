@@ -51,6 +51,25 @@ def _sell_candidate() -> policy.PromptCandidate:
 def _patch_common(monkeypatch, candidate, touches=0):
     monkeypatch.setattr(policy, "_build_candidates", lambda snapshot: [candidate])
     monkeypatch.setattr(policy, "_touches", lambda *args, **kwargs: touches)
+    monkeypatch.setattr(
+        policy,
+        "audit_directional_mitigations",
+        lambda *args, **kwargs: {
+            "qualified_mitigations": touches,
+            "raw_core_contact_episodes_before_invalidation": touches,
+            "history_complete": True,
+            "history_start_ts": candidate.source_ts,
+            "history_required_from_ts": candidate.source_ts,
+            "history_gap_reason": "",
+            "events": [],
+            "invalidated_at": 0,
+            "invalidation_reason": "",
+            "expected_approach_side": "BELOW" if candidate.direction == Direction.SELL else "ABOVE",
+            "expected_reaction_exit_side": "BELOW" if candidate.direction == Direction.SELL else "ABOVE",
+            "distal_invalidation_side": "ABOVE" if candidate.direction == Direction.SELL else "BELOW",
+            "counting_stopped": False,
+        },
+    )
     monkeypatch.setattr(policy, "evaluate_zone_state", lambda *args, **kwargs: ZoneState.ACTIVE)
     monkeypatch.setattr(policy, "_location_score", lambda *args, **kwargs: 8.0)
     monkeypatch.setattr(
@@ -149,6 +168,54 @@ def test_m15_accepted_invalidation_removes_zone(monkeypatch):
     assert diag["rejection_code"] == "M15_ACCEPTED_INVALIDATION"
 
 
+def test_historical_accepted_invalidation_stops_old_zone_before_latest_state_check(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=0)
+    monkeypatch.setattr(
+        policy,
+        "audit_directional_mitigations",
+        lambda *args, **kwargs: {
+            "qualified_mitigations": 1,
+            "raw_core_contact_episodes_before_invalidation": 1,
+            "history_complete": True,
+            "history_start_ts": 100,
+            "history_required_from_ts": 100,
+            "history_gap_reason": "",
+            "events": [
+                {
+                    "event_type": "INVALIDATION",
+                    "qualified": False,
+                    "qualified_index": 0,
+                    "qualified_count_before": 1,
+                    "armed_at": 200,
+                    "approach_side": "BELOW",
+                    "core_touched_at": 0,
+                    "qualified_at": 0,
+                    "bar_ts": 900,
+                    "reason": "M15_SINGLE_ACCEPTED_BODY",
+                }
+            ],
+            "invalidated_at": 900,
+            "invalidation_reason": "M15_SINGLE_ACCEPTED_BODY",
+            "expected_approach_side": "BELOW",
+            "expected_reaction_exit_side": "BELOW",
+            "distal_invalidation_side": "ABOVE",
+            "counting_stopped": True,
+        },
+    )
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=13.0)
+    ])
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
+
+    assert zones == []
+    diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
+    assert diag["rejection_code"] == "HISTORICAL_M15_ACCEPTED_INVALIDATION"
+    assert diag["mitigation_invalidated_at"] == 900
+    assert diag["mitigation_audit"]["counting_stopped"] is True
+
+
 def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_contact(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate, touches=1)
@@ -243,31 +310,65 @@ def test_countertrend_second_qualified_mitigation_is_a_not_forced_bplus(monkeypa
     assert zones[0].touch_count == 2
 
 
-def test_core_edge_chop_is_one_qualified_mitigation_until_envelope_exit():
+def test_sell_mitigation_requires_below_core_below_complete_cycle():
     bars = [
-        policy.Bar(ts=200, open=100.2, high=100.8, low=99.8, close=100.4),
-        policy.Bar(ts=300, open=101.2, high=101.4, low=101.1, close=101.2),
-        policy.Bar(ts=400, open=100.9, high=101.1, low=99.9, close=100.3),
-        policy.Bar(ts=500, open=101.3, high=101.5, low=101.1, close=101.3),
-        policy.Bar(ts=600, open=100.8, high=101.0, low=99.9, close=100.5),
+        # Arm from the correct SELL approach side.
+        policy.Bar(ts=200, open=97.5, high=97.9, low=97.0, close=97.5),
+        # Touch the core from below but remain inside the envelope.
+        policy.Bar(ts=300, open=99.0, high=100.5, low=98.8, close=100.2),
+        policy.Bar(ts=400, open=100.2, high=100.9, low=99.7, close=100.4),
+        # Only this closed return below the envelope completes mitigation #1.
+        policy.Bar(ts=500, open=99.0, high=99.2, low=97.0, close=97.5),
+        # A second correct approach/reaction cycle.
+        policy.Bar(ts=600, open=98.0, high=100.4, low=97.7, close=100.1),
+        policy.Bar(ts=700, open=99.0, high=99.1, low=97.1, close=97.4),
     ]
 
-    mitigations = policy._qualified_mitigations(
-        100.0, 101.0, 98.0, 103.0, 100, bars, raw_touch_episodes=3
+    audit = policy.audit_directional_mitigations(
+        Direction.SELL, 100.0, 101.0, 98.0, 103.0, 100, bars
     )
 
-    assert mitigations == 1
+    assert audit["qualified_mitigations"] == 2
+    qualified = [x for x in audit["events"] if x.get("qualified")]
+    assert [x["core_touched_at"] for x in qualified] == [300, 600]
+    assert [x["qualified_at"] for x in qualified] == [500, 700]
+    assert all(x["approach_side"] == "BELOW" for x in qualified)
 
-    bars.extend(
-        [
-            policy.Bar(ts=700, open=103.2, high=104.2, low=103.1, close=104.0),
-            policy.Bar(ts=800, open=101.1, high=101.2, low=100.1, close=100.6),
-        ]
+
+def test_sell_core_contact_from_above_does_not_consume_freshness():
+    bars = [
+        policy.Bar(ts=200, open=104.0, high=104.3, low=103.5, close=104.0),
+        policy.Bar(ts=300, open=103.4, high=103.7, low=100.4, close=100.7),
+        policy.Bar(ts=400, open=100.7, high=101.0, low=99.7, close=100.2),
+        policy.Bar(ts=500, open=99.0, high=99.2, low=97.0, close=97.6),
+    ]
+
+    audit = policy.audit_directional_mitigations(
+        Direction.SELL, 100.0, 101.0, 98.0, 103.0, 100, bars
     )
-    mitigations = policy._qualified_mitigations(
-        100.0, 101.0, 98.0, 103.0, 100, bars, raw_touch_episodes=4
+
+    assert audit["qualified_mitigations"] == 0
+    wrong = [x for x in audit["events"] if x.get("reason") == "WRONG_APPROACH_SIDE"]
+    assert len(wrong) == 1
+    assert wrong[0]["approach_side"] == "ABOVE"
+
+
+def test_buy_mitigation_requires_above_core_above_complete_cycle():
+    bars = [
+        policy.Bar(ts=200, open=104.0, high=104.2, low=103.5, close=104.0),
+        policy.Bar(ts=300, open=102.5, high=103.1, low=100.5, close=100.8),
+        policy.Bar(ts=400, open=101.0, high=103.5, low=100.2, close=103.4),
+    ]
+
+    audit = policy.audit_directional_mitigations(
+        Direction.BUY, 100.0, 101.0, 98.0, 103.0, 100, bars
     )
-    assert mitigations == 2
+
+    assert audit["qualified_mitigations"] == 1
+    event = next(x for x in audit["events"] if x.get("qualified"))
+    assert event["approach_side"] == "ABOVE"
+    assert event["core_touched_at"] == 300
+    assert event["qualified_at"] == 400
 
 
 def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_execution_grade(monkeypatch):
@@ -292,6 +393,145 @@ def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_exe
     assert public["grade"] == "B+"
     assert public["qualified_mitigations"] == 8
     assert public["grade_degrade_reason"] == "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
+
+
+def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
+    candidate = _sell_candidate()
+    base_audit = {
+        "qualified_mitigations": 2,
+        "invalidated_at": 0,
+        "invalidation_reason": "",
+        "events": [
+            {
+                "event_type": "MITIGATION",
+                "qualified": True,
+                "qualified_index": 1,
+                "qualified_count_before": 0,
+                "armed_at": 200,
+                "approach_side": "BELOW",
+                "core_touched_at": 300,
+                "qualified_at": 400,
+                "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE",
+            },
+            {
+                "event_type": "MITIGATION",
+                "qualified": True,
+                "qualified_index": 2,
+                "qualified_count_before": 1,
+                "armed_at": 500,
+                "approach_side": "BELOW",
+                "core_touched_at": 600,
+                "qualified_at": 700,
+                "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE",
+            },
+        ],
+    }
+
+    ledger = policy._mitigation_grade_ledger(
+        base_audit,
+        candidate,
+        8.0,
+        countertrend=False,
+        structural_liquidity_tf="H4",
+        psy_confluence=True,
+    )
+
+    assert ledger["events"][0]["grade_before"] == "A+"
+    assert ledger["events"][0]["grade_after"] == "A+"
+    assert ledger["events"][0]["grade_changed"] is False
+    assert ledger["events"][1]["grade_before"] == "A+"
+    assert ledger["events"][1]["grade_after"] == "A"
+    assert ledger["events"][1]["grade_changed"] is True
+
+
+def test_incomplete_m15_freshness_history_forces_structural_a_plus_to_watch_only(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=0)
+    monkeypatch.setattr(
+        policy,
+        "audit_directional_mitigations",
+        lambda *args, **kwargs: {
+            "qualified_mitigations": 0,
+            "raw_core_contact_episodes_before_invalidation": 0,
+            "history_complete": False,
+            "history_start_ts": candidate.source_ts + 7200,
+            "history_required_from_ts": candidate.source_ts,
+            "history_gap_reason": "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
+            "events": [],
+            "invalidated_at": 0,
+            "invalidation_reason": "",
+            "expected_approach_side": "BELOW",
+            "expected_reaction_exit_side": "BELOW",
+            "distal_invalidation_side": "ABOVE",
+            "counting_stopped": False,
+        },
+    )
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=13.0)
+    ])
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
+
+    assert len(zones) == 1
+    zone = zones[0]
+    assert "structural_grade:A+" in zone.notes
+    assert zone.grade == Grade.B_PLUS
+    assert zone.core_method.startswith("WATCH|")
+    assert "grade_degrade_reason:FRESHNESS_HISTORY_INCOMPLETE" in zone.notes
+    public = analysis.execution_policy["public_zone_map"]["sell"]
+    assert public["mitigation_history_complete"] is False
+    assert public["grade"] == "B+"
+
+
+def test_source_ready_time_is_after_source_candle_close():
+    h1 = policy.PromptSource(
+        direction=Direction.BUY,
+        tf="H1",
+        source_ts=1_000,
+        core_low=90,
+        core_high=91,
+        zone_low=89,
+        zone_high=92,
+        strength=2.0,
+        fvg=False,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+    )
+    h4 = policy.PromptSource(
+        direction=Direction.SELL,
+        tf="H4",
+        source_ts=2_000,
+        core_low=100,
+        core_high=101,
+        zone_low=99,
+        zone_high=102,
+        strength=2.0,
+        fvg=False,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+    )
+
+    assert policy._source_ready_ts(h1) == 1_000 + 3600
+    assert policy._source_ready_ts(h4) == 2_000 + 14400
+
+
+def test_source_ready_prefers_explicit_evidence_ready_timestamp():
+    source = policy.PromptSource(
+        direction=Direction.SELL,
+        tf="H4",
+        source_ts=10_000,
+        core_low=100,
+        core_high=101,
+        zone_low=99,
+        zone_high=102,
+        strength=2.0,
+        fvg=True,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+        ready_ts=30_000,
+    )
+
+    assert policy._source_ready_ts(source) == 30_000
 
 
 def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus():
