@@ -135,7 +135,6 @@ jobs:
               'REENTRY_LIMIT_REACHED',
               'ENTRY_DECISION',
               'TZ36_PostHandoffEntryReady',
-              'WAITING_FOR_CLOSED_M1_POST_HANDOFF_VALUE_REACTION',
               'POST_HANDOFF_OBJECTIVE_ALREADY_TRADED',
               'MIN_RR_NOT_MET',
               'nearest_open_target',
