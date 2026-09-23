@@ -221,6 +221,7 @@ def audit_directional_mitigations(
                         "event_type": "INTERACTION",
                         "qualified": False,
                         "qualified_index": 0,
+                        "qualified_count_before": qualified,
                         "qualified_at": 0,
                         "exit_side": distal_side,
                         "exit_close": float(bar.close),
@@ -256,6 +257,7 @@ def audit_directional_mitigations(
                             "event_type": "MITIGATION",
                             "qualified": True,
                             "qualified_index": qualified,
+                            "qualified_count_before": qualified - 1,
                             "qualified_at": ts,
                             "exit_side": expected_side,
                             "exit_close": float(bar.close),
@@ -287,6 +289,7 @@ def audit_directional_mitigations(
                         "event_type": "INTERACTION",
                         "qualified": False,
                         "qualified_index": 0,
+                        "qualified_count_before": qualified,
                         "qualified_at": 0,
                         "reason": (
                             "WRONG_APPROACH_SIDE"
