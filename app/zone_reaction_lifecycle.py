@@ -418,6 +418,9 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
         return
     ensure_execution_ownership_schema()
     ensure_zone_publication_schema()
+    # Idempotent safety: direct callers get the same publication-time guard as the
+    # normal snapshot/service pipeline.
+    update_zone_publication_contacts(snapshot)
     now = int(snapshot.sent_at)
     cutoff = now - 7 * 24 * 3600
     with connect() as db:
