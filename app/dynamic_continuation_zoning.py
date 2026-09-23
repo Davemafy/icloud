@@ -43,7 +43,10 @@ class ContinuationEvent:
 
 
 def _event_ready_ts(event: ContinuationEvent) -> int:
-    return int(event.displacement_ts) + int(TF_SECONDS.get(str(event.source_tf).upper(), 0))
+    # Dynamic continuation requires a three-candle FVG around the displacement.
+    # The array is not causally known until the newer third candle closes.
+    tf_seconds = int(TF_SECONDS.get(str(event.source_tf).upper(), 0))
+    return int(event.displacement_ts) + 2 * tf_seconds
 
 
 def _point(snapshot: MarketSnapshot) -> float:
