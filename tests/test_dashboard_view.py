@@ -252,3 +252,19 @@ def test_read_only_dashboard_payload_bypasses_heavy_aggregators(monkeypatch):
     assert payload["source"] == "SQLITE_QUERY_ONLY_SHORT_TIMEOUT"
     assert payload["system"]["components"]["components"]["data_bridge"]["running"] == "1.48"
     assert payload["system"]["components"]["components"]["sequence_ea"]["running"] == "3.39"
+
+
+def test_dashboard_has_no_self_triggering_zone_mutation_observer():
+    html = (
+        '<tbody id="zones"></tbody>'
+        '<div id="checks"></div>'
+        '<h2>Live trading journal</h2>'
+        '</body>'
+    )
+    cleaned = compact_dashboard_html(html)
+
+    assert ".observe(zones,{childList:true,subtree:true})" not in cleaned
+    assert "self-triggering mutation loop on mobile browsers" in cleaned
+    assert "window.setInterval(function(){" in cleaned
+    assert "refreshJournalContext();" in cleaned
+    assert "refreshMitigationAudit();" in cleaned
