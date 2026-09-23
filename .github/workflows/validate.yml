@@ -3,6 +3,8 @@ name: validate
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -29,11 +31,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5')
           text=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
-          assert '#property version   "3.34"' in text
+          assert '#property version   "3.39"' in text
           required=[
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
@@ -48,16 +50,25 @@ jobs:
               'execution_handoff_ts',
               'gate_stage',
               'gate_reason',
-              'SIGNAL_FOUND_WAITING_FOR_PULLBACK',
+              'ENTRY_CONFIRMATION',
+              'FLIP_CONFIRMATION',
+              'WAITING_FOR_CLOSED_M1_VALUE_REACTION',
               'NO_OPEN_TARGET_BEYOND_ENTRY',
               'MT5_ORDER_SEND_FAILED',
               'TZ34_InitialRiskDistance',
               'HistorySelectByPosition(positionId)',
               'RunnerTrailStartR',
+              'TZ39_ProfessionalValueReactionReady',
+              'TZ39_InitialEntryReady',
+              'TZ39_FlipEntryReady',
+              'ENTRY_CONFIRMATION',
+              'FLIP_CONFIRMATION',
+              'ProfessionalEntryReactionMinBodyATR=0.25',
+              'ProfessionalEntryReactionMaxChaseATR=0.15',
           ]
           for needle in required:
               assert needle in text, needle
-          print('Sequence 3.34 MQL structural checks OK')
+          print('Sequence 3.39 MQL structural checks OK')
           PY
       - name: Stable EA SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_34_PersistentRunnerRisk_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5

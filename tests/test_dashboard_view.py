@@ -84,6 +84,10 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     assert "matches the active thesis owner" in cleaned
     assert "This is not entry authorization" in cleaned
     assert "live Sequence EA must still complete sweep" in cleaned
+    assert "CLOSED M1 same-direction rejection/micro-break" in cleaned
+    assert "Every entry model must pass this final confirmation" in cleaned
+    assert "ENTRY_CONFIRMATION" in cleaned
+    assert "FLIP_CONFIRMATION" in cleaned
     assert "thesis origin/ownership anchor" in cleaned
     assert "/mt5/plan" not in cleaned
     assert "OrderSend" not in cleaned
