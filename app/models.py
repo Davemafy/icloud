@@ -112,6 +112,7 @@ class Zone(BaseModel):
     zone_low: float
     zone_high: float
     touch_count: int = 0
+    mitigation_audit: Dict[str, Any] = Field(default_factory=dict)
     confluences: List[str] = Field(default_factory=list)
     independent_confluence_count: int = 0
     requires_sweep: bool = True
