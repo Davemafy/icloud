@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.28",
+  "release": "6.3.29",
   "repository": "Davemafy/icloud",
-  "ref": "eb9b320ddfeb25a7b192af4e82ab9465261a1f47",
-  "data_bridge_version": "1.47",
-  "sequence_ea_version": "3.38",
+  "ref": "aad0d6a973c459363b6bb560d026158dcea34b05",
+  "data_bridge_version": "1.48",
+  "sequence_ea_version": "3.39",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -146,24 +146,33 @@
     "subminimum_lot_fail_closed",
     "aggregate_split_volume_cap",
     "sequence_338_truth_overlay",
-    "databridge_147_sequence_338_truth"
+    "databridge_147_sequence_338_truth",
+    "universal_closed_m1_value_reaction_confirmation",
+    "primary_sniper_closed_m1_confirmation",
+    "continuation_rescue_closed_m1_confirmation",
+    "escape_pullback_closed_m1_confirmation",
+    "accepted_flip_closed_m1_confirmation",
+    "post_formation_reaction_only",
+    "professional_confirmation_floor",
+    "sequence_339_truth_overlay",
+    "databridge_148_sequence_339_truth"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_47_ContextGradeRiskTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
       "requires_reload": true,
-      "sha256": "378dd6536c0470659ba17884754756da1d4a8a8fe21cdd63676bab803ebc6b12"
+      "sha256": "6ff46496b324a95c8ef7ceb40c3a703c3e588c5e14fa0cd0fbd551c7b75b8aac"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_38_ContextGradeRiskAutoSize_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
       "requires_reload": true,
-      "sha256": "13e47adad74199b27272f44654f1f1113ddb9a580d6549cb3a06639c81174701"
+      "sha256": "2f0cfb8b3a6b1071a767efc7865d9903f0e621b658bfaba5f9704c6063d119a2"
     }
   ],
   "support_files": [
