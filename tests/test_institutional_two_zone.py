@@ -163,6 +163,49 @@ def test_m15_accepted_invalidation_removes_zone(monkeypatch):
     assert diag["rejection_code"] == "M15_ACCEPTED_INVALIDATION"
 
 
+def test_historical_accepted_invalidation_stops_old_zone_before_latest_state_check(monkeypatch):
+    candidate = _sell_candidate()
+    _patch_common(monkeypatch, candidate, touches=0)
+    monkeypatch.setattr(
+        policy,
+        "audit_directional_mitigations",
+        lambda *args, **kwargs: {
+            "qualified_mitigations": 1,
+            "events": [
+                {
+                    "event_type": "INVALIDATION",
+                    "qualified": False,
+                    "qualified_index": 0,
+                    "qualified_count_before": 1,
+                    "armed_at": 200,
+                    "approach_side": "BELOW",
+                    "core_touched_at": 0,
+                    "qualified_at": 0,
+                    "bar_ts": 900,
+                    "reason": "M15_SINGLE_ACCEPTED_BODY",
+                }
+            ],
+            "invalidated_at": 900,
+            "invalidation_reason": "M15_SINGLE_ACCEPTED_BODY",
+            "expected_approach_side": "BELOW",
+            "expected_reaction_exit_side": "BELOW",
+            "distal_invalidation_side": "ABOVE",
+            "counting_stopped": True,
+        },
+    )
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=13.0)
+    ])
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
+
+    assert zones == []
+    diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
+    assert diag["rejection_code"] == "HISTORICAL_M15_ACCEPTED_INVALIDATION"
+    assert diag["mitigation_invalidated_at"] == 900
+    assert diag["mitigation_audit"]["counting_stopped"] is True
+
+
 def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_contact(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate, touches=1)
