@@ -17,6 +17,7 @@ from .engine import (
     structure_bias,
 )
 from .models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from .mitigation_audit import audit_directional_mitigations
 from .prompt_contract import prompt_dxy_direction, prompt_snapshot_complete
 from .risk_matrix import execution_grade_eligible
 
@@ -323,31 +324,66 @@ def _qualified_mitigations(
     zone_high: float,
     source_ts: int,
     bars: list[Bar],
-    raw_touch_episodes: int,
+    raw_touch_episodes: int = 0,
+    *,
+    direction: Direction = Direction.SELL,
 ) -> int:
-    """Count distinct mitigation cycles, not every core-edge oscillation.
+    """Compatibility wrapper around the professional directional ledger.
 
-    A new mitigation is counted only after price has first interacted with the
-    tactical core, then closed outside the full institutional envelope, and later
-    re-enters the core. Continuous chop/absorption inside one envelope therefore
-    remains one mitigation campaign instead of being counted many times.
+    raw_touch_episodes is deliberately not allowed to manufacture freshness.
+    Only a completed directionally-correct mitigation cycle can change grade.
     """
-    if not bars:
-        return int(raw_touch_episodes)
-    count = 0
-    can_count = True
-    for bar in bars:
-        if int(bar.ts) <= int(source_ts):
-            continue
-        hit_core = float(bar.high) >= float(core_low) and float(bar.low) <= float(core_high)
-        outside_envelope = float(bar.close) < float(zone_low) or float(bar.close) > float(zone_high)
-        if hit_core and can_count:
-            count += 1
-            can_count = False
-        elif outside_envelope:
-            can_count = True
-    return count
+    audit = audit_directional_mitigations(
+        direction,
+        core_low,
+        core_high,
+        zone_low,
+        zone_high,
+        source_ts,
+        bars,
+    )
+    return int(audit.get("qualified_mitigations") or 0)
 
+
+def _mitigation_grade_ledger(
+    audit: dict,
+    candidate: PromptCandidate,
+    location_score: float,
+    *,
+    countertrend: bool,
+    structural_liquidity_tf: str,
+    psy_confluence: bool,
+) -> dict:
+    """Attach the exact grade effect to every mitigation/interation event."""
+    enriched = {**audit, "events": []}
+    for event in list(audit.get("events") or []):
+        before_count = int(event.get("qualified_count_before") or 0)
+        after_count = before_count + (1 if event.get("qualified") else 0)
+        before = _grade_audit(
+            candidate,
+            before_count,
+            location_score,
+            countertrend=countertrend,
+            structural_liquidity_tf=structural_liquidity_tf,
+            psy_confluence=psy_confluence,
+        )["grade"]
+        after = _grade_audit(
+            candidate,
+            after_count,
+            location_score,
+            countertrend=countertrend,
+            structural_liquidity_tf=structural_liquidity_tf,
+            psy_confluence=psy_confluence,
+        )["grade"]
+        enriched["events"].append(
+            {
+                **event,
+                "grade_before": before.value,
+                "grade_after": after.value,
+                "grade_changed": before != after,
+            }
+        )
+    return enriched
 
 def _grade_audit(
     candidate: PromptCandidate,
@@ -542,19 +578,20 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
 
     zone_low, zone_high, sweep_room = geometry
     raw_touch_episodes = _touches(core_low, core_high, int(candidate.source_ts), snapshot.xau_m15)
-    touches = _qualified_mitigations(
+    core_mid = (core_low + core_high) / 2.0
+    loc = _location_score(candidate.direction, core_mid, snapshot, liq)
+    countertrend = context not in (Direction.NEUTRAL, candidate.direction)
+    psy_confluence = _psy_in_zone(zone_low, zone_high, liq)
+    mitigation_audit = audit_directional_mitigations(
+        candidate.direction,
         core_low,
         core_high,
         zone_low,
         zone_high,
         int(candidate.source_ts),
         snapshot.xau_m15,
-        raw_touch_episodes,
     )
-    core_mid = (core_low + core_high) / 2.0
-    loc = _location_score(candidate.direction, core_mid, snapshot, liq)
-    countertrend = context not in (Direction.NEUTRAL, candidate.direction)
-    psy_confluence = _psy_in_zone(zone_low, zone_high, liq)
+    touches = int(mitigation_audit.get("qualified_mitigations") or 0)
     structural_audit = _grade_audit(
         candidate,
         0,
@@ -573,6 +610,14 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     )
     structural_grade = structural_audit["grade"]
     grade = current_audit["grade"]
+    mitigation_audit = _mitigation_grade_ledger(
+        mitigation_audit,
+        candidate,
+        loc,
+        countertrend=countertrend,
+        structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
+        psy_confluence=psy_confluence,
+    )
     grade_degrade_reason = ""
     if structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
         grade_degrade_reason = "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
@@ -620,6 +665,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         zone_low=round(zone_low, 5),
         zone_high=round(zone_high, 5),
         touch_count=touches,
+        mitigation_audit=mitigation_audit,
         confluences=sorted(conf),
         independent_confluence_count=len(conf),
         requires_sweep=True,
@@ -656,7 +702,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"grade_source_strength:{float(candidate.strength):.4f}",
             f"grade_context:{'COUNTERTREND_REVERSAL' if countertrend else 'TREND_CONTINUATION'}",
             "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
-            "Touch count means distinct envelope-exit/re-entry mitigations; core-edge chop inside one envelope is one campaign.",
+            "Qualified mitigation is directional and complete: SELL requires below-envelope -> core -> below-envelope; BUY requires above-envelope -> core -> above-envelope. Wrong-side contacts never consume freshness.",
             "Grade uses only pre-entry structural evidence. Momentum after price leaves the zone validates execution quality but cannot retroactively upgrade the zone.",
             "D1 gives context. H4 is primary. H1 refines/falls back. M15 validates health. M1 only times entry.",
         ],
@@ -686,7 +732,16 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "sweep_room_points": round(_to_points(sweep_room, snapshot), 1),
         "distance_h1_atr": round(_distance(snapshot.mid, zone_low, zone_high) / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9), 3),
         "grade": grade.value,
+        "mitigation_audit": mitigation_audit,
+        "mitigation_invalidated_at": int(mitigation_audit.get("invalidated_at") or 0),
+        "mitigation_invalidation_reason": str(mitigation_audit.get("invalidation_reason") or ""),
     }
+    if int(mitigation_audit.get("invalidated_at") or 0) > 0:
+        return None, {
+            **diag,
+            "rejection_code": "HISTORICAL_M15_ACCEPTED_INVALIDATION",
+            "rejection_reason": "The original zone had already received accepted M15 invalidation after its source formed. Mitigation counting stopped at that timestamp; later crossings belong to flip/reclaim logic.",
+        }
     if state != ZoneState.ACTIVE:
         return None, {**diag, "rejection_code": "M15_ACCEPTED_INVALIDATION", "rejection_reason": "Closed M15 price has accepted beyond the outer envelope. Wick-only raids are allowed; accepted body closes are not."}
     return zone, {**diag, "rejection_code": "", "rejection_reason": ""}
@@ -824,6 +879,9 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "touches": zone.touch_count,
             "qualified_mitigations": zone.touch_count,
             "raw_core_touch_episodes": raw_touch_episodes,
+            "mitigation_audit": dict(zone.mitigation_audit or {}),
+            "mitigation_expected_approach_side": str((zone.mitigation_audit or {}).get("expected_approach_side") or ""),
+            "mitigation_counting_stopped": bool((zone.mitigation_audit or {}).get("counting_stopped")),
             "required_liquidity": required,
             "liquidity_in_zone": True,
             "attached_liquidity": attached,
@@ -874,7 +932,11 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         "psy_is_confluence_not_qualification": True,
         "dxy_is_confirmation_not_qualification": True,
         "mitigation_count_affects_grade_not_zone_geometry": True,
-        "touch_count_semantics": "DISTINCT_ENVELOPE_EXIT_REENTRY_MITIGATIONS",
+        "touch_count_semantics": "DIRECTIONAL_COMPLETE_CORE_MITIGATIONS_ONLY",
+        "sell_mitigation_cycle": "BELOW_ENVELOPE_TO_CORE_TO_BELOW_ENVELOPE",
+        "buy_mitigation_cycle": "ABOVE_ENVELOPE_TO_CORE_TO_ABOVE_ENVELOPE",
+        "wrong_side_core_contact_consumes_freshness": False,
+        "accepted_invalidation_stops_original_zone_counting": True,
         "context_specific_grade_models": {
             "TREND": "CONTINUATION_SOURCE_STRENGTH_FRESHNESS",
             "COUNTERTREND": "HTF_EXTREMITY_LIQUIDITY_SWEEP_REJECTION_RESPONSE",
@@ -891,7 +953,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     }
     analysis.execution_policy = policy
     summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. The map now reports structural grade separately from current execution grade: a structurally A+/A zone can become current B+ after repeated qualified reuse without rewriting what the source quality was. Touches are distinct envelope-exit/re-entry mitigations, not every core-edge oscillation. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
+    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. The map now reports structural grade separately from current execution grade: a structurally A+/A zone can become current B+ after repeated qualified reuse without rewriting what the source quality was. Qualified mitigations are directional complete cycles: SELL below->core->below; BUY above->core->above. Wrong-side contacts and post-invalidation crossings never consume freshness. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
     return analysis.zones
 
 
