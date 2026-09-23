@@ -495,13 +495,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       refreshJournalContext();
     }).observe(checks,{childList:true,subtree:true});
   }
-  const zones=document.getElementById('zones');
-  if(zones){
-    new MutationObserver(function(){
-      refreshJournalContext();
-      refreshMitigationAudit();
-    }).observe(zones,{childList:true,subtree:true});
-  }
+  // Deliberately no MutationObserver on #zones. refreshJournalContext() writes
+  // ownership tags back into that same subtree; observing it creates a
+  // self-triggering mutation loop on mobile browsers. The bounded 3-second timer
+  // below is the sole refresh mechanism for ownership and mitigation audit.
   window.setInterval(function(){
     refreshJournalContext();
     refreshReadinessSplit();
