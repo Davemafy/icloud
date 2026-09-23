@@ -515,6 +515,25 @@ def test_source_ready_time_is_after_source_candle_close():
     assert policy._source_ready_ts(h4) == 2_000 + 14400
 
 
+def test_source_ready_prefers_explicit_evidence_ready_timestamp():
+    source = policy.PromptSource(
+        direction=Direction.SELL,
+        tf="H4",
+        source_ts=10_000,
+        core_low=100,
+        core_high=101,
+        zone_low=99,
+        zone_high=102,
+        strength=2.0,
+        fvg=True,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+        ready_ts=30_000,
+    )
+
+    assert policy._source_ready_ts(source) == 30_000
+
+
 def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus():
     candidate = _buy_reversal_candidate()
     candidate.strength = 1.8
