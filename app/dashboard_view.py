@@ -15,6 +15,20 @@ _FRESHNESS_LABEL_REPLACEMENT = (
     "'Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ watch-only)')"
 )
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
+_MITIGATION_AUDIT_CARD = (
+    '<h2>Mitigation audit <span class="pill paper">GRADE AUTHORITY</span></h2>'
+    '<div class="card scroll"><table><thead><tr>'
+    '<th>Zone</th><th>Expected cycle</th><th>Event</th><th>Approach</th>'
+    '<th>Armed</th><th>Core touch</th><th>Qualified / exit</th>'
+    '<th>Counted</th><th>Grade effect / reason</th>'
+    '</tr></thead><tbody id="mitigationAudit">'
+    '<tr><td colspan="9" class="muted">Waiting for mitigation audit…</td></tr>'
+    '</tbody></table>'
+    '<p class="note"><b>Freshness rule:</b> SELL = below envelope → core → below envelope; '
+    'BUY = above envelope → core → above envelope. Wrong-side contact never downgrades a zone. '
+    'Accepted distal M15 invalidation permanently stops the original zone counter.</p></div>'
+)
+
 _JOURNAL_CONTEXT_CARD = (
     '<div class="card" style="margin-top:12px">'
     '<h3>Map / thesis ownership &amp; M1 authority <span class="pill paper">READ ONLY</span></h3>'
@@ -56,6 +70,71 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     }catch(e){
       return {};
     }
+  }
+
+  function auditTime(ts){
+    const n=Number(ts||0);
+    if(!n)return '—';
+    try{return new Date(n*1000).toLocaleString();}catch(e){return String(n);}
+  }
+
+  function auditText(v){
+    return String(v===undefined||v===null?'':v)
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+      .replaceAll('"','&quot;').replaceAll("'","&#039;");
+  }
+
+  function refreshMitigationAudit(){
+    const body=document.getElementById('mitigationAudit');
+    if(!body)return;
+    const p=policyState();
+    const map=p && typeof p.public_zone_map==='object' ? p.public_zone_map : {};
+    const rows=[];
+    for(const side of ['sell','buy']){
+      const z=map?.[side]||{};
+      if(!z.zone_id)continue;
+      const audit=z.mitigation_audit||{};
+      const events=Array.isArray(audit.events)?audit.events:[];
+      const expected=String(audit.expected_approach_side||z.mitigation_expected_approach_side||'—');
+      const cycle=(String(side).toUpperCase()==='SELL')
+        ? 'BELOW → CORE → BELOW'
+        : 'ABOVE → CORE → ABOVE';
+      if(!events.length){
+        rows.push(
+          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
+          '<td>'+auditText(expected)+'</td><td>—</td><td>—</td><td>—</td><td><b>NO</b></td>'+
+          '<td>Qualified mitigations '+auditText(audit.qualified_mitigations||0)+'</td></tr>'
+        );
+        continue;
+      }
+      events.forEach((e)=>{
+        const qualified=e.qualified===true;
+        const type=String(e.event_type||'INTERACTION')+(qualified&&e.qualified_index?' #'+e.qualified_index:'');
+        const before=String(e.grade_before||'');
+        const after=String(e.grade_after||'');
+        const effect=(before||after)?((before||'—')+' → '+(after||'—')):'';
+        const reason=String(e.reason||'');
+        rows.push(
+          '<tr><td>'+auditText(z.zone_id)+'</td>'+
+          '<td>'+cycle+'</td>'+
+          '<td>'+auditText(type)+'</td>'+
+          '<td>'+auditText(e.approach_side||'—')+'</td>'+
+          '<td>'+auditTime(e.armed_at)+'</td>'+
+          '<td>'+auditTime(e.core_touched_at)+'</td>'+
+          '<td>'+auditTime(e.qualified_at||e.bar_ts)+'</td>'+
+          '<td><b class="'+(qualified?'ok':'warn')+'">'+(qualified?'YES':'NO')+'</b></td>'+
+          '<td>'+auditText(effect+(effect&&reason?' • ':'')+reason)+'</td></tr>'
+        );
+      });
+      if(audit.counting_stopped===true){
+        rows.push(
+          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td><b class="bad">COUNTER STOPPED</b></td>'+
+          '<td>—</td><td>—</td><td>—</td><td>'+auditTime(audit.invalidated_at)+'</td><td><b>NO</b></td>'+
+          '<td>'+auditText(audit.invalidation_reason||'ACCEPTED INVALIDATION')+'</td></tr>'
+        );
+      }
+    }
+    body.innerHTML=rows.length?rows.join(''):'<tr><td colspan="9" class="muted">No current map zone has mitigation audit data.</td></tr>';
   }
 
   function activeThesis(){
@@ -397,6 +476,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
   refreshJournalContext();
   refreshReadinessSplit();
+  refreshMitigationAudit();
 
   const checks=document.getElementById('checks');
   if(checks){
@@ -409,11 +489,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
   if(zones){
     new MutationObserver(function(){
       refreshJournalContext();
+      refreshMitigationAudit();
     }).observe(zones,{childList:true,subtree:true});
   }
   window.setInterval(function(){
     refreshJournalContext();
     refreshReadinessSplit();
+    refreshMitigationAudit();
   },3000);
 })();
 </script>
@@ -432,6 +514,9 @@ def compact_dashboard_html(html: str) -> str:
     cleaned = _EXECUTION_CONTRACT_CARD.sub("", html, count=1)
     cleaned = cleaned.replace(_EXECUTION_CONTRACT_BINDING, _EXECUTION_POLICY_BINDING)
     cleaned = cleaned.replace(_FRESHNESS_LABEL_BINDING, _FRESHNESS_LABEL_REPLACEMENT)
+
+    if 'id="mitigationAudit"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
+        cleaned = cleaned.replace(_JOURNAL_ANCHOR, _MITIGATION_AUDIT_CARD + "\n" + _JOURNAL_ANCHOR, 1)
 
     if 'id="journalContext"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
         cleaned = cleaned.replace(_JOURNAL_ANCHOR, _JOURNAL_CONTEXT_CARD + "\n" + _JOURNAL_ANCHOR, 1)
