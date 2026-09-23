@@ -141,3 +141,39 @@ def test_dashboard_transform_is_idempotent():
     assert twice.count('id="journal-context-readonly-script"') == 1
     assert twice.count('id="htfScore"') == 1
     assert twice.count('id="executionMeta"') == 1
+
+
+def test_dashboard_payload_keeps_healthy_sections_when_one_aggregation_fails(monkeypatch):
+    import json
+    from app import main
+
+    class Analysis:
+        def model_dump(self):
+            return {"analysis_id": "A1", "zones": []}
+
+    def broken_journal():
+        raise RuntimeError("journal aggregation failed")
+
+    monkeypatch.setattr(main, "latest_snapshot", lambda: None)
+    monkeypatch.setattr(main, "active_analysis", lambda: Analysis())
+    monkeypatch.setattr(main, "_journal_snapshot", broken_journal)
+    monkeypatch.setattr(main, "scheduler_status", lambda: {"running": True})
+    monkeypatch.setattr(main, "system_status", lambda: {"healthy": True, "cloud_version": "test"})
+
+    payload = json.loads(main._dashboard_payload("tick"))
+
+    assert payload["event"] == "tick"
+    assert payload["analysis"]["analysis_id"] == "A1"
+    assert payload["system"]["healthy"] is True
+    assert payload["journal"] is None
+    assert payload["degraded"] is True
+    assert payload["errors"]["journal"].startswith("RuntimeError:")
+
+
+def test_dashboard_client_renders_system_before_optional_sections():
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    handler = html.split("es.addEventListener('state'", 1)[1]
+    assert handler.index("if(d.system)renderSystem(d.system)") < handler.index("const a=d.analysis")
+    assert "try{if(d.journal)renderJournal(d.journal)}catch(err){}" in handler
