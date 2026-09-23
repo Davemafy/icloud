@@ -155,7 +155,9 @@ def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_con
     analysis = _analysis([
         LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=4.0)
     ])
-    snap = _snapshot(mid=103.95)
+    # Keep the quote just above the core but within the 0.30 x M15 ATR
+    # approach buffer. This remains valid under the installed V659 H4 geometry.
+    snap = _snapshot(mid=106.35)
 
     zones = policy.apply_two_zone_institutional_map(analysis, snap)
 
