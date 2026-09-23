@@ -134,6 +134,34 @@ def test_sequence_reentry_confirmation_has_explicit_wait_state():
     assert status == "WAITING FOR M1 VALUE REACTION"
 
 
+def test_sequence_initial_primary_confirmation_has_explicit_wait_state():
+    status = _sequence_reconciled_status(
+        "M1 READY",
+        {
+            "online": True,
+            "authority": "HTF_CORE_HANDOFF",
+            "gate_stage": "ENTRY_CONFIRMATION",
+            "gate_reason": "E0_WAITING_FOR_CLOSED_M1_VALUE_REACTION",
+            "open_positions": 0,
+        },
+    )
+    assert status == "WAITING FOR M1 VALUE REACTION"
+
+
+def test_sequence_flip_confirmation_has_explicit_wait_state():
+    status = _sequence_reconciled_status(
+        "FLIP CANDIDATE",
+        {
+            "online": True,
+            "authority": "ACCEPTED_ZONE_FLIP_HANDOFF",
+            "gate_stage": "FLIP_CONFIRMATION",
+            "gate_reason": "FLIP_F0_WAITING_FOR_CLOSED_M1_VALUE_REACTION",
+            "open_positions": 0,
+        },
+    )
+    assert status == "WAITING FOR M1 VALUE REACTION"
+
+
 def test_sequence_reentry_limit_is_terminal_for_same_thesis():
     status = _sequence_reconciled_status(
         "M1 READY",
