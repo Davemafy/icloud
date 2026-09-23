@@ -47,7 +47,9 @@ def test_v339_professional_confirmation_is_closed_directional_and_post_formation
     end = text.index("bool TZ39_InitialEntryReady", start)
     gate = text[start:end]
     for needle in [
-        "newestAfterFormation=MathMin(s.break_idx-1,s.pd_idx-1)",
+        "int newestAfterFormation=s.break_idx-1;",
+        'if(StringFind(s.pd_type,"FVG")>=0)',
+        "newestAfterFormation=MathMin(newestAfterFormation,s.pd_idx-2)",
         "bool touched=(r[i].high>=s.entry_low&&r[i].low<=s.entry_high)",
         "bool directional=buy?(r[i].close>r[i].open):(r[i].close<r[i].open)",
         "bool rejected=buy?(r[i].close>=s.entry_high):(r[i].close<=s.entry_low)",
