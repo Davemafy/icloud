@@ -118,6 +118,7 @@ def audit_directional_mitigations(
     if not ordered:
         return {
             "qualified_mitigations": 0,
+            "raw_core_contact_episodes_before_invalidation": 0,
             "events": [],
             "invalidated_at": 0,
             "invalidation_reason": "",
@@ -131,6 +132,8 @@ def audit_directional_mitigations(
     absolute_index = {int(bar.ts): i for i, bar in enumerate(all_ordered)}
 
     qualified = 0
+    raw_core_contacts = 0
+    raw_core_engaged = False
     events: list[dict] = []
     invalidated_at = 0
     invalidation_reason = ""
@@ -191,6 +194,11 @@ def audit_directional_mitigations(
             break
 
         hit_core = float(bar.high) >= float(core_low) and float(bar.low) <= float(core_high)
+        if hit_core and not raw_core_engaged:
+            raw_core_contacts += 1
+            raw_core_engaged = True
+        elif not hit_core:
+            raw_core_engaged = False
         close_side = _close_side(bar, zone_low, zone_high)
 
         # A previously valid approach has already touched the core. The cycle is
@@ -307,6 +315,7 @@ def audit_directional_mitigations(
 
     return {
         "qualified_mitigations": qualified,
+        "raw_core_contact_episodes_before_invalidation": raw_core_contacts,
         "events": events,
         "invalidated_at": invalidated_at,
         "invalidation_reason": invalidation_reason,
