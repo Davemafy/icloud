@@ -1,6 +1,13 @@
 from app import db
 from app.models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
-from app.zone_reaction_lifecycle import attach_lifecycle, register_analysis_zones, update_zone_reactions
+from app.zone_reaction_lifecycle import (
+    apply_publication_truth,
+    attach_lifecycle,
+    publication_state_for_zone,
+    register_analysis_zones,
+    update_zone_publication_contacts,
+    update_zone_reactions,
+)
 
 
 def _zone() -> Zone:
@@ -220,3 +227,93 @@ def test_lifecycle_grade_freezes_after_first_core_interaction(tmp_path, monkeypa
 
     assert int(row["core_touched_at"] or 0) == 2100
     assert row["grade"] == "A+"
+
+
+def test_prepublication_m15_contact_never_latches_live_execution_touch(tmp_path, monkeypatch):
+    path = tmp_path / "publication_truth.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _zone()
+    analysis = _analysis([zone])
+    analysis.generated_at = 2000
+    analysis.snapshot_at = 2000
+    register_analysis_zones(analysis)
+
+    # The bar touched the future geometry before it was published. Current quote is
+    # already below the SELL core, so this must remain historical evidence only.
+    snap = _snapshot(
+        2100,
+        96.0,
+        [
+            Bar(ts=1500, open=99.5, high=101.2, low=99.0, close=100.2),
+            Bar(ts=1800, open=100.2, high=101.1, low=95.8, close=96.2),
+        ],
+    )
+    update_zone_publication_contacts(snap, analysis)
+    state = publication_state_for_zone(zone)
+
+    assert int(state["first_published_at"]) == 2000
+    assert int(state["live_core_touched_at"] or 0) == 0
+
+    apply_publication_truth(analysis)
+    assert "publication_execution_status:RETEST_ONLY_NO_LIVE_CONTACT" in zone.notes
+
+
+def test_postpublication_live_quote_latches_exact_geometry_contact(tmp_path, monkeypatch):
+    path = tmp_path / "publication_live.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _zone()
+    analysis = _analysis([zone])
+    analysis.generated_at = 2000
+    analysis.snapshot_at = 2000
+    register_analysis_zones(analysis)
+
+    snap = _snapshot(
+        2050,
+        100.4,
+        [Bar(ts=1800, open=99.0, high=99.5, low=98.0, close=99.0)],
+    )
+    update_zone_publication_contacts(snap, analysis)
+    state = publication_state_for_zone(zone)
+
+    assert int(state["live_core_touched_at"] or 0) == 2050
+    assert state["live_core_touch_basis"] == "LIVE_QUOTE_OVERLAP"
+
+
+def test_requalified_geometry_gets_new_publication_clock_and_touch_baseline(tmp_path, monkeypatch):
+    path = tmp_path / "publication_requal.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    first = _zone()
+    first.touch_count = 1
+    first.notes = ["raw_core_touch_episodes:2"]
+    a1 = _analysis([first])
+    a1.analysis_id = "A_OLD"
+    a1.generated_at = 2000
+    register_analysis_zones(a1)
+
+    revised = _zone()
+    revised.zone_id = "PZ_TEST_SELL_REQUAL"
+    revised.core_low = 98.5
+    revised.core_high = 99.5
+    revised.zone_low = 96.0
+    revised.zone_high = 102.0
+    revised.touch_count = 3
+    revised.notes = ["raw_core_touch_episodes:5"]
+    a2 = _analysis([revised])
+    a2.analysis_id = "A_NEW"
+    a2.generated_at = 2300
+    register_analysis_zones(a2)
+
+    old_state = publication_state_for_zone(first)
+    new_state = publication_state_for_zone(revised)
+
+    assert int(old_state["first_published_at"]) == 2000
+    assert int(new_state["first_published_at"]) == 2300
+    assert int(new_state["publication_qualified_mitigations"]) == 3
+    assert int(new_state["publication_raw_core_contacts"]) == 5
+    assert int(new_state["live_core_touched_at"] or 0) == 0
