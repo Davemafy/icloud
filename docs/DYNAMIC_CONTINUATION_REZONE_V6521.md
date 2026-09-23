@@ -20,7 +20,8 @@ This release separates historical zone truth from current execution relevance.
 - The structural liquidity is centered inside the tactical core with buffer on both sides.
 - Core and envelope widths use the existing V659 source-timeframe professional geometry.
 - The existing 50-pip distal sweep reserve remains mandatory.
-- A dynamic continuation candidate may be A+ through one mitigation or A through a second qualified mitigation; three-plus mitigations are WATCH-only.
+- A dynamic continuation candidate may be A+ through one qualified mitigation or A through a second qualified mitigation; three-plus qualified mitigations are WATCH-only.
+- Qualified mitigation uses the same directional complete-cycle contract as the primary map: SELL below-envelope -> core -> below-envelope; BUY above-envelope -> core -> above-envelope. Wrong-side contacts do not consume freshness, and accepted distal M15 invalidation permanently ends the original zone counter.
 - A nearer dynamic continuation primary may replace a remote same-direction primary only when it is materially nearer by at least 0.35 H1 ATR and the remote primary is not already INTERACTING or M1_READY.
 - An already-acquired thesis is protected. Dynamic re-zoning cannot steal its execution ownership.
 - M1 confirmation remains mandatory. Re-zoning never sends an order.
