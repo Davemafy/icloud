@@ -136,10 +136,13 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 7. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-8. Mitigation count measures distinct institutional re-use, not every small core-edge oscillation. A new
-   mitigation requires price to leave the full envelope and later re-enter the core. Continuous chop or
-   absorption inside one envelope is one interaction campaign. Repeated qualified mitigation downgrades
-   quality rather than moving the zone or manufacturing a different zone.
+8. Mitigation count is directional and measures COMPLETE institutional re-use, not every core contact.
+   SELL mitigation = CLOSED M15 below envelope -> later tactical-core overlap -> CLOSED M15 back below envelope.
+   BUY mitigation = CLOSED M15 above envelope -> later tactical-core overlap -> CLOSED M15 back above envelope.
+   Wrong-side contacts consume zero freshness: SELL approached from above and BUY approached from below are
+   interactions only. The first touch does not change grade; freshness changes only when the expected-side
+   M15 exit closes. Continuous chop inside one envelope remains one campaign. Accepted distal M15 invalidation
+   terminates the original zone's mitigation history permanently; later crossings belong to flip/reclaim logic.
 9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
    strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/
    rejection, reversal-source strength, displacement/FVG/volume evidence and qualified mitigation. A
@@ -150,8 +153,8 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    before freshness and remote HTF authority. A much nearer structurally valid zone may outrank a remote
    higher-grade candidate only under the deterministic ranking contract; grade remains an explicit quality/risk input. Distance NEVER
    manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
-10. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone. A wick-only
-    liquidity raid does not invalidate it.
+10. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone and permanently
+    stops its mitigation/freshness counter. A wick-only liquidity raid does not invalidate it.
 11. Publish at most one PRIMARY SELL and one PRIMARY BUY, but DO NOT force both sides. If no valid BUY
     exists below/interacting with price, PRIMARY BUY=NONE. If no valid SELL exists above/interacting with
     price, PRIMARY SELL=NONE.
