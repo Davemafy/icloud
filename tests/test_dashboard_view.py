@@ -50,6 +50,26 @@ def test_read_only_map_execution_context_is_injected_without_execution_calls():
     assert "OrderSend" not in cleaned
 
 
+def test_directional_mitigation_audit_is_visible_and_read_only():
+    html = (
+        '<tbody id="zones"></tbody>'
+        '<h2>Live trading journal</h2>'
+        '</body>'
+    )
+
+    cleaned = compact_dashboard_html(html)
+
+    assert 'id="mitigationAudit"' in cleaned
+    assert "Mitigation audit" in cleaned
+    assert "GRADE AUTHORITY" in cleaned
+    assert "SELL = below envelope" in cleaned
+    assert "BUY = above envelope" in cleaned
+    assert "Wrong-side contact never downgrades a zone" in cleaned
+    assert "refreshMitigationAudit" in cleaned
+    assert "WRONG_APPROACH_SIDE" not in cleaned  # reason is runtime data, not fabricated UI text
+    assert "OrderSend" not in cleaned
+
+
 def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     html = (
         '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div>'
@@ -113,6 +133,7 @@ def test_dashboard_transform_is_idempotent():
     once = compact_dashboard_html(html)
     twice = compact_dashboard_html(once)
 
+    assert twice.count('id="mitigationAudit"') == 1
     assert twice.count('id="journalContext"') == 1
     assert twice.count('id="ownershipState"') == 1
     assert twice.count('id="journal-context-readonly-script"') == 1
