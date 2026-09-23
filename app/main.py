@@ -286,7 +286,7 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     if online and open_positions > 0:
         return "IN TRADE"
 
-    terminal = {"CLOSED", "MANAGING", "IN TRADE", "FLIP CANDIDATE"}
+    terminal = {"CLOSED", "MANAGING", "IN TRADE"}
     if status in terminal:
         return status
 
