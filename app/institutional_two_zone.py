@@ -63,6 +63,7 @@ class PromptCandidate:
     source_kind: str
     volume_expansion: bool
     method: str
+    source_ready_ts: int = 0
 
 
 def _point(snapshot: MarketSnapshot) -> float:
@@ -193,6 +194,14 @@ def _overlap(a_low: float, a_high: float, b_low: float, b_high: float, pad: floa
     return not (a_high < b_low - pad or b_high < a_low - pad)
 
 
+def _tf_seconds(tf: str) -> int:
+    return {"H1": 3600, "H4": 14400, "D1": 86400}.get(str(tf).upper(), 0)
+
+
+def _source_ready_ts(source: PromptSource) -> int:
+    return int(source.source_ts) + _tf_seconds(source.tf)
+
+
 def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
     h4 = _sources(snapshot.xau_h4, "H4")
     h1 = _sources(snapshot.xau_h1, "H1")
@@ -208,13 +217,13 @@ def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
             if matches:
                 child = max(matches, key=lambda x: (x.source_ts, x.strength))
                 used_children.add(id(child))
-                out.append(PromptCandidate(direction, "H4>H1", max(parent.source_ts, child.source_ts), child.core_low, child.core_high, parent.zone_low, parent.zone_high, max(parent.strength, child.strength), parent.fvg or child.fvg, f"{parent.source_kind}+{child.source_kind}", parent.volume_expansion or child.volume_expansion, "PROMPT_H4_PARENT_H1_REFINEMENT"))
+                out.append(PromptCandidate(direction, "H4>H1", max(parent.source_ts, child.source_ts), child.core_low, child.core_high, parent.zone_low, parent.zone_high, max(parent.strength, child.strength), parent.fvg or child.fvg, f"{parent.source_kind}+{child.source_kind}", parent.volume_expansion or child.volume_expansion, "PROMPT_H4_PARENT_H1_REFINEMENT", max(_source_ready_ts(parent), _source_ready_ts(child))))
             else:
-                out.append(PromptCandidate(direction, "H4", parent.source_ts, parent.core_low, parent.core_high, parent.zone_low, parent.zone_high, parent.strength, parent.fvg, parent.source_kind, parent.volume_expansion, "PROMPT_H4_SOURCE_CANDLE"))
+                out.append(PromptCandidate(direction, "H4", parent.source_ts, parent.core_low, parent.core_high, parent.zone_low, parent.zone_high, parent.strength, parent.fvg, parent.source_kind, parent.volume_expansion, "PROMPT_H4_SOURCE_CANDLE", _source_ready_ts(parent)))
         for child in children:
             if id(child) in used_children:
                 continue
-            out.append(PromptCandidate(direction, "H1", child.source_ts, child.core_low, child.core_high, child.zone_low, child.zone_high, child.strength, child.fvg, child.source_kind, child.volume_expansion, "PROMPT_H1_TACTICAL_SOURCE"))
+            out.append(PromptCandidate(direction, "H1", child.source_ts, child.core_low, child.core_high, child.zone_low, child.zone_high, child.strength, child.fvg, child.source_kind, child.volume_expansion, "PROMPT_H1_TACTICAL_SOURCE", _source_ready_ts(child)))
     return out
 
 
@@ -541,6 +550,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         "source_method": candidate.method,
         "source_kind": candidate.source_kind,
         "source_ts": candidate.source_ts,
+        "source_ready_ts": int(candidate.source_ready_ts or candidate.source_ts),
         "core_low": round(core_low, 5),
         "core_high": round(core_high, 5),
         "core_width_points": round(_to_points(core_high - core_low, snapshot), 1),
@@ -577,8 +587,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         }
 
     zone_low, zone_high, sweep_room = geometry
+    mitigation_start_ts = int(candidate.source_ready_ts or candidate.source_ts)
     raw_touch_episodes_all_history = _touches(
-        core_low, core_high, int(candidate.source_ts), snapshot.xau_m15
+        core_low, core_high, mitigation_start_ts, snapshot.xau_m15
     )
     core_mid = (core_low + core_high) / 2.0
     loc = _location_score(candidate.direction, core_mid, snapshot, liq)
@@ -590,7 +601,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         core_high,
         zone_low,
         zone_high,
-        int(candidate.source_ts),
+        mitigation_start_ts,
         snapshot.xau_m15,
     )
     touches = int(mitigation_audit.get("qualified_mitigations") or 0)
@@ -691,6 +702,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         notes=[
             f"readiness:{readiness}",
             f"source_candle:{candidate.source_tf}:{candidate.source_ts}",
+            f"source_ready_ts:{mitigation_start_ts}",
             f"source_kind:{candidate.source_kind}",
             f"attached_liquidity:{required}:{attached.label}@{float(attached.price):.5f}",
             f"core_width_points:{_to_points(core_high - core_low, snapshot):.1f}",
@@ -894,6 +906,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
             "liquidity_in_zone": True,
             "attached_liquidity": attached,
             "source_ts": zone.source_ts,
+            "source_ready_ts": int(_note_float(zone, "source_ready_ts:")),
         }
         labels.append(
             f"{zone.original_direction.value}={zone.zone_low:.2f}-{zone.zone_high:.2f} "
