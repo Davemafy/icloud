@@ -1104,7 +1104,13 @@ bool TZ39_ProfessionalValueReactionReady(
    // Only bars that closed AFTER both the structure break and the PD-array
    // construction may confirm the entry. This prevents the displacement candle
    // itself, or an older OB/FVG candle, from being misread as entry confirmation.
-   int newestAfterFormation=MathMin(s.break_idx-1,s.pd_idx-1);
+   int newestAfterFormation=s.break_idx-1;
+   // FVG is only fully formed when the newer third candle (pd_idx-1) closes.
+   // Confirmation must therefore come from a later CLOSED bar, never that
+   // formation candle itself. An OB predates displacement, so the break close
+   // is its activation event and break_idx-1 is already strictly later.
+   if(StringFind(s.pd_type,"FVG")>=0)
+      newestAfterFormation=MathMin(newestAfterFormation,s.pd_idx-2);
    newestAfterFormation=MathMin(newestAfterFormation,ArraySize(r)-3);
    if(newestAfterFormation<1)
    {
