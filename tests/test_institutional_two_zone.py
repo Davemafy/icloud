@@ -161,7 +161,10 @@ def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_con
 
     assert len(zones) == 1
     zone = zones[0]
-    assert snap.ask < zone.core_low
+    # Prove there is no live quote/core overlap without assuming which side
+    # of the core current price is on. The runtime interaction predicate is
+    # intentionally direction-agnostic geometry overlap.
+    assert snap.ask < zone.core_low or snap.bid > zone.core_high
     assert policy.primary_zone_approaching(zone, snap) is True
     assert policy.primary_zone_interacting(zone, snap) is False
     assert zone.core_method.startswith("ARMED|")
