@@ -129,6 +129,8 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 - A SELL core contact approached from ABOVE is not a SELL mitigation. A BUY core contact approached from BELOW is not a BUY mitigation. Wrong-side interactions remain auditable but consume zero freshness.
 - Continuous chop/absorption inside one envelope remains one interaction campaign. Repeated core-edge oscillations inside that campaign cannot create additional mitigations.
 - A contact with no prior expected-side closed-envelope arm is not a qualified mitigation.
+- The mitigation clock starts only after the source is causally available: H1 source at H1 candle close, H4 source at H4 candle close, and H4>H1 refinement after both parent and refinement candles are closed.
+- If supplied M15 history begins after that source-ready timestamp, freshness is UNVERIFIED. The structural source may remain visible, but a structural A/A+ source is capped to B+ / WATCH for new execution until full freshness can be proven; the engine must never infer zero touches from missing history.
 - Closed M15 accepted invalidation on the distal side terminates the original zone's mitigation ledger permanently. Any later crossing belongs to flip/reclaim lifecycle and cannot resume or change the old zone's freshness count.
 - Historical mitigation grading must therefore retain an audit ledger containing approach side, arm time, core-touch time, qualification/exit time, counted YES/NO reason and grade effect.
 - A+ execution eligibility is limited to 0–1 qualified mitigation.
