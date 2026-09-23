@@ -47,6 +47,7 @@ class PromptSource:
     fvg: bool
     source_kind: str
     volume_expansion: bool
+    ready_ts: int = 0
 
 
 @dataclass
@@ -103,6 +104,10 @@ def _source_from_displacement(origin, bars: list[Bar]) -> PromptSource | None:
     body_low, body_high = sorted((float(bar.open), float(bar.close)))
     if body_high <= body_low:
         body_low, body_high = float(bar.low), float(bar.high)
+    displacement_index = int(origin.displacement_index)
+    ready_index = displacement_index + 1 if bool(origin.fvg) else displacement_index
+    ready_index = min(max(0, ready_index), len(bars) - 1)
+    evidence_ready_ts = int(bars[ready_index].ts) + _tf_seconds(str(origin.tf))
     return PromptSource(
         direction=origin.direction,
         tf=str(origin.tf),
@@ -115,6 +120,7 @@ def _source_from_displacement(origin, bars: list[Bar]) -> PromptSource | None:
         fvg=bool(origin.fvg),
         source_kind="DISPLACEMENT_BOS_SOURCE",
         volume_expansion=_volume_expansion(bars, int(origin.source_ts)),
+        ready_ts=evidence_ready_ts,
     )
 
 
@@ -153,14 +159,24 @@ def _sweep_rejection_sources(bars: list[Bar], tf: str, max_items: int = 18) -> l
         sell_move = min(float(x.low) for x in follow) <= float(bar.close) - MIN_FOLLOW_THROUGH_ATR * noise
         if sell_raid and sell_reject and sell_move:
             strength = max(2.0, (float(bar.high) - min(float(x.low) for x in follow)) / noise)
-            out.append(PromptSource(Direction.SELL, tf, int(bar.ts), body_high, float(bar.high), float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts))))
+            confirming = next(
+                x for x in follow
+                if float(x.low) <= float(bar.close) - MIN_FOLLOW_THROUGH_ATR * noise
+            )
+            ready_ts = int(confirming.ts) + _tf_seconds(tf)
+            out.append(PromptSource(Direction.SELL, tf, int(bar.ts), body_high, float(bar.high), float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts)), ready_ts))
 
         buy_raid = float(bar.low) <= prior_low + tolerance and float(bar.close) > prior_low
         buy_reject = lower_wick / rng >= MIN_REJECTION_WICK_FRACTION or float(bar.close) > float(bar.open)
         buy_move = max(float(x.high) for x in follow) >= float(bar.close) + MIN_FOLLOW_THROUGH_ATR * noise
         if buy_raid and buy_reject and buy_move:
             strength = max(2.0, (max(float(x.high) for x in follow) - float(bar.low)) / noise)
-            out.append(PromptSource(Direction.BUY, tf, int(bar.ts), float(bar.low), body_low, float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts))))
+            confirming = next(
+                x for x in follow
+                if float(x.high) >= float(bar.close) + MIN_FOLLOW_THROUGH_ATR * noise
+            )
+            ready_ts = int(confirming.ts) + _tf_seconds(tf)
+            out.append(PromptSource(Direction.BUY, tf, int(bar.ts), float(bar.low), body_low, float(bar.low), float(bar.high), round(strength, 3), False, "LIQUIDITY_SWEEP_REJECTION", _volume_expansion(bars, int(bar.ts)), ready_ts))
 
     deduped: list[PromptSource] = []
     for source in reversed(out):
@@ -199,7 +215,7 @@ def _tf_seconds(tf: str) -> int:
 
 
 def _source_ready_ts(source: PromptSource) -> int:
-    return int(source.source_ts) + _tf_seconds(source.tf)
+    return int(source.ready_ts or (int(source.source_ts) + _tf_seconds(source.tf)))
 
 
 def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
