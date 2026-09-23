@@ -145,6 +145,12 @@ def test_acquired_thesis_protects_map_from_rezoning(monkeypatch):
     assert analysis.execution_policy["dynamic_continuation_rezone"]["owner_protected"] is True
 
 
+def test_dynamic_fvg_mitigation_clock_waits_for_third_candle_close():
+    event = _event()
+    assert event.source_tf == "H1"
+    assert policy._event_ready_ts(event) == event.displacement_ts + 2 * 3600
+
+
 def test_liquidity_centered_geometry_has_buffer_on_both_sides():
     snap = _snapshot()
     event = _event()
