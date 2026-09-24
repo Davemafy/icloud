@@ -1,3 +1,4 @@
+import pytest
 from types import SimpleNamespace
 
 from app.master_sniper_adaptive_geometry import _install_engine_geometry
@@ -27,7 +28,7 @@ def _candidate(direction):
     )
 
 
-def test_sell_attached_bsl_can_define_distal_envelope_without_fixed_width_cap():
+def test_sell_attached_bsl_defines_native_distal_envelope_without_synthetic_padding():
     _install_engine_geometry()
     s = _snapshot()
     c = _candidate(Direction.SELL)
@@ -36,9 +37,10 @@ def test_sell_attached_bsl_can_define_distal_envelope_without_fixed_width_cap():
     level = engine._select_liquidity(c, *core, liq, s)
     assert level is not None
     low, high, room = engine._build_geometry(c, *core, level, s)
-    assert low == 99.0
-    assert high > 110.0
-    assert room > 0.0
+    assert low == core[0] == 100.0
+    assert high == pytest.approx(level.price, abs=2e-9)
+    assert room == pytest.approx(0.0, abs=2e-9)
+    assert c.zone_low < low
 
 
 def test_remote_bsl_is_not_pulled_into_zone():
