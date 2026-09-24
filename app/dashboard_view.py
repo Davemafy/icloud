@@ -89,11 +89,16 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     if(!body)return;
     const p=policyState();
     const map=p && typeof p.public_zone_map==='object' ? p.public_zone_map : {};
+    const analysisZones=Array.isArray(window.tradeZoneAnalysisZones)?window.tradeZoneAnalysisZones:[];
     const rows=[];
     for(const side of ['sell','buy']){
-      const z=map?.[side]||{};
+      const mapped=map?.[side]||{};
+      const raw=analysisZones.find(x=>String(x?.original_direction||'').toLowerCase()===side)||{};
+      // The raw Zone model also carries the full mitigation ledger. Use it as an
+      // observability fallback when a later policy wrapper omits the side entry.
+      const z=mapped.zone_id?mapped:raw;
       if(!z.zone_id)continue;
-      const audit=z.mitigation_audit||{};
+      const audit=z.mitigation_audit||raw.mitigation_audit||{};
       const events=Array.isArray(audit.events)?audit.events:[];
       const expected=String(audit.expected_approach_side||z.mitigation_expected_approach_side||'—');
       const historyComplete=audit.history_complete===true || z.mitigation_history_complete===true;
@@ -113,7 +118,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         rows.push(
           '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
           '<td>'+auditText(expected)+'</td><td>—</td><td>—</td><td>—</td><td><b>NO</b></td>'+
-          '<td>Qualified mitigations '+auditText(audit.qualified_mitigations||0)+'</td></tr>'
+          '<td>Qualified mitigations '+auditText(audit.qualified_mitigations??z.qualified_mitigations??z.touch_count??0)+'</td></tr>'
         );
         continue;
       }
