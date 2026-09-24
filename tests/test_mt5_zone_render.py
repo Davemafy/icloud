@@ -252,7 +252,33 @@ def test_live_renderer_hides_context_buy_once_price_is_below_zone():
     assert d["zone1_id"] == "PZ_H1_SELL_16"
 
 
-def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_zone():
+def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_zone(monkeypatch):
+    monkeypatch.setattr(
+        ownership,
+        "active_owner_snapshot",
+        lambda now: {
+            "reaction_key": "BUY|H4>H1|100",
+            "latest_zone_id": "BUY_OWNER",
+            "ownership_zone_id": "BUY_OWNER",
+            "direction": "BUY",
+            "source_tf": "H4>H1",
+            "source_ts": 100,
+            "status": "REACTION_CONFIRMED",
+            "ownership_acquired_at": 250,
+            "ownership_authority": "HTF_CORE_HANDOFF",
+            "ownership_analysis_id": "A_OWNER_SIDE",
+            "ownership_zone_payload": "",
+            "target1": 4294.90,
+            "target2": 4301.88,
+            "target3": 0.0,
+            "best_price": 4280.0,
+            "target1_hit_at": 0,
+            "target2_hit_at": 0,
+            "target3_hit_at": 0,
+            "objective_complete_at": 0,
+            "last_reason": "OWNER_ACTIVE",
+        },
+    )
     buy = _zone(
         "BUY_OWNER", "BUY",
         4256.34, 4272.20, 4261.55, 4267.55,
