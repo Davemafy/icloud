@@ -26,6 +26,7 @@ _thesis_m1_handoff_latch: set[str] = set()
 _last_snapshot_seen: int = 0
 _thesis_state_latch: str = ""
 _liquidity_reversal_latch: str = ""
+_wrong_side_context_latch: set[str] = set()
 
 
 def _parse_hhmm(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
@@ -84,6 +85,7 @@ def scheduler_status() -> dict:
         "thesis_m1_handoff_latch_count": len(_thesis_m1_handoff_latch),
         "thesis_state_latch": _thesis_state_latch or None,
         "liquidity_reversal_latch": _liquidity_reversal_latch or None,
+        "wrong_side_context_latch_count": len(_wrong_side_context_latch),
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
@@ -155,6 +157,40 @@ def _interaction_ids(snap) -> set[str]:
     return ids
 
 
+def _wrong_side_context_ids(snap) -> set[str]:
+    """Detect stale non-owner/non-selected map zones that live price has passed.
+
+    A fresh analysis must remove these from today's alert map. Selected/owned
+    geometry is excluded here because it may still be required locally for M15
+    accepted-invalidation and flip monitoring.
+    """
+    if not SETTINGS.paper_only:
+        return set()
+    a = latest_analysis(ai_required=False)
+    if a is None:
+        return set()
+    selected = str(getattr(a, "selected_zone_id", "") or "")
+    owner = active_owner_snapshot(int(getattr(snap, "sent_at", 0) or 0))
+    owner_id = str((owner or {}).get("ownership_zone_id") or (owner or {}).get("latest_zone_id") or "")
+    try:
+        mid = float(snap.mid)
+    except (TypeError, ValueError):
+        return set()
+
+    out: set[str] = set()
+    for z in list(getattr(a, "zones", []) or []):
+        zid = str(getattr(z, "zone_id", "") or "")
+        if not zid or zid == selected or (owner_id and zid == owner_id):
+            continue
+        direction = str(getattr(getattr(z, "original_direction", None), "value", getattr(z, "original_direction", ""))).upper()
+        low = min(float(getattr(z, "zone_low", 0.0)), float(getattr(z, "zone_high", 0.0)))
+        high = max(float(getattr(z, "zone_low", 0.0)), float(getattr(z, "zone_high", 0.0)))
+        wrong = (direction == "BUY" and low > mid) or (direction == "SELL" and high < mid)
+        if wrong:
+            out.add(zid)
+    return out
+
+
 def _m1_handoff_ids(snap) -> set[str]:
     if not SETTINGS.paper_only:
         return set()
@@ -189,7 +225,7 @@ def _liquidity_reversal_signature(snap) -> str:
 
 
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
-    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch
+    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch, _wrong_side_context_latch
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     startup_analysis_pending = True
     while True:
@@ -243,6 +279,11 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                 lr_changed = bool(lr_sig and lr_sig != _liquidity_reversal_latch)
                 _liquidity_reversal_latch = lr_sig
 
+                wrong_side_ids = _wrong_side_context_ids(snap)
+                new_wrong_side_ids = wrong_side_ids - _wrong_side_context_latch
+                _wrong_side_context_latch.clear()
+                _wrong_side_context_latch.update(wrong_side_ids)
+
                 refresh_reason = ""
                 if hard_released:
                     refresh_reason = "STALE_THESIS_HARD_RELEASE"
@@ -250,6 +291,8 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                     refresh_reason = f"ACTIVE_THESIS_STATE:{thesis_sig or 'RELEASED'}"
                 elif lr_changed:
                     refresh_reason = f"LIQUIDITY_REVERSAL_HANDOFF:{lr_sig}"
+                elif new_wrong_side_ids:
+                    refresh_reason = f"WRONG_SIDE_CONTEXT_REQUALIFY:{','.join(sorted(new_wrong_side_ids)[:2])}"
                 elif new_m1_ids:
                     refresh_reason = f"ACTIVE_THESIS_M1_HANDOFF:{','.join(sorted(new_m1_ids)[:2])}"
                 elif new_ids:
