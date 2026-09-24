@@ -351,3 +351,13 @@ def test_dashboard_distinguishes_campaign_origin_from_immediate_raw_touch_side()
     assert "Campaign '+auditText(r.campaign_approach_side||r.approach_side||'—')" in cleaned
     assert "Immediate '+auditText(r.immediate_approach_side||'—')" in cleaned
     assert "r.immediate_approach_ts" in cleaned
+
+
+def test_dashboard_exposes_target_ladder_truth():
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "Target ladder status" in html
+    assert "Target ladder truth" in html
+    assert "Target activation reference" in html
+    assert "Verified open liquidity objective" in html
