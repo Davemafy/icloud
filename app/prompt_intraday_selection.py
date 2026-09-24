@@ -14,8 +14,15 @@ def _distance(price: float, low: float, high: float) -> float:
 
 
 def _reachability(zone: Zone, snapshot: MarketSnapshot) -> tuple[int, float]:
-    """Classify today's reachability without qualifying or deleting a zone."""
-    h1_atr = max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9)
+    """Classify today's reachability without qualifying or deleting a zone.
+
+    Snapshot-safe by design: lightweight research/test snapshots may omit ATR/bar
+    fields. Missing volatility context must not crash structural zone ranking.
+    """
+    atr_h1 = float(getattr(snapshot, "atr_h1", 0.0) or 0.0)
+    xau_h1 = getattr(snapshot, "xau_h1", []) or []
+    derived = float(atr(xau_h1)) if xau_h1 else 0.0
+    h1_atr = max(atr_h1, derived, 1e-9)
     distance = _distance(float(snapshot.mid), float(zone.zone_low), float(zone.zone_high))
     distance_atr = distance / h1_atr
     if distance_atr <= 1.5:
@@ -48,21 +55,7 @@ def _source_quality(zone: Zone) -> tuple[int, int, int]:
 
 
 def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
-    """Rank already-valid zones by the Master Sniper intraday contract.
-
-    Order is deliberate:
-      1) executable structural tier,
-      2) today's reachability,
-      3) current execution grade,
-      4) causal source quality,
-      5) qualified mitigation freshness,
-      6) HTF authority and location quality.
-
-    Raw contacts never appear here. Qualified mitigation is already incorporated
-    into current execution grade, so touch count is only a later same-grade
-    tiebreaker. This prevents a weak/less important zero-touch zone from displacing
-    the A+/A institutional source the trader would actually mark on H4/H1.
-    """
+    """Rank already-valid zones by the Master Sniper intraday contract."""
     execution_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A} else 1
     reach_bucket, distance_atr = _reachability(zone, snapshot)
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
@@ -86,5 +79,4 @@ def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
 def install_prompt_intraday_selection() -> None:
     """Install selection only; source/liquidity/M15/M1 rules are unchanged."""
     from . import institutional_two_zone as zoning
-
     zoning._rank = prompt_intraday_rank
