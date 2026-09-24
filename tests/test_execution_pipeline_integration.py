@@ -14,7 +14,7 @@ def _kv(text: str) -> dict[str, str]:
     return out
 
 
-def test_persisted_owner_plus_ai_outage_exports_executable_paper_plan(tmp_path, monkeypatch):
+def test_persisted_owner_plus_ai_outage_preserves_owner_but_final_safety_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "_path", lambda: str(tmp_path / "pipeline.db"))
     db.init_db()
 
@@ -95,10 +95,14 @@ def test_persisted_owner_plus_ai_outage_exports_executable_paper_plan(tmp_path, 
     analysis.execution_policy = policy
 
     plan = _kv(active_plan_text(analysis, snap))
-    assert plan["ea_mode"] == "DUAL_BRANCH"
-    assert plan["execution_authority"] == "HTF_CORE_HANDOFF"
+    # AI outage fallback preserves the paper thesis/owner, but the deliberately
+    # incomplete and stale synthetic snapshot cannot pass the independent final
+    # professional execution-separation gate.
+    assert plan["ea_mode"] == "WATCH_ONLY"
+    assert plan["execution_authority"] == "NONE"
     assert plan["paper_ai_fallback_active"] == "1"
-    assert plan["execution_handoff_ts"] == str(snap.sent_at)
     assert plan["owner_target_progress_applied"] == "1"
     assert float(plan["original_target1"]) == 90.0
     assert plan["live_target_direction_valid"] == "1"
+    assert "ANALYSIS_HISTORY_WINDOW_INCOMPLETE" in plan["separation_guard"]
+    assert "SNAPSHOT_SAFETY_HOLD" in plan["separation_guard"]
