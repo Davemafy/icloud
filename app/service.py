@@ -208,7 +208,11 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
 
     if not bool(target_truth.get("authority_safe")):
         attempted = authority
-        block_reason = "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
+        block_reason = (
+            "NO_LIVE_DIRECTIONAL_TARGET"
+            if attempted == "LIQUIDITY_REVERSAL_HANDOFF"
+            else "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
+        )
         auth_meta["authority"] = "NONE"
         auth_meta["attempted_authority"] = attempted
         auth_meta["ownership_acquired"] = False
@@ -226,8 +230,13 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         policy.pop("paper_ai_fallback", None)
         a.execution_policy = policy
         a.ai_approved = False
-        if "TARGET_LADDER_REMAP_REQUIRED_AT_ACTIVATION" not in a.guards:
-            a.guards.append("TARGET_LADDER_REMAP_REQUIRED_AT_ACTIVATION")
+        guard_code = (
+            "LIQUIDITY_HANDOFF_NO_LIVE_DIRECTIONAL_TARGET"
+            if block_reason == "NO_LIVE_DIRECTIONAL_TARGET"
+            else "TARGET_LADDER_REMAP_REQUIRED_AT_ACTIVATION"
+        )
+        if guard_code not in a.guards:
+            a.guards.append(guard_code)
         a.trader_brief += (
             " Execution ownership blocked at activation because no planned target "
             "remains beyond the handoff price. Pre-activation target crossings were "
