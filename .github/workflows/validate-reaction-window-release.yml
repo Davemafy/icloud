@@ -21,7 +21,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_handoff_preownership_guard.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_thesis_ownership_policy.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_directional_mitigation_audit.py tests/test_institutional_two_zone.py tests/test_dynamic_continuation_zoning.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_target_revalidation.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_databridge_145_source.py tests/test_databridge_146_source.py tests/test_databridge_147_source.py tests/test_databridge_148_source.py tests/test_journal_provenance.py tests/test_grade_risk_execution.py tests/test_sequence_339_source.py tests/test_sequence_338_source.py tests/test_sequence_337_source.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_handoff_preownership_guard.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_thesis_ownership_policy.py tests/test_live_ownership_sync.py tests/test_dashboard_view.py tests/test_directional_mitigation_audit.py tests/test_institutional_two_zone.py tests/test_dynamic_continuation_zoning.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_target_revalidation.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_databridge_145_source.py tests/test_databridge_146_source.py tests/test_databridge_147_source.py tests/test_databridge_148_source.py tests/test_databridge_149_source.py tests/test_journal_provenance.py tests/test_grade_risk_execution.py tests/test_sequence_340_source.py tests/test_sequence_339_source.py tests/test_sequence_338_source.py tests/test_sequence_337_source.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
       - name: Python syntax
         run: python -m compileall -q app tests
       - name: Verify manifest pinned-ref SHA256
@@ -49,26 +49,26 @@ jobs:
               )
           print(f"Stable manifest pinned-ref verification OK: {ref}")
           PY
-      - name: DataBridge 1.48 structural checks
+      - name: DataBridge 1.49 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5')
           t=p.read_text(encoding='utf-8')
           core=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5').read_text(encoding='utf-8')
           for text in (t, core):
               for a,b in [('(',')'),('{','}'),('[',']')]:
                   assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
           for needle in [
-              '#property version "1.48"',
-              '#define TZ_BRIDGE_VERSION "1.48"',
-              '#define TZ_SEQUENCE_EXPECTED "3.39"',
+              '#property version "1.49"',
+              '#define TZ_BRIDGE_VERSION "1.49"',
+              '#define TZ_SEQUENCE_EXPECTED "3.40"',
               'BackfillJournalHistory(false);',
               'BackfillJournalHistory(true);',
               'JournalContinuityResyncSeconds=180',
               'TZ_RefreshPlanContextWithJournalContinuity()',
               'previousCloudVersion!=g_cloudVersion',
-              'TZ_SendHeartbeatV148();',
+              'TZ_SendHeartbeatV149();',
               'WAITING FOR CLOSED M1 VALUE REACTION',
               'stage=="ENTRY_CONFIRMATION"',
               'stage=="FLIP_CONFIRMATION"',
@@ -93,20 +93,20 @@ jobs:
           ]:
               assert needle in core,needle
           assert 'IsTester()' not in core
-          print('DataBridge 1.48 release structural checks OK')
+          print('DataBridge 1.49 release structural checks OK')
           PY
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5
+          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5
           sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
-      - name: Sequence 3.39 structural checks
+      - name: Sequence 3.40 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.39"',
+              '#property version   "3.40"',
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
               'HTF_ZONE_SWEEP_HANDOFF',
@@ -151,6 +151,9 @@ jobs:
               'TZ39_ProfessionalValueReactionReady',
               'TZ39_InitialEntryReady',
               'TZ39_FlipEntryReady',
+              'TZ40_FailedZoneBreakerPD',
+              'TZ40_BreakerFlipReady',
+              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED',
               'ENTRY_CONFIRMATION',
               'FLIP_CONFIRMATION',
               'ProfessionalEntryReactionMinBodyATR=0.25',
@@ -167,7 +170,7 @@ jobs:
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.39 release structural checks OK')
+          print('Sequence 3.40 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5
