@@ -156,3 +156,25 @@ def test_raw_contact_ledger_preserves_every_episode_inside_one_campaign():
     assert audit["raw_contacts"][2]["contact_role"] == "RECONTACT_WITHIN_OPEN_CAMPAIGN"
     assert all(x["approach_side"] == "ABOVE" for x in audit["raw_contacts"])
     assert all(x["counts_freshness_by_itself"] is False for x in audit["raw_contacts"])
+
+
+def test_raw_recontact_reports_immediate_side_separately_from_campaign_origin():
+    bars = [
+        _bar(200, 104.0, 104.2, 103.6, 104.0),  # BUY campaign armed above envelope
+        _bar(300, 101.4, 101.6, 100.5, 101.2),  # contact 1 from above core
+        _bar(400, 99.3, 99.7, 98.8, 99.5),      # moves below core, still inside envelope
+        _bar(500, 99.6, 100.5, 99.4, 100.2),    # contact 2 immediately from below core
+        _bar(600, 103.2, 103.8, 103.1, 103.5),  # closes above envelope, completes one cycle
+    ]
+    audit = audit_directional_mitigations(
+        Direction.BUY, 100.0, 101.0, 98.0, 103.0, 200, bars
+    )
+
+    contacts = audit["raw_contacts"]
+    assert len(contacts) == 2
+    assert contacts[0]["campaign_approach_side"] == "ABOVE"
+    assert contacts[0]["immediate_approach_side"] == "ABOVE_CORE"
+    assert contacts[1]["campaign_approach_side"] == "ABOVE"
+    assert contacts[1]["immediate_approach_side"] == "BELOW_CORE"
+    assert contacts[1]["immediate_approach_ts"] == 400
+    assert audit["qualified_mitigations"] == 1
