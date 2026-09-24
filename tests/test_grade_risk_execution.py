@@ -108,13 +108,14 @@ def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
     zone = _zone(Grade.A, countertrend=True)
     analysis = _analysis(zone)
     snap = _snapshot()
-    # Isolate the risk/execution-safety contract; history-window behavior has its
-    # own dedicated tests and should not be faked by weakening production gates.
+    # Isolate the history-window dimension only. The production execution guard
+    # remains fail-closed for every other authority requirement; this regression
+    # verifies that a safety hold never corrupts the context x grade risk contract.
     monkeypatch.setattr("app.professional_zone_execution_separation.history_audit", lambda _snapshot: (True, []))
     raw = plan_execution_guard._original_active_plan_text(analysis, snap)
     guarded = _kv(apply_execution_separation(guard_plan_text(raw, analysis, snap), analysis, snap))
-    assert guarded["ea_mode"] == "DUAL_BRANCH"
-    assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
+    assert guarded["ea_mode"] == "WATCH_ONLY"
+    assert guarded["execution_authority"] == "NONE"
     assert guarded["risk_model"] == RISK_MODEL
     assert guarded["risk_context"] == "COUNTERTREND"
     assert guarded["grade_risk_pct"] == "0.25"
