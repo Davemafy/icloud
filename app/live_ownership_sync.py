@@ -297,9 +297,9 @@ def install_live_ownership_sync() -> None:
 
     _ORIGINAL_ZONE_RENDER_TEXT = mt5_zone_render.mt5_zone_render_text
 
-    def mt5_zone_render_text_live(analysis):
+    def mt5_zone_render_text_live(analysis, current_mid=None):
         synced = sync_analysis_live_ownership(analysis)
-        return _zone_render_sync(_ORIGINAL_ZONE_RENDER_TEXT(synced))
+        return _zone_render_sync(_ORIGINAL_ZONE_RENDER_TEXT(synced, current_mid=current_mid))
 
     mt5_zone_render.mt5_zone_render_text = mt5_zone_render_text_live
 
