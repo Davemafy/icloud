@@ -20,6 +20,7 @@ from .risk_matrix import matrix_payload
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
+from .target_revalidation import apply_target_revalidation, target_ladder_truth
 from .thesis_hard_release import hard_release_stale_thesis
 from .thesis_ownership_policy import (
     acquire_execution_ownership,
@@ -174,6 +175,61 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         a.execution_policy = policy
         return authority, thesis
 
+    # New ownership is not allowed to attach to a stale objective ladder. This is
+    # independent of zone validity/invalidation: the zone may remain structurally
+    # valid while execution fails closed until fresh liquidity is mapped.
+    target_zone = next((z for z in a.zones if z.zone_id == zone_id), None)
+    if target_zone is None:
+        attempted = authority
+        auth_meta["authority"] = "NONE"
+        auth_meta["attempted_authority"] = attempted
+        auth_meta["ownership_acquired"] = False
+        auth_meta["block_reason"] = "TARGET_ZONE_NOT_FOUND"
+        policy["execution_authority"] = auth_meta
+        a.execution_policy = policy
+        return "NONE", None
+
+    target_truth = target_ladder_truth(a, target_zone, s)
+    target_policy = dict(policy.get("target_revalidation") or {})
+    per_zone = dict(target_policy.get("per_zone") or {})
+    per_zone[target_zone.zone_id] = target_truth
+    target_policy["per_zone"] = per_zone
+    policy["target_revalidation"] = target_policy
+
+    if not bool(target_truth.get("authority_safe")):
+        attempted = authority
+        block_reason = (
+            "TARGET_HISTORY_UNVERIFIED"
+            if str(target_truth.get("status") or "") == "HISTORY_UNVERIFIED_BLOCK"
+            else "TARGET_REMAP_REQUIRED"
+        )
+        auth_meta["authority"] = "NONE"
+        auth_meta["attempted_authority"] = attempted
+        auth_meta["ownership_acquired"] = False
+        auth_meta["owner_continuation"] = False
+        auth_meta["block_reason"] = block_reason
+        policy["execution_authority"] = auth_meta
+
+        if attempted == "LIQUIDITY_REVERSAL_HANDOFF":
+            lrh_meta = dict(policy.get("liquidity_reversal_handoff") or {})
+            lrh_meta["active"] = False
+            lrh_meta["authority"] = "NONE"
+            lrh_meta["reason"] = block_reason
+            policy["liquidity_reversal_handoff"] = lrh_meta
+
+        policy.pop("paper_ai_fallback", None)
+        a.execution_policy = policy
+        a.ai_approved = False
+        guard = "TARGET_LADDER_" + block_reason
+        if guard not in a.guards:
+            a.guards.append(guard)
+        a.trader_brief += (
+            " Execution ownership blocked: the published target ladder has no "
+            "verified open objective. Fresh liquidity remap is required; zone "
+            "validity and M15 invalidation logic are unchanged."
+        )
+        return "NONE", None
+
     if authority == "LIQUIDITY_REVERSAL_HANDOFF":
         zone = next(
             (z for z in a.zones if z.zone_id == zone_id),
@@ -306,6 +362,9 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
         update_zone_publication_contacts(s, a)
         update_zone_reactions(s)
         apply_publication_truth(a)
+        # Revalidate the objective ladder independently from zone validity and
+        # invalidation. Consumed/behind objectives cannot manufacture ownership.
+        apply_target_revalidation(a, s)
         hard_release_stale_thesis(s)
 
     # Only a thesis that previously acquired an explicit execution handoff may
