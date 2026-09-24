@@ -132,3 +132,27 @@ def test_history_coverage_is_explicit_and_never_assumed():
     assert audit["history_start_ts"] == 500
     assert audit["history_required_from_ts"] == 200
     assert audit["history_gap_reason"] == "M15_HISTORY_STARTS_AFTER_SOURCE_READY"
+
+
+def test_raw_contact_ledger_preserves_every_episode_inside_one_campaign():
+    bars = [
+        _bar(200, 104.0, 104.2, 103.6, 104.0),  # BUY armed from above
+        _bar(300, 101.4, 101.6, 100.5, 101.2),  # raw contact 1, campaign opens
+        _bar(400, 101.8, 102.2, 101.4, 102.0),  # leaves core but stays inside envelope
+        _bar(500, 101.3, 101.5, 100.4, 100.8),  # raw contact 2, same campaign
+        _bar(600, 101.7, 102.1, 101.4, 101.9),  # leaves core, still inside
+        _bar(700, 101.2, 101.4, 100.2, 100.7),  # raw contact 3, same campaign
+        _bar(800, 102.6, 103.8, 102.4, 103.4),  # closes above envelope, qualifies once
+    ]
+    audit = audit_directional_mitigations(
+        Direction.BUY, 100.0, 101.0, 98.0, 103.0, 200, bars
+    )
+
+    assert audit["raw_core_contact_episodes_before_invalidation"] == 3
+    assert audit["qualified_mitigations"] == 1
+    assert [x["core_touched_at"] for x in audit["raw_contacts"]] == [300, 500, 700]
+    assert audit["raw_contacts"][0]["contact_role"] == "NEW_CORE_CONTACT_EPISODE"
+    assert audit["raw_contacts"][1]["contact_role"] == "RECONTACT_WITHIN_OPEN_CAMPAIGN"
+    assert audit["raw_contacts"][2]["contact_role"] == "RECONTACT_WITHIN_OPEN_CAMPAIGN"
+    assert all(x["approach_side"] == "ABOVE" for x in audit["raw_contacts"])
+    assert all(x["counts_freshness_by_itself"] is False for x in audit["raw_contacts"])
