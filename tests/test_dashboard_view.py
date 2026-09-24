@@ -268,3 +268,24 @@ def test_dashboard_has_no_self_triggering_zone_mutation_observer():
     assert "window.setInterval(function(){" in cleaned
     assert "refreshJournalContext();" in cleaned
     assert "refreshMitigationAudit();" in cleaned
+
+
+def test_mitigation_audit_falls_back_to_raw_zone_ledger():
+    html = (
+        '<tbody id="zones"></tbody>'
+        '<h2>Live trading journal</h2>'
+        '</body>'
+    )
+    cleaned = compact_dashboard_html(html)
+
+    assert "window.tradeZoneAnalysisZones" in cleaned
+    assert "const raw=analysisZones.find" in cleaned
+    assert "const z=mapped.zone_id?mapped:raw" in cleaned
+    assert "audit.qualified_mitigations??z.qualified_mitigations??z.touch_count??0" in cleaned
+
+
+def test_recovery_zone_table_matches_current_twelve_column_contract():
+    cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
+    assert "colspan=\"12\"" in cleaned
+    assert "publication_execution_status" in cleaned
+    assert "raw_core_contact_episodes_before_invalidation" in cleaned
