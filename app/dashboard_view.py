@@ -123,7 +123,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           '<tr><td>'+auditText(zoneId)+'</td>'+
           '<td>'+cycle+'</td>'+
           '<td>RAW CORE CONTACT #'+auditText(r.raw_contact_index||'—')+'</td>'+
-          '<td>'+auditText(r.approach_side||'—')+'</td>'+
+          '<td>Campaign '+auditText(r.campaign_approach_side||r.approach_side||'—')+
+          '<br><span class="muted">Immediate '+auditText(r.immediate_approach_side||'—')+
+          (r.immediate_approach_ts?(' @ '+auditTime(r.immediate_approach_ts)):'')+'</span></td>'+
           '<td>'+auditTime(r.armed_at)+'</td>'+
           '<td>'+auditTime(r.core_touched_at)+'</td>'+
           '<td>—</td>'+
