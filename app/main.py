@@ -382,7 +382,11 @@ def mt5_plan():
 
 @app.get("/mt5/zones", response_class=PlainTextResponse, dependencies=[Depends(require_api_key)])
 def mt5_zones():
-    return PlainTextResponse(mt5_zone_render_text(active_analysis()), status_code=200)
+    s = latest_snapshot()
+    return PlainTextResponse(
+        mt5_zone_render_text(active_analysis(), current_mid=(float(s.mid) if s is not None else None)),
+        status_code=200,
+    )
 
 
 @app.post("/analysis/run")
