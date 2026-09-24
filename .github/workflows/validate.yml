@@ -31,11 +31,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5')
           text=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
-          assert '#property version   "3.39"' in text
+          assert '#property version   "3.40"' in text
           required=[
               'TZ_BuildEscapePullback',
               'TZ28_ArmAcceptedFlip',
@@ -61,6 +61,9 @@ jobs:
               'TZ39_ProfessionalValueReactionReady',
               'TZ39_InitialEntryReady',
               'TZ39_FlipEntryReady',
+              'TZ40_FailedZoneBreakerPD',
+              'TZ40_BreakerFlipReady',
+              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED',
               'ENTRY_CONFIRMATION',
               'FLIP_CONFIRMATION',
               'ProfessionalEntryReactionMinBodyATR=0.25',
@@ -68,7 +71,7 @@ jobs:
           ]
           for needle in required:
               assert needle in text, needle
-          print('Sequence 3.39 MQL structural checks OK')
+          print('Sequence 3.40 MQL structural checks OK')
           PY
       - name: Stable EA SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5
