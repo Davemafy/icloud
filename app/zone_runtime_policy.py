@@ -5,12 +5,12 @@ from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
 
 # MASTER SNIPER TOTAL AUTHORITY
 # Zone geometry comes only from the actual H4/H1 institutional source candle.
-# No fixed-width core padding, envelope padding, ATR expansion, remote-liquidity
-# expansion or minimum sweep-room manufacture is allowed.
+# Liquidity, FVG, PSY, volume and DXY are evidence/confluence. They must never
+# manufacture, stretch, or hard-reject an otherwise valid institutional source.
 XAU_POINTS_PER_PIP = 10.0
 MIN_SWEEP_ROOM_POINTS = 0.0
 MIN_SWEEP_ROOM_PIPS = 0.0
-PROMPT_ZONE_CONTRACT = "MASTER_SNIPER_SOURCE_EXACT_V6577"
+PROMPT_ZONE_CONTRACT = "MASTER_SNIPER_TOTAL_AUTHORITY_V6578"
 
 # Legacy compatibility names. They are deliberately zero because width contracts
 # no longer qualify or manufacture a zone.
@@ -35,14 +35,16 @@ def _geometry_pips(source_tf: str) -> dict[str, float]:
 
 
 def _geometry_points(source_tf: str) -> dict[str, float]:
-    # Compatibility seam used by the old dynamic continuation module. Returning
-    # zero width makes that legacy synthetic re-zone fail closed rather than
-    # manufacture a replacement outside the Master Sniper source candle.
     return {"core_min": 0.0, "core_max": 0.0, "envelope_min": 0.0, "envelope_max": 0.0}
 
 
 def install_zone_geometry_policy() -> None:
-    """Install source-exact Master Sniper zoning into the base engine."""
+    """Install Master Sniper source-first zoning into the base engine.
+
+    The prompt asks us to locate the institutional source that caused the move and
+    then use liquidity/FVG/PSY/etc. as confirmation. Therefore a source is not
+    rejected merely because a BSL/SSL object is outside that source candle.
+    """
     from . import institutional_two_zone as zoning
 
     def normalize_core(candidate, snapshot):
@@ -61,16 +63,17 @@ def install_zone_geometry_policy() -> None:
             if tf not in {"D1", "H4", "H1"}:
                 continue
             price = float(level.price)
-            # Structural liquidity must ALREADY be inside the source candle.
-            if not (source_low <= price <= source_high):
-                continue
-            # Preserve the prompt's directional relationship to the tactical core.
-            if candidate.direction == Direction.SELL and price < core_low:
-                continue
-            if candidate.direction == Direction.BUY and price > core_high:
-                continue
+            # Prefer liquidity naturally inside the source, but do not make that a
+            # hard qualification rule. The Master Sniper prompt treats liquidity as
+            # institutional context/objective, not as permission to create a zone.
+            inside = source_low <= price <= source_high
+            directional = (
+                price >= core_low
+                if candidate.direction == Direction.SELL
+                else price <= core_high
+            )
             edge = abs(price - (core_high if candidate.direction == Direction.SELL else core_low))
-            options.append((tf_rank.get(tf, 9), edge, float(level.distance), level))
+            options.append((0 if inside else 1, 0 if directional else 1, tf_rank.get(tf, 9), edge, float(level.distance), level))
         if not options:
             return None
         options.sort(key=lambda row: row[:-1])
@@ -78,25 +81,31 @@ def install_zone_geometry_policy() -> None:
 
     def build_geometry(candidate, core_low, core_high, level, snapshot):
         source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
-        liquidity_price = float(level.price)
-        # Core and structural liquidity must both be naturally contained by the
-        # source candle. Never stretch the envelope to make a candidate qualify.
+        # Geometry is the actual institutional source. Never expand it to capture a
+        # remote liquidity object and never reject it because liquidity sits outside.
         if core_low < source_low - 1e-9 or core_high > source_high + 1e-9:
             return None
-        if liquidity_price < source_low - 1e-9 or liquidity_price > source_high + 1e-9:
-            return None
+        liquidity_price = float(level.price)
         distal_room = (
-            source_high - liquidity_price
+            max(0.0, source_high - liquidity_price)
             if candidate.direction == Direction.SELL
-            else liquidity_price - source_low
+            else max(0.0, liquidity_price - source_low)
         )
-        if distal_room < -1e-9:
-            return None
-        return source_low, source_high, max(0.0, distal_room)
+        return source_low, source_high, distal_room
 
     zoning._normalize_core = normalize_core
     zoning._select_liquidity = select_liquidity
     zoning._build_geometry = build_geometry
+
+    # A valid source may interact even when its strongest structural liquidity is
+    # contextual rather than physically inside the candle. Entry/management/exit
+    # logic remains unchanged; this only removes the old zoning veto.
+    def zone_health_allows_interaction(zone, snapshot):
+        if zone.state.value != "ACTIVE" or zone.grade not in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}:
+            return False
+        return zoning.evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15).value == "ACTIVE"
+
+    zoning._zone_health_allows_interaction = zone_health_allows_interaction
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -107,34 +116,15 @@ def _distance(price: float, low: float, high: float) -> float:
 
 
 def _market_side_rejection(direction: Direction, low: float, high: float, mid: float) -> tuple[str, str]:
-    lo, hi = sorted((float(low), float(high)))
-    price = float(mid)
-    if direction == Direction.BUY and lo > price:
-        return "BUY_ZONE_ABOVE_CURRENT_PRICE", "BUY alert must be below current price or already interacting."
-    if direction == Direction.SELL and hi < price:
-        return "SELL_ZONE_BELOW_CURRENT_PRICE", "SELL alert must be above current price or already interacting."
+    # Master Sniper asks for the best BUY and SELL levels for the day. A valid
+    # institutional zone is not deleted merely because price has already moved to
+    # the other side. Market side affects ranking/current relevance, not existence.
     return "", ""
 
 
 def install_prompt_market_side_policy() -> None:
-    from . import institutional_two_zone as zoning
-    current = zoning._candidate_zone
-    if getattr(current, "_master_sniper_market_side", False):
-        return
-
-    def wrapped(candidate, snapshot, liq, context, index):
-        zone, diag = current(candidate, snapshot, liq, context, index)
-        if zone is None:
-            return zone, diag
-        code, reason = _market_side_rejection(zone.original_direction, zone.zone_low, zone.zone_high, snapshot.mid)
-        if not code:
-            return zone, diag
-        out = dict(diag or {})
-        out.update({"current_price": round(float(snapshot.mid), 5), "rejection_code": code, "rejection_reason": reason})
-        return None, out
-
-    wrapped._master_sniper_market_side = True
-    zoning._candidate_zone = wrapped
+    # Kept as a compatibility hook. There is intentionally no hard side rejection.
+    return None
 
 
 def _reachability_bucket(zone: Zone, snapshot: MarketSnapshot) -> tuple[int, float]:
@@ -152,7 +142,7 @@ def _reachability_bucket(zone: Zone, snapshot: MarketSnapshot) -> tuple[int, flo
 
 
 def intraday_zone_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
-    execution_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A} else 1
+    execution_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} else 1
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(str(zone.source_tf), 9)
     reach_bucket, distance_atr = _reachability_bucket(zone, snapshot)
@@ -165,12 +155,32 @@ def install_zone_rank_policy() -> None:
 
 
 def _clean_zone(zone: Zone) -> None:
-    zone.core_method = str(zone.core_method or "").replace("PROMPT_SWEEP_ROOM_GEOMETRY", "MASTER_SNIPER_SOURCE_EXACT")
+    zone.core_method = str(zone.core_method or "").replace("PROMPT_SWEEP_ROOM_GEOMETRY", "MASTER_SNIPER_SOURCE_FIRST")
     zone.invalidation_rule = "Closed M15 body acceptance beyond the actual institutional source envelope invalidates the zone. Wick-only liquidity raids do not invalidate."
     conf = set(zone.confluences)
-    for legacy in ("CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "PROFESSIONAL_SOURCE_TF_CORE_WIDTH", "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH", "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM", "SWEEP_ROOM_RESERVED"):
+    for legacy in (
+        "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS",
+        "PROFESSIONAL_SOURCE_TF_CORE_WIDTH", "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH",
+        "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM", "SWEEP_ROOM_RESERVED",
+    ):
         conf.discard(legacy)
     conf.update({"SOURCE_CANDLE_EXACT_CORE", "SOURCE_CANDLE_EXACT_ENVELOPE", "NO_SYNTHETIC_ZONE_EXPANSION"})
+
+    # Correct the old label if the attached structural liquidity is contextual.
+    attached_price = None
+    for raw in zone.notes:
+        text = str(raw)
+        if text.startswith("attached_liquidity:") and "@" in text:
+            try:
+                attached_price = float(text.rsplit("@", 1)[1])
+            except (TypeError, ValueError):
+                attached_price = None
+    if attached_price is not None and not (float(zone.zone_low) <= attached_price <= float(zone.zone_high)):
+        conf.discard("LIQUIDITY_IN_MARKED_ZONE")
+        conf.discard("BSL_IN_MARKED_ZONE")
+        conf.discard("SSL_IN_MARKED_ZONE")
+        conf.add("STRUCTURAL_LIQUIDITY_CONTEXT")
+
     zone.confluences = sorted(conf)
     zone.independent_confluence_count = len(zone.confluences)
     cleaned = []
@@ -181,7 +191,7 @@ def _clean_zone(zone: Zone) -> None:
         if text.startswith("Core is source-anchored") or text.startswith("Core/envelope use source-timeframe"):
             continue
         cleaned.append(text)
-    cleaned.append("MASTER SNIPER: core and envelope are exact source-candle geometry; no fixed-width padding or remote-liquidity expansion is permitted.")
+    cleaned.append("MASTER SNIPER: institutional source creates the zone; liquidity/FVG/PSY/volume/DXY confirm, rank or target it but do not manufacture or veto it.")
     zone.notes = cleaned
 
 
@@ -213,33 +223,49 @@ def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> 
             zone_map.pop(key, None)
     zone_map.update({
         "prompt_contract_ref": PROMPT_ZONE_CONTRACT,
+        "authority": "MASTER_SNIPER_PROMPT_TOTAL",
         "geometry_authority": "ACTUAL_H4_H1_SOURCE_CANDLE_ONLY",
         "fixed_width_padding": False,
         "remote_liquidity_envelope_expansion": False,
-        "liquidity_must_already_exist_inside_source_envelope": True,
+        "liquidity_is_confluence_not_zone_permission": True,
         "equal_high_low_are_liquidity_objects_only": True,
-        "buy_zone_must_be_below_or_interacting": True,
-        "sell_zone_must_be_above_or_interacting": True,
-        "wrong_side_zone_is_rejected_not_flipped": True,
+        "market_side_is_ranking_not_zone_existence": True,
         "reachability_is_ranking_only": True,
+        "execution_trade_management_exit_frozen": True,
     })
     policy["public_zone_map"] = zone_map
     policy["zone_geometry"] = {
-        "authority": "MASTER_SNIPER_SOURCE_EXACT",
+        "authority": "MASTER_SNIPER_SOURCE_FIRST",
         "core": "ACTUAL_SOURCE_BODY_OR_NATIVE_SOURCE_CORE",
         "envelope": "ACTUAL_SOURCE_CANDLE_HIGH_LOW",
         "fixed_width_padding": False,
         "atr_padding": False,
         "remote_liquidity_expansion": False,
+        "liquidity_hard_veto": False,
     }
-    primary = [x for x in list(policy.get("primary") or []) if x not in {"CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM", "PROFESSIONAL_SOURCE_TF_CORE_WIDTH", "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH", "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM"}]
-    for rule in ("ACTUAL_H4_H1_INSTITUTIONAL_SOURCE_CANDLE", "SOURCE_EXACT_CORE_AND_ENVELOPE", "NO_SYNTHETIC_ZONE_EXPANSION", "STRUCTURAL_LIQUIDITY_ALREADY_INSIDE_SOURCE", "BUY_BELOW_OR_INTERACTING_WITH_CURRENT_PRICE", "SELL_ABOVE_OR_INTERACTING_WITH_CURRENT_PRICE", "EQH_EQL_LIQUIDITY_ONLY"):
+    primary = [x for x in list(policy.get("primary") or []) if x not in {
+        "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM",
+        "PROFESSIONAL_SOURCE_TF_CORE_WIDTH", "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH",
+        "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM", "STRUCTURAL_LIQUIDITY_ALREADY_INSIDE_SOURCE",
+        "BUY_BELOW_OR_INTERACTING_WITH_CURRENT_PRICE", "SELL_ABOVE_OR_INTERACTING_WITH_CURRENT_PRICE",
+    }]
+    for rule in (
+        "MASTER_SNIPER_PROMPT_TOTAL_AUTHORITY", "ACTUAL_H4_H1_INSTITUTIONAL_SOURCE_CANDLE",
+        "SOURCE_EXACT_CORE_AND_ENVELOPE", "NO_SYNTHETIC_ZONE_EXPANSION",
+        "LIQUIDITY_FVG_PSY_VOLUME_DXY_ARE_CONFLUENCE_NOT_ZONE_PERMISSION",
+        "EQH_EQL_LIQUIDITY_ONLY", "M15_HEALTH_M1_TIMING",
+        "EXECUTION_MANAGEMENT_EXIT_FROZEN_DURING_ZONING_FIX",
+    ):
         if rule not in primary:
             primary.append(rule)
     policy["primary"] = primary
     analysis.execution_policy = policy
 
     brief = str(analysis.trader_brief or "")
-    brief += " MASTER SNIPER SOURCE-EXACT authority: every published zone must come from the actual H4/H1 institutional source candle. Fixed-width core/envelope padding, ATR padding and remote-liquidity envelope expansion are disabled. Structural liquidity must already exist inside the source envelope."
+    brief += (
+        " MASTER SNIPER TOTAL AUTHORITY: institutional H4/H1 source first. The actual source candle defines geometry. "
+        "Liquidity, FVG, psychological levels, volume and DXY confirm/rank/target the source but cannot manufacture, stretch or hard-reject it. "
+        "M15 validates health; M1 times entry. Execution, trade management and exit logic are frozen while zoning is corrected."
+    )
     analysis.trader_brief = brief
     return analysis
