@@ -66,6 +66,7 @@ _RECOVERY_SCRIPT = r'''
     if(!a || typeof a!=='object')return;
     window.tradeZoneExecutionPolicy=a.execution_policy||{};
     window.tradeZoneAnalysisZones=Array.isArray(a.zones)?a.zones:[];
+    window.tradeZoneAuditIdentity='audit_zone_id';
 
     const brief=document.getElementById('brief');
     if(brief)brief.textContent=a.trader_brief||'—';
