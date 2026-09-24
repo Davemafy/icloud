@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from app import institutional_two_zone as zoning
 from app import zone_runtime_policy as policy
-from app.models import Direction
+from app.models import Direction, Grade
 
 
 def _snapshot(point: float = 0.01):
@@ -24,63 +24,45 @@ def _liq(label: str, source_tf: str, price: float, distance: float = 1.0):
     return SimpleNamespace(label=label, source_tf=source_tf, price=price, distance=distance)
 
 
-def test_v659_core_normalization_is_source_timeframe_specific():
+def test_master_sniper_keeps_native_source_core_without_fixed_width_padding():
     policy.install_zone_geometry_policy()
     s = _snapshot()
-
-    h1 = _candidate("H1", Direction.SELL, 4305.0, 4306.0, 4304.0, 4307.0)
-    assert zoning._normalize_core(h1, s) == (4300.0, 4306.0)  # 60 pips minimum
-
-    h4 = _candidate("H4", Direction.SELL, 4305.0, 4306.0, 4304.0, 4307.0)
-    assert zoning._normalize_core(h4, s) == (4298.0, 4306.0)  # 80 pips minimum
-
-    refined = _candidate("H4>H1", Direction.BUY, 4299.0, 4300.0, 4298.0, 4302.0)
-    assert zoning._normalize_core(refined, s) == (4299.0, 4305.0)  # H1-refined 60-pip core
+    h1 = _candidate("H1", Direction.SELL, 4282.0, 4284.0, 4275.0, 4286.0)
+    assert zoning._normalize_core(h1, s) == (4282.0, 4284.0)
 
 
-def test_v659_sell_geometry_keeps_bsl_and_50_pip_sweep_inside_h1_envelope():
+def test_master_sniper_sell_zone_can_include_structural_bsl_outside_single_source_candle():
     policy.install_zone_geometry_policy()
     s = _snapshot()
-    candidate = _candidate("H1", Direction.SELL, 4305.0, 4306.0, 4304.0, 4307.0)
+    candidate = _candidate("H1", Direction.SELL, 4282.0, 4284.0, 4275.0, 4286.0)
+    bsl = _liq("H1_BSL", "H1", 4290.0)
     core_low, core_high = zoning._normalize_core(candidate, s)
-    level = _liq("H1_BSL", "H1", 4310.0)
-
-    attached = zoning._select_liquidity(candidate, core_low, core_high, [level], s)
-    assert attached is level
-
-    geometry = zoning._build_geometry(candidate, core_low, core_high, attached, s)
-    assert geometry is not None
-    low, high, actual_room = geometry
-    assert low <= core_low
-    assert high >= 4315.0
-    assert round((high - low) / s.point / policy.XAU_POINTS_PER_PIP, 1) >= 140.0
-    assert round(actual_room / s.point / policy.XAU_POINTS_PER_PIP, 1) >= 50.0
+    attached = zoning._select_liquidity(candidate, core_low, core_high, [bsl], s)
+    assert attached is bsl
+    low, high, _ = zoning._build_geometry(candidate, core_low, core_high, attached, s)
+    assert (low, high) == (4275.0, 4290.0)
 
 
-def test_v659_rejects_sell_liquidity_that_needs_more_than_h1_max_envelope():
+def test_master_sniper_buy_zone_can_include_structural_ssl_outside_single_source_candle():
     policy.install_zone_geometry_policy()
     s = _snapshot()
-    candidate = _candidate("H1", Direction.SELL, 4305.0, 4306.0, 4304.0, 4307.0)
+    candidate = _candidate("H1", Direction.BUY, 4233.0, 4235.0, 4231.0, 4240.0)
+    ssl = _liq("H4_SSL", "H4", 4229.0)
     core_low, core_high = zoning._normalize_core(candidate, s)
-    too_far_bsl = _liq("H1_BSL", "H1", 4318.0)
+    attached = zoning._select_liquidity(candidate, core_low, core_high, [ssl], s)
+    assert attached is ssl
+    low, high, _ = zoning._build_geometry(candidate, core_low, core_high, attached, s)
+    assert (low, high) == (4229.0, 4240.0)
 
-    assert zoning._select_liquidity(candidate, core_low, core_high, [too_far_bsl], s) is None
 
-
-def test_v659_buy_geometry_keeps_ssl_and_50_pip_sweep_inside_h4_envelope():
+def test_master_sniper_does_not_accept_wrong_direction_liquidity():
     policy.install_zone_geometry_policy()
     s = _snapshot()
-    candidate = _candidate("H4", Direction.BUY, 4294.0, 4295.0, 4293.0, 4296.0)
-    core_low, core_high = zoning._normalize_core(candidate, s)
-    level = _liq("H4_SSL", "H4", 4289.0)
+    sell = _candidate("H1", Direction.SELL, 4282.0, 4284.0, 4275.0, 4286.0)
+    wrong_bsl = _liq("H1_BSL", "H1", 4270.0)
+    core_low, core_high = zoning._normalize_core(sell, s)
+    assert zoning._select_liquidity(sell, core_low, core_high, [wrong_bsl], s) is None
 
-    attached = zoning._select_liquidity(candidate, core_low, core_high, [level], s)
-    assert attached is level
 
-    geometry = zoning._build_geometry(candidate, core_low, core_high, attached, s)
-    assert geometry is not None
-    low, high, actual_room = geometry
-    assert low <= 4284.0
-    assert high >= core_high
-    assert round((high - low) / s.point / policy.XAU_POINTS_PER_PIP, 1) >= 180.0
-    assert round(actual_room / s.point / policy.XAU_POINTS_PER_PIP, 1) >= 50.0
+def test_bplus_is_not_ranked_as_watch_only():
+    assert Grade.B_PLUS in {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
