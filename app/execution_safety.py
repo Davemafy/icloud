@@ -12,6 +12,7 @@ from .risk_matrix import (
     original_risk_pct,
     zone_risk_context,
 )
+from .target_revalidation import TARGET_REVALIDATION_CONTRACT, target_ladder_truth
 
 # DEMO/PAPER execution safety contract. Primary M1 SEARCH authority may begin at
 # the tactical core OR after a qualified outer-envelope interaction proves the
@@ -410,7 +411,20 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         live_reference,
         target_min_gap(snapshot),
     )
-    exported_original = live_valid if handoff_ready else original_valid
+
+    target_truth = target_ladder_truth(analysis, zone, snapshot)
+    target_truth_enforced = bool(
+        int(target_truth.get("publication_ts") or 0) > 0
+        or bool(target_truth.get("owner"))
+    )
+    truth_open = [float(x) for x in list(target_truth.get("open_targets") or [])]
+    if target_truth_enforced:
+        exported_original = truth_open
+        live_valid = truth_open
+        original_valid = truth_open
+    else:
+        exported_original = live_valid if handoff_ready else original_valid
+
     _pack_targets(kv, "original", exported_original)
     kv["original_targets_removed_wrong_side"] = str(original_removed)
     kv["live_targets_removed_wrong_side"] = str(live_removed)
@@ -418,6 +432,19 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["next_open_target"] = f"{float(exported_original[0] if exported_original else 0.0):.5f}"
     kv["original_target_direction_valid"] = "1" if original_valid else "0"
     kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
+    kv["target_revalidation_contract"] = TARGET_REVALIDATION_CONTRACT
+    kv["target_revalidation_enforced"] = "1" if target_truth_enforced else "0"
+    kv["target_revalidation_status"] = str(target_truth.get("status") or "UNAVAILABLE")
+    kv["target_history_complete"] = "1" if bool(target_truth.get("history_complete")) else "0"
+    kv["target_remap_required"] = "1" if bool(target_truth.get("remap_required")) else "0"
+    kv["target_authority_safe"] = "1" if (not target_truth_enforced or bool(target_truth.get("authority_safe"))) else "0"
+    kv["target_activation_reference"] = f"{float(target_truth.get('activation_reference') or 0.0):.5f}"
+    kv["target_activation_reference_basis"] = str(target_truth.get("activation_reference_basis") or "")
+    for item in list(target_truth.get("objectives") or []):
+        label = str(item.get("label") or "").lower()
+        if label:
+            kv[f"target_state_{label}"] = str(item.get("state") or "")
+            kv[f"target_reason_{label}"] = str(item.get("reason") or "")
 
     flip_values = [
         float(zone.flip_target1),
@@ -437,14 +464,32 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["flip_target_direction_valid"] = "1" if flip_valid else "0"
 
     guard_reasons: list[str] = []
+    target_authority_safe = bool(
+        not target_truth_enforced or target_truth.get("authority_safe")
+    )
     if not handoff_ready:
         guard_reasons.append("NO_EXECUTION_HANDOFF")
     if not original_valid:
         guard_reasons.append("NO_DIRECTIONALLY_VALID_ORIGINAL_TARGET")
     if handoff_ready and not live_valid:
         guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
+    if handoff_ready and target_truth_enforced and not target_authority_safe:
+        target_reason = (
+            "TARGET_HISTORY_UNVERIFIED"
+            if str(target_truth.get("status") or "") == "HISTORY_UNVERIFIED_BLOCK"
+            else "TARGET_REMAP_REQUIRED"
+        )
+        guard_reasons.append(target_reason)
+        handoff_ready = False
+        authority = "NONE"
+        kv["execution_authority"] = "NONE"
+        kv["core_handoff_ready"] = "0"
+        kv["owner_continuation_ready"] = "0"
+        kv["owner_continuation_authority"] = "NONE"
+        kv["zone_sweep_handoff_ready"] = "0"
+        kv["liquidity_handoff_ready"] = "0"
 
-    if handoff_ready and original_valid and live_valid:
+    if handoff_ready and original_valid and live_valid and target_authority_safe:
         kv["ea_mode"] = "DUAL_BRANCH"
         if owner_continuation_ready:
             kv["setup_type"] = "CONTINUATION"
@@ -468,9 +513,16 @@ def live_target_guard_reasons(text: str, snapshot: MarketSnapshot | None) -> lis
     _, kv = _parse_plan(text)
     if str(kv.get("ea_mode", "")).upper() != "DUAL_BRANCH":
         return []
+    reasons: list[str] = []
     if str(kv.get("live_target_direction_valid", "1")) != "1":
-        return ["LIVE_TARGET_DIRECTION_INVALID"]
-    return []
+        reasons.append("LIVE_TARGET_DIRECTION_INVALID")
+    if str(kv.get("target_revalidation_enforced", "0")) == "1" and str(kv.get("target_authority_safe", "1")) != "1":
+        reasons.append(
+            "TARGET_HISTORY_UNVERIFIED"
+            if str(kv.get("target_revalidation_status", "")) == "HISTORY_UNVERIFIED_BLOCK"
+            else "TARGET_REMAP_REQUIRED"
+        )
+    return reasons
 
 
 def normalize_candidate_feedback(
