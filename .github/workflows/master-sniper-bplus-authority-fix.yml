@@ -20,118 +20,71 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           def edit(path, replacements):
               p=Path(path); s=p.read_text(encoding='utf-8'); old=s
-              for a,b in replacements:
-                  s=s.replace(a,b)
-              if s==old:
-                  print('no textual change:', path)
-              else:
-                  p.write_text(s,encoding='utf-8')
-                  print('updated:', path)
+              for a,b in replacements: s=s.replace(a,b)
+              if s!=old: p.write_text(s,encoding='utf-8')
 
-          # Cloud release/version truth.
           edit('app/config.py', [('app_version: str = "6.5.80"','app_version: str = "6.5.81"')])
-
-          # Public contract and UI must describe the same executable B+ rule as risk_matrix.py.
           edit('app/service.py', [('zone_map["bplus_is_research_context_only"] = True','zone_map["bplus_is_research_context_only"] = False\n    zone_map["bplus_execution_authority"] = True')])
-          edit('app/dashboard_view.py', [
-              ('A+ ≤1 • A ≤2 • B+ watch-only','A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%'),
-              ('New A/A+ execution authority is blocked.','New A+/A/B+ execution authority is blocked.'),
-          ])
+          edit('app/dashboard_view.py', [('A+ ≤1 • A ≤2 • B+ watch-only','A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%'),('New A/A+ execution authority is blocked.','New A+/A/B+ execution authority is blocked.')])
           edit('app/watch_ready.py', [('A+ <=1 touch, A <=2 touches, B+ no new authority.','A+ <=1 touch, A <=2 touches, B+ <=1 touch at reduced-risk authority.')])
-          edit('app/execution_safety.py', [('Legacy compatibility seam. B+ is context-only in the V2 risk matrix.','Legacy compatibility seam retained; B+ authority is now handled by the shared execution-grade contract.')])
+          edit('app/execution_safety.py', [('Legacy compatibility seam. B+ is context-only in the V2 risk matrix.','Legacy compatibility seam retained; B+ authority is handled by the shared execution-grade contract.')])
           edit('app/liquidity_reversal_handoff.py', [('B+ may act as contextual origin evidence even though it is not executable.','B+ may act as contextual origin evidence and is executable only at the reduced 0.25% authority after all normal gates pass.')])
           edit('docs/ZONE_FORMATION_PROMPT_CONTRACT_2026-09-14.md', [('A+ and A are the only new execution grades. B+ remains visible research context / WATCH ONLY.','A+, A and B+ are new execution grades. B+ is reduced-risk execution authority at 0.25% and still requires every normal M15/M1/AI/safety gate.')])
-          edit('app/ai.py', [
-              ('the zone must be WATCH/B+ for new execution rather than assumed fresh.','the zone must not be promoted to A/A+; B+ may retain only its reduced 0.25% execution authority if every normal gate passes.'),
-          ])
+          edit('app/ai.py', [('the zone must be WATCH/B+ for new execution rather than assumed fresh.','the zone must not be promoted to A/A+; B+ may retain only its reduced 0.25% execution authority if every normal gate passes.')])
 
-          # Sequence 3.41: remove the two hard execution blocks that zeroed B+ after cloud approval.
           old=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5')
           s=old.read_text(encoding='utf-8')
-          s=s.replace('#property version   "3.40"','#property version   "3.41"')
-          s=s.replace('#define TZ_SEQUENCE_VERSION "3.40"','#define TZ_SEQUENCE_VERSION "3.41"')
+          s=s.replace('#property version   "3.40"','#property version   "3.41"').replace('#define TZ_SEQUENCE_VERSION "3.40"','#define TZ_SEQUENCE_VERSION "3.41"')
           s=s.replace('input double ResearchRiskPctCountertrendA=0.25;','input double ResearchRiskPctCountertrendA=0.25;\ninput double ResearchRiskPctBPlus=0.25;')
-          s=s.replace('   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   return 0.0;', '   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   if(grade=="B+")return ResearchRiskPctBPlus;\n   return 0.0;')
+          s=s.replace('   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   return 0.0;','   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   if(grade=="B+")return ResearchRiskPctBPlus;\n   return 0.0;')
           s=s.replace('   if(grade=="B+"){original=0.0;flipPct=0.0;}\n','')
-          s=s.replace('   if(grade!="A+"&&grade!="A")return 0.0;','   if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;')
-          s=s.replace('SMC Research v3.40','SMC Research v3.41')
-          new=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
-          new.write_text(s,encoding='utf-8')
-          old.unlink()
+          s=s.replace('   if(grade!="A+"&&grade!="A")return 0.0;','   if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;').replace('SMC Research v3.40','SMC Research v3.41')
+          Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5').write_text(s,encoding='utf-8'); old.unlink()
 
-          # DataBridge 1.50 advertises the actual running Sequence contract.
           oldb=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5')
-          b=oldb.read_text(encoding='utf-8')
-          b=b.replace('#property version "1.49"','#property version "1.50"')
-          b=b.replace('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"')
-          b=b.replace('#define TZ_SEQUENCE_EXPECTED "3.40"','#define TZ_SEQUENCE_EXPECTED "3.41"')
-          b=b.replace('Sequence 3.40','Sequence 3.41').replace('v1.49','v1.50').replace('V149','V150')
-          newb=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5')
-          newb.write_text(b,encoding='utf-8')
-          oldb.unlink()
+          b=oldb.read_text(encoding='utf-8').replace('#property version "1.49"','#property version "1.50"').replace('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"').replace('#define TZ_SEQUENCE_EXPECTED "3.40"','#define TZ_SEQUENCE_EXPECTED "3.41"').replace('Sequence 3.40','Sequence 3.41').replace('v1.49','v1.50').replace('V149','V150')
+          Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5').write_text(b,encoding='utf-8'); oldb.unlink()
 
-          # Update source/test/workflow references to renamed stable components.
           for p in list(Path('tests').glob('*.py')) + list(Path('.github/workflows').glob('*.yml')):
               if p.name=='master-sniper-bplus-authority-fix.yml': continue
               t=p.read_text(encoding='utf-8'); u=t
-              t=t.replace('InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5','InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
-              t=t.replace('InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5','InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5')
-              t=t.replace('TZ_SEQUENCE_EXPECTED "3.40"','TZ_SEQUENCE_EXPECTED "3.41"')
-              t=t.replace('#property version   "3.40"','#property version   "3.41"')
-              t=t.replace('#define TZ_SEQUENCE_VERSION "3.40"','#define TZ_SEQUENCE_VERSION "3.41"')
-              t=t.replace('#property version "1.49"','#property version "1.50"')
-              t=t.replace('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"')
-              t=t.replace('manifest["data_bridge_version"] == "1.49"','manifest["data_bridge_version"] == "1.50"')
-              t=t.replace('manifest["sequence_ea_version"] == "3.40"','manifest["sequence_ea_version"] == "3.41"')
-              t=t.replace('SETTINGS.app_version == "6.5.75"','SETTINGS.app_version == "6.5.81"')
-              t=t.replace('SETTINGS.app_version == "6.5.80"','SETTINGS.app_version == "6.5.81"')
-              t=t.replace('if(grade!="A+"&&grade!="A")return 0.0;','if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;')
+              for a,b in [
+                ('InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5','InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5'),
+                ('InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5','InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5'),
+                ('TZ_SEQUENCE_EXPECTED "3.40"','TZ_SEQUENCE_EXPECTED "3.41"'),('#property version   "3.40"','#property version   "3.41"'),('#define TZ_SEQUENCE_VERSION "3.40"','#define TZ_SEQUENCE_VERSION "3.41"'),('#property version "1.49"','#property version "1.50"'),('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"'),('manifest["data_bridge_version"] == "1.49"','manifest["data_bridge_version"] == "1.50"'),('manifest["sequence_ea_version"] == "3.40"','manifest["sequence_ea_version"] == "3.41"'),('SETTINGS.app_version == "6.5.75"','SETTINGS.app_version == "6.5.81"'),('SETTINGS.app_version == "6.5.80"','SETTINGS.app_version == "6.5.81"'),('if(grade!="A+"&&grade!="A")return 0.0;','if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;')]: t=t.replace(a,b)
               if t!=u: p.write_text(t,encoding='utf-8')
 
-          # Add focused regression test: cloud and Sequence must agree on B+.
-          Path('tests/test_bplus_execution_authority_release.py').write_text('''from pathlib import Path\n\nfrom app.models import Grade\nfrom app.risk_matrix import EXECUTION_GRADES, risk_pct_for_grade\n\nROOT = Path(__file__).resolve().parents[1]\nSEQ = ROOT / "mt5" / "stable" / "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5"\n\ndef test_cloud_bplus_contract():\n    assert Grade.B_PLUS in EXECUTION_GRADES\n    assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.25\n    assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.25\n\ndef test_sequence_bplus_contract_is_not_zeroed():\n    t = SEQ.read_text(encoding="utf-8")\n    assert "ResearchRiskPctBPlus=0.25" in t\n    assert 'if(grade=="B+")return ResearchRiskPctBPlus;' in t\n    assert 'if(grade=="B+"){original=0.0;flipPct=0.0;}' not in t\n    assert 'if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;' in t\n''',encoding='utf-8')
+          Path('tests/test_bplus_execution_authority_release.py').write_text('''from pathlib import Path\nfrom app.models import Grade\nfrom app.risk_matrix import EXECUTION_GRADES, risk_pct_for_grade\nROOT=Path(__file__).resolve().parents[1]\nSEQ=ROOT/"mt5"/"stable"/"InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5"\ndef test_cloud_bplus_contract():\n assert Grade.B_PLUS in EXECUTION_GRADES\n assert risk_pct_for_grade(Grade.B_PLUS,"TREND")==0.25\n assert risk_pct_for_grade(Grade.B_PLUS,"COUNTERTREND")==0.25\ndef test_sequence_bplus_contract_is_not_zeroed():\n t=SEQ.read_text(encoding="utf-8")\n assert "ResearchRiskPctBPlus=0.25" in t\n assert 'if(grade=="B+")return ResearchRiskPctBPlus;' in t\n assert 'if(grade=="B+"){original=0.0;flipPct=0.0;}' not in t\n assert 'if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;' in t\n''',encoding='utf-8')
           PY
-
-      - name: Commit coordinated source repair
+      - name: Commit coordinated source repair to release branch
         run: |
           git config user.name "Trade Zone Release Bot"
           git config user.email "actions@users.noreply.github.com"
+          git checkout -b master-sniper-bplus-authority-6581
           git add -A
           git commit -m "fix: propagate B+ 0.25% execution authority end-to-end"
-          git push
+          git push -u origin master-sniper-bplus-authority-6581
           echo "SOURCE_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
       - name: Refresh stable manifest and checksums
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          import json, hashlib, os
-          p=Path('mt5/stable/manifest.json')
-          m=json.loads(p.read_text(encoding='utf-8'))
-          m['release']='6.3.31'
-          m['ref']=os.environ['SOURCE_REF']
-          m['data_bridge_version']='1.50'
-          m['sequence_ea_version']='3.41'
+          import json,hashlib,os
+          p=Path('mt5/stable/manifest.json'); m=json.loads(p.read_text())
+          m['release']='6.3.31'; m['ref']=os.environ['SOURCE_REF']; m['data_bridge_version']='1.50'; m['sequence_ea_version']='3.41'
           for item in m['files']:
-              if item.get('role')=='data_bridge':
-                  item['name']=item['path']=item['target_name']='InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5'
-                  item['path']='mt5/stable/'+item['name']
-              elif item.get('role')=='sequence_ea':
-                  item['name']=item['target_name']='InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5'
-                  item['path']='mt5/stable/'+item['name']
+              if item.get('role')=='data_bridge': item.update(name='InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5',path='mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5',target_name='InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5')
+              elif item.get('role')=='sequence_ea': item.update(name='InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5',path='mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5',target_name='InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
               fp=Path(item['path'])
               if fp.exists(): item['sha256']=hashlib.sha256(fp.read_bytes()).hexdigest()
-          p.write_text(json.dumps(m,indent=2)+'\n',encoding='utf-8')
+          p.write_text(json.dumps(m,indent=2)+'\n')
           PY
           git add mt5/stable/manifest.json
           git commit -m "release: stable 6.3.31 B+ execution authority"
           git push
-
       - name: Validate focused contract
-        run: |
-          python -m pytest -q tests/test_master_sniper_risk_contract.py tests/test_bplus_execution_authority_release.py
+        run: python -m pytest -q tests/test_master_sniper_risk_contract.py tests/test_bplus_execution_authority_release.py
