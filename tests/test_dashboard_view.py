@@ -336,3 +336,11 @@ def test_mitigation_dashboard_accepts_audit_zone_id():
     cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
     assert "mapped.audit_zone_id||mapped.zone_id" in cleaned
     assert "const zoneId=mappedId||rawId" in cleaned
+
+
+def test_dashboard_renders_raw_mitigation_contacts_separately_from_qualified_events():
+    cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
+    assert "const rawContacts=Array.isArray(audit.raw_contacts)?audit.raw_contacts:[]" in cleaned
+    assert "RAW CORE CONTACT #" in cleaned
+    assert "OBSERVATION ONLY • " in cleaned
+    assert "RECONTACT_WITHIN_OPEN_CAMPAIGN" not in cleaned  # runtime value, not hard-coded classification logic
