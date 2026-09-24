@@ -4,6 +4,7 @@ from app.config import SETTINGS
 from app.engine import active_plan_text
 from app.execution_safety import guard_plan_text
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from app import plan_execution_guard
 from app.professional_zone_execution_separation import apply_execution_separation
 from app.risk_matrix import RISK_MODEL, execution_grade_eligible, flip_risk_pct, original_risk_pct, zone_risk_context
 
@@ -84,8 +85,8 @@ def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
     plan = _kv(active_plan_text(analysis))
     assert analysis.ai_approved is True
     assert execution_grade_eligible(zone)
-    # With no live snapshot, the professional separation layer correctly fails
-    # closed. Grade authority and its risk budget must still be exported intact.
+    # No snapshot means the final professional execution layer must fail closed;
+    # the B+ grade/risk authority itself remains intact in the exported plan.
     assert plan["ea_mode"] == "WATCH_ONLY"
     assert plan["grade"] == "B+"
     assert plan["risk_model"] == RISK_MODEL
@@ -107,10 +108,11 @@ def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
     zone = _zone(Grade.A, countertrend=True)
     analysis = _analysis(zone)
     snap = _snapshot()
-    # This unit test targets the execution-safety/risk exporter, not the separate
-    # historical-window gate (covered in test_professional_zone_execution_separation).
+    # Isolate the risk/execution-safety contract; history-window behavior has its
+    # own dedicated tests and should not be faked by weakening production gates.
     monkeypatch.setattr("app.professional_zone_execution_separation.history_audit", lambda _snapshot: (True, []))
-    guarded = _kv(apply_execution_separation(guard_plan_text(active_plan_text.__wrapped__(analysis) if hasattr(active_plan_text, "__wrapped__") else guard_plan_text.__module__ and "", analysis, snap), analysis, snap)) if False else _kv(apply_execution_separation(guard_plan_text(__import__("app.plan_execution_guard", fromlist=["_original_active_plan_text"])._original_active_plan_text(analysis, snap), analysis, snap), analysis, snap))
+    raw = plan_execution_guard._original_active_plan_text(analysis, snap)
+    guarded = _kv(apply_execution_separation(guard_plan_text(raw, analysis, snap), analysis, snap))
     assert guarded["ea_mode"] == "DUAL_BRANCH"
     assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
     assert guarded["risk_model"] == RISK_MODEL
