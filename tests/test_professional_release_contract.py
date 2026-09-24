@@ -11,7 +11,7 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.70"
+    assert SETTINGS.app_version == "6.5.71"
     assert manifest["release"] == "6.3.29"
     assert manifest["data_bridge_version"] == "1.48"
     assert manifest["sequence_ea_version"] == "3.39"
