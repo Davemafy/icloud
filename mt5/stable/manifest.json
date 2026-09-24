@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.29",
+  "release": "6.3.30",
   "repository": "Davemafy/icloud",
-  "ref": "e393a1a4fce74614670cfdbd3ee9bdc7fa078576",
-  "data_bridge_version": "1.48",
-  "sequence_ea_version": "3.39",
+  "ref": "807a28180bf1dca4fd1ddb851bdbbbfcdcf24a23",
+  "data_bridge_version": "1.49",
+  "sequence_ea_version": "3.40",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -155,24 +155,29 @@
     "post_formation_reaction_only",
     "professional_confirmation_floor",
     "sequence_339_truth_overlay",
-    "databridge_148_sequence_339_truth"
+    "databridge_148_sequence_339_truth",
+    "publication_time_zone_rendering",
+    "no_retrospective_prepublication_zone_shading",
+    "accepted_zone_breaker_pd_array",
+    "accepted_zone_breaker_retest_mss_displacement_entry",
+    "accepted_zone_breaker_no_chase"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
       "requires_reload": true,
-      "sha256": "6ff46496b324a95c8ef7ceb40c3a703c3e588c5e14fa0cd0fbd551c7b75b8aac"
+      "sha256": "901f94bf0ae25413afe5e32e14eef573e7e5512438621eec2686be90b7008d60"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
       "requires_reload": true,
-      "sha256": "7be166d30d0dc292e1e92409f216661a0660c85d6e03207bcbefefbecf7e7a40"
+      "sha256": "bb3ee50731966f32a4f471edf61aa036aa97d16c03f60b6f250d2b439fbbcfbb"
     }
   ],
   "support_files": [
@@ -190,7 +195,7 @@
       "path": "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh",
       "target": "Include\\TradeZoneCore",
       "target_name": "TradeZone_ZoneRenderer_v1_0.mqh",
-      "sha256": "075d19b0f5b99bfa7ce051f7fcf91a17cc07948f6412e05e9c09ecd9737dfe97"
+      "sha256": "ae419ab1c0f2b3e3ad1e664ae4adbabb8cb63ce83e8dc0c7da3422233a64b3f8"
     },
     {
       "role": "sequence_core",
