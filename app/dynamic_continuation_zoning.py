@@ -368,16 +368,84 @@ def _zone_payload(zone: Zone) -> dict[str, Any]:
 
 
 def _sync_public_map(analysis: Analysis) -> None:
+    """Synchronize the execution map without destroying grade/publication audit truth.
+
+    The base prompt engine already publishes structural/current grade metadata,
+    freshness diagnostics and source-quality gaps. Continuation re-ranking may
+    remove or replace a side, but a surviving zone must retain those fields.
+    """
     policy = dict(analysis.execution_policy or {})
     zone_map = dict(policy.get("public_zone_map") or {})
+    previous_by_side = {
+        "sell": dict(zone_map.get("sell") or {}),
+        "buy": dict(zone_map.get("buy") or {}),
+    }
     zone_map.pop("sell", None)
     zone_map.pop("buy", None)
+
+    def note_text(zone: Zone, prefix: str, fallback: str = "") -> str:
+        for raw in list(zone.notes or []):
+            text = str(raw)
+            if text.startswith(prefix):
+                return text.split(":", 1)[1]
+        return fallback
+
+    def note_float(zone: Zone, prefix: str, fallback: float = 0.0) -> float:
+        raw = note_text(zone, prefix, "")
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(fallback)
+
     for zone in analysis.zones:
         side = zone.original_direction.value.lower()
+        previous = previous_by_side.get(side) or {}
+        same_zone = str(previous.get("zone_id") or previous.get("audit_zone_id") or "") == str(zone.zone_id)
+        preserved = previous if same_zone else {}
+
+        structural_grade = note_text(
+            zone,
+            "structural_grade:",
+            str(preserved.get("structural_grade") or zone.grade.value),
+        )
+        current_grade = note_text(zone, "current_execution_grade:", zone.grade.value)
+        grade_reason = note_text(
+            zone,
+            "grade_degrade_reason:",
+            str(preserved.get("grade_degrade_reason") or "NONE"),
+        )
+        aplus_gap = note_text(
+            zone,
+            "structural_aplus_missing:",
+            str(preserved.get("structural_aplus_missing") or "NONE"),
+        )
+        a_gap = note_text(
+            zone,
+            "structural_a_missing:",
+            str(preserved.get("structural_a_missing") or "NONE"),
+        )
+
         zone_map[side] = {
+            **preserved,
+            "zone_id": zone.zone_id,
             "state": str(zone.core_method or "").split("|", 1)[0],
             "source_tf": zone.source_tf,
-            "grade": zone.grade.value,
+            "structural_grade": structural_grade,
+            "grade": current_grade,
+            "current_execution_grade": current_grade,
+            "grade_degrade_reason": grade_reason,
+            "structural_aplus_missing": aplus_gap,
+            "structural_a_missing": a_gap,
+            "grade_location_score": note_float(
+                zone,
+                "grade_location_score:",
+                float(preserved.get("grade_location_score") or zone.location_score or 0.0),
+            ),
+            "grade_source_strength": note_float(
+                zone,
+                "grade_source_strength:",
+                float(preserved.get("grade_source_strength") or 0.0),
+            ),
             "low": zone.zone_low,
             "high": zone.zone_high,
             "core_low": zone.core_low,
