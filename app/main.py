@@ -23,6 +23,7 @@ from .mt5_zone_render import mt5_zone_render_text
 from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
+from .target_revalidation import target_ladder_truth
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -723,6 +724,21 @@ def _journal_snapshot():
             "execution_grade_eligible": execution_grade_eligible(z),
         }
 
+    target_truth = (
+        target_ladder_truth(a, z, s)
+        if a is not None and z is not None and s is not None
+        else {
+            "status": "UNAVAILABLE",
+            "objectives": [],
+            "open_targets": [],
+            "completed_targets": [],
+            "behind_activation_targets": [],
+            "authority_safe": False,
+            "history_complete": False,
+            "remap_required": False,
+        }
+    )
+
     checks = {
         "fresh_zone": bool(z and execution_touch_limit(z) >= 0 and z.touch_count <= execution_touch_limit(z)),
         "liquidity_in_marked_zone": bool(z and "LIQUIDITY_IN_MARKED_ZONE" in set(z.confluences)),
@@ -730,6 +746,7 @@ def _journal_snapshot():
         "clear_run": bool(z and z.clear_run > 0),
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
         "grade_executable": bool(z and execution_grade_eligible(z)),
+        "target_ladder_open": bool(target_truth.get("authority_safe")),
         "m1_handoff_ready": bool(z and readiness == "M1_READY"),
         "live_data_safe": bool(
             s
@@ -763,6 +780,17 @@ def _journal_snapshot():
         "remaining_thesis_targets": target_progress["remaining"],
         "completed_thesis_targets": target_progress["completed"],
         "target_scope": target_progress["scope"],
+        "target_revalidation_status": target_truth.get("status"),
+        "target_ladder_truth": target_truth.get("objectives") or [],
+        "target_open_objectives": target_truth.get("open_targets") or [],
+        "target_completed_objectives": target_truth.get("completed_targets") or [],
+        "target_behind_activation_objectives": target_truth.get("behind_activation_targets") or [],
+        "target_activation_reference": target_truth.get("activation_reference"),
+        "target_activation_reference_basis": target_truth.get("activation_reference_basis"),
+        "target_history_complete": bool(target_truth.get("history_complete")),
+        "target_history_reason": target_truth.get("history_reason"),
+        "target_remap_required": bool(target_truth.get("remap_required")),
+        "target_authority_safe": bool(target_truth.get("authority_safe")),
         "trader_brief": a.trader_brief if a else "",
         "execution_policy": a.execution_policy if a else {},
         "zone": zone,
