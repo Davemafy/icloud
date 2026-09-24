@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from .config import SETTINGS
-from .models import Direction, Grade, MarketSnapshot, Zone
+from .models import Direction, MarketSnapshot, Zone
 from .risk_matrix import execution_grade_eligible
 
 # User-approved Master Sniper analysis windows. These are minimum evidence windows;
-# retaining additional history is harmless and must never change the source-exact zone.
+# retaining additional history for lifecycle/mitigation accounting is harmless and
+# must never change the source-exact zone used by the analysis layer.
 D1_MIN_CALENDAR_DAYS = 350
 H4_MIN_CALENDAR_DAYS = 120
 H1_MIN_CALENDAR_DAYS = 28
@@ -40,6 +41,7 @@ def history_audit(snapshot: MarketSnapshot | None) -> tuple[bool, list[str]]:
         "XAU_H1_4W": _span_days(snapshot.xau_h1) >= H1_MIN_CALENDAR_DAYS,
         "XAU_M15_3TD": _trading_days(snapshot.xau_m15) >= M15_MIN_TRADING_DAYS,
         "DXY_D1_1Y": _span_days(snapshot.dxy_d1) >= D1_MIN_CALENDAR_DAYS,
+        "DXY_H4_4M": _span_days(snapshot.dxy_h4) >= H4_MIN_CALENDAR_DAYS,
         "DXY_H1_4W": _span_days(snapshot.dxy_h1) >= H1_MIN_CALENDAR_DAYS,
     }
     failed = [name for name, ok in checks.items() if not ok]
@@ -47,12 +49,7 @@ def history_audit(snapshot: MarketSnapshot | None) -> tuple[bool, list[str]]:
 
 
 def conservative_runway(zone: Zone) -> tuple[float, float, bool]:
-    """Measure usable target space from the least-favourable edge of the tactical core.
-
-    This is deliberately separate from zone formation. A source-exact institutional
-    location remains map truth even when there is no longer enough directional space
-    to grant execution authority.
-    """
+    """Measure usable target space from the least-favourable edge of the tactical core."""
     target = float(zone.original_target1 or 0.0)
     if zone.original_direction == Direction.BUY:
         runway = target - float(zone.core_high) if target > 0 else 0.0
@@ -100,6 +97,10 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
 
     history_ok, history_failures = history_audit(snapshot)
     runway, runway_need, runway_ok = conservative_runway(zone)
+    spread = float(getattr(snapshot, "spread_points", 0.0) or 0.0) if snapshot is not None else 0.0
+    spread_ok = snapshot is not None and spread <= float(SETTINGS.max_spread_points)
+    snapshot_age = max(0, int(datetime.now(tz=timezone.utc).timestamp()) - int(snapshot.sent_at)) if snapshot is not None else 10**9
+    snapshot_ok = snapshot is not None and snapshot_age <= int(SETTINGS.max_snapshot_age_seconds)
     layer = zone_layer(zone, history_ok, runway_ok)
 
     _replace_or_append(rows, "institutional_layer", layer)
@@ -109,17 +110,30 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "required_runway", f"{runway_need:.5f}")
     _replace_or_append(rows, "usable_runway_ok", "1" if runway_ok else "0")
     _replace_or_append(rows, "map_location_authority", "SOURCE_EXACT_PRESERVED")
+    _replace_or_append(rows, "live_spread_points", f"{spread:.2f}")
+    _replace_or_append(rows, "max_spread_points", f"{float(SETTINGS.max_spread_points):.2f}")
+    _replace_or_append(rows, "spread_safety_ok", "1" if spread_ok else "0")
+    _replace_or_append(rows, "snapshot_age_seconds", str(snapshot_age))
+    _replace_or_append(rows, "snapshot_safety_ok", "1" if snapshot_ok else "0")
 
-    if layer != "EXECUTION_CANDIDATE":
+    # Location/map truth is independent of execution authority. Incomplete analysis
+    # history or runway keeps a zone as context. Live spread/snapshot safety is a
+    # separate final execution hold and never destroys an earned thesis/map.
+    reasons = []
+    if not execution_grade_eligible(zone):
+        reasons.append("GRADE_OR_QUALIFIED_MITIGATION_EXHAUSTED")
+    if not history_ok:
+        reasons.append("ANALYSIS_HISTORY_WINDOW_INCOMPLETE")
+    if not runway_ok:
+        reasons.append("INSUFFICIENT_USABLE_RUNWAY")
+    if not spread_ok:
+        reasons.append("SPREAD_SAFETY_HOLD")
+    if not snapshot_ok:
+        reasons.append("SNAPSHOT_SAFETY_HOLD")
+
+    if layer != "EXECUTION_CANDIDATE" or not spread_ok or not snapshot_ok:
         _replace_or_append(rows, "ea_mode", "WATCH_ONLY")
         _replace_or_append(rows, "execution_authority", "NONE")
-        reasons = []
-        if not execution_grade_eligible(zone):
-            reasons.append("GRADE_OR_QUALIFIED_MITIGATION_EXHAUSTED")
-        if not history_ok:
-            reasons.append("ANALYSIS_HISTORY_WINDOW_INCOMPLETE")
-        if not runway_ok:
-            reasons.append("INSUFFICIENT_USABLE_RUNWAY")
         _replace_or_append(rows, "separation_guard", ",".join(reasons) or "MAP_CONTEXT_ONLY")
     else:
         _replace_or_append(rows, "separation_guard", "PASS")
@@ -128,7 +142,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
 
 
 def install_ai_contract_correction() -> None:
-    """Remove the stale B+ watch-only wording without changing deterministic risk sizing."""
+    """Remove stale B+ wording and publish the exact Master Sniper evidence contract."""
     from . import ai
 
     ai.SYSTEM = ai.SYSTEM.replace(
@@ -152,8 +166,11 @@ def install_ai_contract_correction() -> None:
             "XAU_H1": "4-6 weeks",
             "XAU_M15": "3-5 trading days",
             "DXY_D1": "1 year",
+            "DXY_H4": "4-6 months",
             "DXY_H1": "4-6 weeks",
         }
+        rules["lifecycle_history_is_separate"] = "Mitigation/freshness history may retain older M15 bars than the 3-5 trading-day analysis window; older bars are lifecycle evidence only and must not widen or relocate a source-exact zone."
+        rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
         rules["clear_run_semantics"] = "usable directional space from conservative tactical-core edge to valid target; never a reason to move the institutional zone"
         return payload
 
