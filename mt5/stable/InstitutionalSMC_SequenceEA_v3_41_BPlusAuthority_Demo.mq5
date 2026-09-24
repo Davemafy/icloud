@@ -1,5 +1,5 @@
 #property strict
-#property version   "3.40"
+#property version   "3.41"
 #property description "DEMO/PAPER XAU M1 execution: publication-truth visuals + accepted-zone breaker flip confirmation."
 
 // Research wrapper around the validated v3.21 execution core.
@@ -27,7 +27,7 @@
 #undef ManagePositions
 #undef BuildFlip
 
-#define TZ_SEQUENCE_VERSION "3.40"
+#define TZ_SEQUENCE_VERSION "3.41"
 
 input bool PaperResearchMode=true;
 input double ResearchMaxSpreadPoints=50.0;
@@ -84,6 +84,7 @@ input double ResearchRiskPctTrendAPlus=1.00;
 input double ResearchRiskPctTrendA=0.75;
 input double ResearchRiskPctCountertrendAPlus=0.50;
 input double ResearchRiskPctCountertrendA=0.25;
+input double ResearchRiskPctBPlus=0.25;
 
 datetime g_tzLastStateWrite=0,g_tzLastHeartbeat=0,g_tzLastAuthorityPoll=0,g_tzGateTs=0;
 string g_tzLoadedStateKey="";
@@ -212,6 +213,7 @@ double TZ38_DefaultContextRiskPct(string grade,string context)
       return context=="COUNTERTREND"?ResearchRiskPctCountertrendAPlus:ResearchRiskPctTrendAPlus;
    if(grade=="A")
       return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;
+   if(grade=="B+")return ResearchRiskPctBPlus;
    return 0.0;
 }
 
@@ -234,7 +236,6 @@ void TZ38_LoadRiskContract(string text,string grade,string setupType)
    double flipPct=StringToDouble(KV(text,"flip_risk_pct"));
    if(flipPct<=0)flipPct=TZ38_DefaultContextRiskPct(grade,TZ38_OppositeRiskContext(context));
 
-   if(grade=="B+"){original=0.0;flipPct=0.0;}
    g_tzOriginalRiskPct=original;
    g_tzFlipRiskPct=flipPct;
    g_tzGradeRiskPct=original;
@@ -250,7 +251,7 @@ double TZ37_RiskBase()
 
 double TZ38_ThesisBudget(bool flip,string grade)
 {
-   if(grade!="A+"&&grade!="A")return 0.0;
+   if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;
    double pct=0.0;
    if(flip)
    {
@@ -476,7 +477,7 @@ void ManagePositions()
 
       if((buy&&sl>0&&desired<=sl+_Point)||(!buy&&sl>0&&desired>=sl-_Point))continue;
       if(!trade.PositionModify(ticket,desired,tp))
-         Print("SMC Research v3.40 management modify failed ticket=",ticket,
+         Print("SMC Research v3.41 management modify failed ticket=",ticket,
                " desiredSL=",desired," retcode=",trade.ResultRetcode());
    }
 }
@@ -727,7 +728,7 @@ void TZ28_EvaluateAcceptedFlip()
          g_lastSequence=seq;g_lastTradeBar=cb;g_tzLastModel="ACCEPTED_ZONE_FLIP_"+sig.pd_type;
          TZ_SetGate("ORDER_SENT","DEMO_ACCEPTED_ZONE_FLIP_OPENED");
          TZ28_SaveAcceptedFlip();
-         Print("SMC Research v3.40 ",tag," opened from accepted-zone flip. authority=",g_tzExecutionAuthority,
+         Print("SMC Research v3.41 ",tag," opened from accepted-zone flip. authority=",g_tzExecutionAuthority,
                " sourceZone=",g_tzFlipSourceZone," entry=",entry," sl=",sl," riskMoney=",risk);
       }
       else TZ_SetGate("ORDER","MT5_FLIP_ORDER_SEND_FAILED");
@@ -1601,7 +1602,7 @@ void Evaluate()
       g_lastSequence=seq;g_lastTradeBar=cb;
       g_tzLastModel=(tag=="L0"?"LIQ_REVERSAL_":tag=="E0"?"ESCAPE_":"")+sig.pd_type;
       TZ_SetGate("ORDER_SENT",g_tzLastSplitPartial?"DEMO_ENTRY_OPENED_PARTIAL_SPLIT":"DEMO_ENTRY_OPENED");
-      Print("SMC Research v3.40 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
+      Print("SMC Research v3.41 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
             " gate=",g_tzGateStage," lr=",g_tzLRLabel,"@",g_tzLRPrice," entry=",entry," sl=",sl,
             " target=",openTarget," rr=",DoubleToString(rr,2)," riskMoney=",risk);
    }

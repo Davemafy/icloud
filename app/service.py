@@ -65,7 +65,8 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
         "CONFLUENCE_QUALITY",
     ]
     zone_map["nearer_valid_a_zone_can_outrank_remote_fresher_a_zone"] = True
-    zone_map["bplus_is_research_context_only"] = True
+    zone_map["bplus_is_research_context_only"] = False
+    zone_map["bplus_execution_authority"] = True
     zone_map["context_grade_risk_matrix"] = matrix_payload()
     zone_map["four_zone_map_contract"] = {
         "primary_per_side": 1,

@@ -77,7 +77,7 @@ This is mandatory for the intraday alert map:
 - If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
 - If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
-- A+ and A are the only new execution grades. B+ remains visible research context / WATCH ONLY.
+- A+, A and B+ are new execution grades. B+ is reduced-risk execution authority at 0.25% and still requires every normal M15/M1/AI/safety gate.
 - TREND and COUNTERTREND do not use the same qualification rubric.
 - TREND grades continuation-source quality: HTF authority, displacement/BOS strength, freshness, premium/discount location and supporting FVG/volume evidence.
 - COUNTERTREND grades reversal-location quality: HTF extremity, required structural liquidity inside the envelope, actual sweep/rejection evidence, source response strength, H4>H1 agreement and supporting FVG/volume/PSY evidence.

@@ -99,7 +99,7 @@ def interzone_transit_guard(
     below a higher SELL zone. In that corridor the SELL zone is a destination, not
     an already-acquired SELL thesis. The mirror rule applies while price travels
     down from SELL toward BUY.
-    B+ may act as contextual origin evidence even though it is not executable.
+    B+ may act as contextual origin evidence and is executable only at the reduced 0.25% authority after all normal gates pass.
     """
     px = float(snapshot.mid)
     direction = destination_zone.original_direction

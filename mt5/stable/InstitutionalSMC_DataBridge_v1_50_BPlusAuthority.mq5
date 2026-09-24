@@ -1,6 +1,6 @@
 #property strict
-#property version "1.49"
-#property description "DEMO/PAPER bridge with Sequence 3.40 accepted-breaker flip truth and publication-time zone rendering."
+#property version "1.50"
+#property description "DEMO/PAPER bridge with Sequence 3.41 accepted-breaker flip truth and publication-time zone rendering."
 
 #define TZ_JOURNAL_BRIDGE_VERSION "1.49"
 #define OnInit TZ_BridgeCore_OnInit
@@ -14,8 +14,8 @@
 #undef OnTimer
 #undef OnTradeTransaction
 
-#define TZ_BRIDGE_VERSION "1.49"
-#define TZ_SEQUENCE_EXPECTED "3.40"
+#define TZ_BRIDGE_VERSION "1.50"
+#define TZ_SEQUENCE_EXPECTED "3.41"
 #define TZ_ZONE_RENDER_CONTRACT "V660"
 
 input bool LogSuccessfulSnapshots=true;
@@ -225,7 +225,7 @@ void TZ_WriteBridgeState()
    FileClose(h);
 }
 
-void TZ_SendHeartbeatV149()
+void TZ_SendHeartbeatV150()
 {
    string updater=TZ_ReadLocalKV("updater_status.txt","updater_version");
    string stable=TZ_ReadLocalKV("updater_status.txt","stable_release");
@@ -348,7 +348,7 @@ int OnInit()
    TZR_RefreshAndRender();
    TZ_RenderTwoZoneMap();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV149();
+   TZ_SendHeartbeatV150();
    Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: journal continuity recovery + compile-safe tester guard + execution-truth overlay + V659 zones + ownership visualization.");
    return INIT_SUCCEEDED;
 }
@@ -370,7 +370,7 @@ void OnTimer()
    TZ_RenderTwoZoneMap();
    MarkPositions();
    TZ_WriteBridgeState();
-   TZ_SendHeartbeatV149();
+   TZ_SendHeartbeatV150();
 }
 
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)

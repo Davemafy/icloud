@@ -11,8 +11,8 @@ _EXECUTION_CONTRACT_BINDING = "$('policy').textContent=JSON.stringify(a.executio
 _EXECUTION_POLICY_BINDING = "window.tradeZoneExecutionPolicy=a.execution_policy||{};"
 _FRESHNESS_LABEL_BINDING = "fresh_zone:'Fresh zone (0–1 touch)'"
 _FRESHNESS_LABEL_REPLACEMENT = (
-    "fresh_zone:(z.zone_id?(z.zone_id+' touch eligibility (A+ ≤1 • A ≤2 • B+ watch-only)'):"
-    "'Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ watch-only)')"
+    "fresh_zone:(z.zone_id?(z.zone_id+' touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)'):"
+    "'Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)')"
 )
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
 _MITIGATION_AUDIT_CARD = (
@@ -115,7 +115,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           '<td>'+auditText(expected)+'</td><td>'+auditTime(audit.history_start_ts||z.mitigation_history_start_ts)+'</td>'+
           '<td>—</td><td>Required from '+auditTime(audit.history_required_from_ts||z.mitigation_history_required_from_ts)+'</td>'+
           '<td><b>NO</b></td><td>'+auditText(audit.history_gap_reason||z.mitigation_history_gap_reason||'M15 history cannot prove full freshness')+
-          ' • New A/A+ execution authority is blocked.</td></tr>'
+          ' • New A+/A/B+ execution authority is blocked.</td></tr>'
         );
       }
       rawContacts.forEach((r)=>{

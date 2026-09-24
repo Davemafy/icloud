@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.30",
+  "release": "6.3.31",
   "repository": "Davemafy/icloud",
-  "ref": "807a28180bf1dca4fd1ddb851bdbbbfcdcf24a23",
-  "data_bridge_version": "1.49",
-  "sequence_ea_version": "3.40",
+  "ref": "439fe61fcc5ff88f7e82d99ebb84fca3d6911e72",
+  "data_bridge_version": "1.50",
+  "sequence_ea_version": "3.41",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -165,19 +165,19 @@
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
       "requires_reload": true,
-      "sha256": "901f94bf0ae25413afe5e32e14eef573e7e5512438621eec2686be90b7008d60"
+      "sha256": "e5dbb953da20ab40a57d485ed57face221b6ff9a305ad0ee0f08d0ee7288f294"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
       "requires_reload": true,
-      "sha256": "bb3ee50731966f32a4f471edf61aa036aa97d16c03f60b6f250d2b439fbbcfbb"
+      "sha256": "e6a6b545c8d255f5b6a099a38ca8d4a2ad1491b8731004c24d85bbc9692cafeb"
     }
   ],
   "support_files": [
