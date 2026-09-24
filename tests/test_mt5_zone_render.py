@@ -18,7 +18,7 @@ def _kv(text: str) -> dict[str, str]:
     return out
 
 
-def _zone(zid, direction, low, high, core_low, core_high, method, grade, source_tf, source_ts, touches):
+def _zone(zid, direction, low, high, core_low, core_high, method, grade, source_tf, source_ts, touches, notes=None):
     return SimpleNamespace(
         zone_id=zid,
         original_direction=V(direction),
@@ -32,6 +32,7 @@ def _zone(zid, direction, low, high, core_low, core_high, method, grade, source_
         zone_high=high,
         core_low=core_low,
         core_high=core_high,
+        notes=list(notes or []),
     )
 
 
@@ -121,6 +122,7 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis(monkeypatc
     assert d["zone1_zone_low"] == "4323.34000"
     assert d["zone1_core_low"] == "4327.52000"
     assert d["zone1_execution_authority"] == "0"
+    assert d["zone1_published_at"] == "300"
 
     assert d["zone2_id"] == "BUY_1"
     assert d["zone2_state"] == "WATCH"
@@ -132,6 +134,7 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis(monkeypatc
     assert d["zone3_state"] == "RESERVE"
     assert d["zone3_zone_high"] == "4402.59000"
     assert d["zone3_core_low"] == "4392.49000"
+    assert d["zone3_published_at"] == "300"
 
 
 def test_next_objective_uses_best_price_for_sell_progress(monkeypatch):
@@ -192,3 +195,31 @@ def test_render_feed_empty_without_analysis():
     assert d["zone_count"] == "0"
     assert d["active_thesis_locked"] == "0"
     assert d["active_thesis_next_objective"] == "0.00000"
+
+
+def test_render_feed_uses_exact_geometry_publication_not_source_time():
+    sell = _zone(
+        "SELL_PUB",
+        "SELL",
+        4302.19,
+        4324.19,
+        4303.77,
+        4309.77,
+        "ARMED|PROMPT",
+        "A",
+        "H1",
+        1_790_190_000,
+        0,
+        notes=["geometry_published_at:1790210000"],
+    )
+    a = SimpleNamespace(
+        analysis_id="A_PUB",
+        generated_at=1_790_220_000,
+        selected_zone_id="SELL_PUB",
+        zones=[sell],
+        execution_policy={"active_thesis": {"locked": False}},
+    )
+    d = _kv(mt5_zone_render_text(a))
+    assert d["zone1_source_ts"] == "1790190000"
+    assert d["zone1_published_at"] == "1790210000"
+    assert int(d["zone1_published_at"]) > int(d["zone1_source_ts"])
