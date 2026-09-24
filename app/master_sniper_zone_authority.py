@@ -1,21 +1,32 @@
 from __future__ import annotations
 
-"""Master Sniper publication authority for the institutional zone engine.
+"""Master Sniper authority for XAU institutional zone formation.
 
 DEMO/PAPER ONLY.
 
-The underlying institutional_two_zone module remains responsible for discovering
-source candles, liquidity, mitigation history, M15 invalidation and M1 execution
-handoff.  This layer controls which discovered zone is allowed to become the
-front-facing intraday alert map.
+This module is intentionally installed before analysis construction.  The Master
+Sniper prompt is the zoning authority, not a publication filter placed on top of
+legacy geometry.  The underlying engine still supplies audited structure,
+liquidity, mitigation, M15 invalidation and M1 handoff, but it is not allowed to
+manufacture a tactical core or stretch a source candle into a synthetic zone.
 
-The key rule is location truth:
-* BUY is publishable only below current price or while price is interacting.
-* SELL is publishable only above current price or while price is interacting.
-
-A structurally valid zone on the wrong side of price remains diagnostic/context;
-it must never be relabelled as today's actionable BUY/SELL alert.  No opposite
-side zone is forced merely to keep a two-zone display populated.
+Formation truth:
+* D1 = external context; H4 = primary institutional location; H1 = refinement/fallback.
+* A zone must originate from an actual H4/H1 displacement/BOS source or an actual
+  liquidity-sweep/rejection source followed by displacement.
+* The tactical core is the REAL source-candle body/refinement.  It is never padded
+  to a fixed width simply to satisfy a geometry constant.
+* The outer envelope is the REAL source-candle range (H4 parent for H4>H1).  It is
+  never expanded merely to pull a remote BSL/SSL into the zone.
+* SELL requires genuine structural BSL already inside that source envelope, with
+  distal sweep room naturally present inside the same source range.
+* BUY requires genuine structural SSL already inside that source envelope, with
+  distal sweep room naturally present inside the same source range.
+* FVG, wick rejection, volume, premium/discount, PSY and DXY are confluence/context;
+  none is allowed to manufacture location.
+* BUY alerts are below current price or interacting; SELL alerts are above current
+  price or interacting.  No opposite-side or reserve zone is forced.
+* M15 judges health/accepted invalidation.  M1 times entry only.
 """
 
 from typing import Callable
@@ -27,6 +38,86 @@ def install_master_sniper_zone_authority() -> None:
 
     if getattr(engine, "_MASTER_SNIPER_ZONE_AUTHORITY_INSTALLED", False):
         return
+
+    # ------------------------------------------------------------------
+    # MASTER-SNIPER FORMATION OVERRIDES
+    # ------------------------------------------------------------------
+    # The old engine normalized every core to a fixed point width and could expand
+    # the source range to make a liquidity level fit.  That is precisely the drift
+    # this authority forbids.  apply_two_zone_institutional_map resolves these
+    # helpers at runtime, so installing them here changes candidate formation BEFORE
+    # mitigation, grading, selection and publication are calculated.
+
+    def master_sniper_source_core(candidate, snapshot):
+        lo, hi = sorted((float(candidate.core_low), float(candidate.core_high)))
+        if hi <= lo:
+            return lo, hi
+        return lo, hi
+
+    def master_sniper_select_liquidity(candidate, core_low, core_high, liq, snapshot):
+        required = "BSL" if candidate.direction == Direction.SELL else "SSL"
+        source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+        sweep_room = engine.MIN_SWEEP_ROOM_POINTS * engine._point(snapshot)
+        tf_rank = {"D1": 0, "H4": 1, "H1": 2}
+        options = []
+
+        for level in liq:
+            if required not in str(level.label).upper():
+                continue
+            tf = str(level.source_tf).upper()
+            if tf not in {"D1", "H4", "H1"}:
+                continue
+            price = float(level.price)
+
+            # Liquidity must already belong to the actual source candle.  Never
+            # widen the zone to capture a nearby pivot after the fact.
+            if not (source_low <= price <= source_high):
+                continue
+
+            if candidate.direction == Direction.SELL:
+                if price < core_low:
+                    continue
+                room = source_high - price
+                edge_distance = abs(price - core_high)
+            else:
+                if price > core_high:
+                    continue
+                room = price - source_low
+                edge_distance = abs(core_low - price)
+
+            if room + 1e-9 < sweep_room:
+                continue
+            options.append((tf_rank.get(tf, 9), edge_distance, float(level.distance), level))
+
+        if not options:
+            return None
+        options.sort(key=lambda row: row[:-1])
+        return options[0][-1]
+
+    def master_sniper_source_geometry(candidate, core_low, core_high, level, snapshot):
+        source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+        liquidity_price = float(level.price)
+        sweep_room = engine.MIN_SWEEP_ROOM_POINTS * engine._point(snapshot)
+
+        if not (source_low <= core_low <= core_high <= source_high):
+            return None
+        if not (source_low <= liquidity_price <= source_high):
+            return None
+
+        if candidate.direction == Direction.SELL:
+            actual_room = source_high - liquidity_price
+        else:
+            actual_room = liquidity_price - source_low
+        if actual_room + 1e-9 < sweep_room:
+            return None
+
+        # Exact source range.  No arbitrary minimum width, no remote-liquidity
+        # expansion, no geometry manufactured from current price.
+        return source_low, source_high, actual_room
+
+    engine._normalize_core = master_sniper_source_core
+    engine._select_liquidity = master_sniper_select_liquidity
+    engine._build_geometry = master_sniper_source_geometry
 
     original_apply: Callable = engine.apply_two_zone_institutional_map
 
@@ -46,14 +137,18 @@ def install_master_sniper_zone_authority() -> None:
             return float(zone.zone_low) > mid
         return False
 
-    def master_sniper_rank(zone, snapshot) -> tuple:
-        """Rank today's alert before remote HTF context.
+    def _master_source_evidence(zone) -> bool:
+        conf = set(zone.confluences or [])
+        source_ok = "SOURCE_CANDLE_ANCHORED" in conf
+        liquidity_ok = "LIQUIDITY_IN_MARKED_ZONE" in conf
+        impulse_ok = bool(
+            {"INSTITUTIONAL_DISPLACEMENT", "LIQUIDITY_SWEEP_REJECTION"} & conf
+        )
+        return source_ok and liquidity_ok and impulse_ok
 
-        Location truth and executable quality lead the ordering.  HTF source
-        hierarchy still matters, but it cannot make a remote or wrong-side zone
-        today's alert merely because its source timeframe is larger.
-        """
+    def master_sniper_rank(zone, snapshot) -> tuple:
         side_penalty = 0 if _alert_side_valid(zone, snapshot) else 1
+        evidence_penalty = 0 if _master_source_evidence(zone) else 1
         interacting_penalty = 0 if _interacting(zone, snapshot) else 1
         grade_rank = {
             Grade.A_PLUS: 0,
@@ -67,6 +162,7 @@ def install_master_sniper_zone_authority() -> None:
         tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(zone.source_tf, 9)
         return (
             side_penalty,
+            evidence_penalty,
             interacting_penalty,
             grade_rank,
             distance,
@@ -79,8 +175,6 @@ def install_master_sniper_zone_authority() -> None:
             -int(zone.source_ts),
         )
 
-    # apply_two_zone_institutional_map resolves _rank at runtime, therefore this
-    # replaces candidate ordering without duplicating the discovery/grade engine.
     engine._rank = master_sniper_rank
 
     def apply_master_sniper_map(analysis, snapshot):
@@ -89,7 +183,12 @@ def install_master_sniper_zone_authority() -> None:
         published = []
         suppressed = []
         for zone in zones:
-            if zone.state == ZoneState.ACTIVE and _alert_side_valid(zone, snapshot):
+            valid = (
+                zone.state == ZoneState.ACTIVE
+                and _alert_side_valid(zone, snapshot)
+                and _master_source_evidence(zone)
+            )
+            if valid:
                 published.append(zone)
             else:
                 suppressed.append(zone)
@@ -100,8 +199,6 @@ def install_master_sniper_zone_authority() -> None:
         ):
             analysis.selected_zone_id = ""
 
-        # Never manufacture a selection.  If a valid A/A+ zone exists, prefer the
-        # D1-context side; otherwise use the nearest valid executable alert.
         executable = [
             z for z in published
             if z.state == ZoneState.ACTIVE and engine.execution_grade_eligible(z)
@@ -124,8 +221,14 @@ def install_master_sniper_zone_authority() -> None:
         zone_map = dict(policy.get("public_zone_map") or {})
         zone_map.update(
             {
-                "engine": "MASTER_SNIPER_ZONE_AUTHORITY_2026_09_24",
+                "engine": "MASTER_SNIPER_TOTAL_AUTHORITY_2026_09_24_V2",
                 "master_sniper_prompt_authoritative": True,
+                "master_sniper_controls_formation_not_only_publication": True,
+                "core_geometry": "EXACT_SOURCE_CANDLE_BODY_OR_H1_REFINEMENT",
+                "envelope_geometry": "EXACT_SOURCE_CANDLE_RANGE_OR_H4_PARENT",
+                "fixed_width_core_normalization_disabled": True,
+                "remote_liquidity_envelope_expansion_disabled": True,
+                "liquidity_must_preexist_inside_source_envelope": True,
                 "alert_side_rule": {
                     "BUY": "BELOW_CURRENT_PRICE_OR_INTERACTING",
                     "SELL": "ABOVE_CURRENT_PRICE_OR_INTERACTING",
@@ -134,15 +237,15 @@ def install_master_sniper_zone_authority() -> None:
                 "wrong_side_zone_can_receive_m1_authority": False,
                 "no_second_zone_is_forced": True,
                 "intraday_reachability_precedes_remote_htf_context": True,
+                "m15_health_only": True,
+                "m1_timing_only": True,
                 "published_zone_count": len(published),
-                "suppressed_wrong_side_zone_ids": [z.zone_id for z in suppressed],
+                "suppressed_zone_ids": [z.zone_id for z in suppressed],
             }
         )
         policy["public_zone_map"] = zone_map
         analysis.execution_policy = policy
 
-        # Rebuild the short brief so it cannot continue advertising a zone that
-        # Master Sniper publication authority has suppressed.
         labels = []
         for zone in published:
             labels.append(
@@ -152,12 +255,13 @@ def install_master_sniper_zone_authority() -> None:
             )
         summary = "; ".join(labels) if labels else "none"
         analysis.trader_brief = (
-            f"D1 context={analysis.overall_bias.value}. Master Sniper active execution map: "
-            f"{summary}. BUY alerts must be below current price or already interacting; "
-            f"SELL alerts must be above current price or already interacting. Wrong-side "
-            f"HTF zones remain context only and receive no M1 execution authority. "
-            f"H4/H1 source, liquidity, freshness and M15 invalidation remain mandatory; "
-            f"M1 times entry only. No zone is forced to populate the map."
+            f"D1 context={analysis.overall_bias.value}. MASTER SNIPER TOTAL AUTHORITY map: "
+            f"{summary}. Zones originate from actual H4/H1 institutional source candles; "
+            f"fixed-width core padding and remote-liquidity envelope expansion are disabled. "
+            f"Required structural liquidity and distal sweep room must already exist inside "
+            f"the source envelope. BUY alerts must be below price/interacting; SELL alerts "
+            f"must be above price/interacting. FVG, PSY, volume and DXY are confluence only. "
+            f"M15 validates health; M1 times entry. No zone is forced."
         )
         return analysis.zones
 
