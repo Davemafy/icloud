@@ -1,3 +1,3 @@
 Trigger coordinated Master Sniper B+ 0.25% execution-authority repair.
 Requested: 2026-09-24.
-Attempt: release-branch-2
+Attempt: release-branch-3-safe-no-workflow-mutations
