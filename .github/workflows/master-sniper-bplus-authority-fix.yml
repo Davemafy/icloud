@@ -48,8 +48,9 @@ jobs:
           b=oldb.read_text(encoding='utf-8').replace('#property version "1.49"','#property version "1.50"').replace('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"').replace('#define TZ_SEQUENCE_EXPECTED "3.40"','#define TZ_SEQUENCE_EXPECTED "3.41"').replace('Sequence 3.40','Sequence 3.41').replace('v1.49','v1.50').replace('V149','V150')
           Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5').write_text(b,encoding='utf-8'); oldb.unlink()
 
-          for p in list(Path('tests').glob('*.py')) + list(Path('.github/workflows').glob('*.yml')):
-              if p.name=='master-sniper-bplus-authority-fix.yml': continue
+          # Tests follow the new filenames/versions. Workflow files are intentionally
+          # excluded so the release commit never requires GitHub workflow-file scope.
+          for p in list(Path('tests').glob('*.py')):
               t=p.read_text(encoding='utf-8'); u=t
               for a,b in [
                 ('InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5','InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5'),
