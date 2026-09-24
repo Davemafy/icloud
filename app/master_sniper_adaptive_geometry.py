@@ -2,17 +2,22 @@ from __future__ import annotations
 
 """Master Sniper structural geometry correction (PAPER/DEMO only).
 
-The institutional source candle is the anchor and its body/refinement remains the
-execution core. Genuine structural BSL/SSL may define the distal envelope when it
-is attached to that source within the configured HTF structural reach. There is
-no fixed 200-300 point width veto and no arbitrary remote-liquidity padding.
+Contract V6586 fixes the architectural error where the full H4/H1 source candle
+was published as the actionable zone.  The source candle is evidence/guardrail;
+the published tactical map is the structural reaction band around the attached
+BSL/SSL and the native refinement.  This mirrors the manual Master Sniper process:
+HTF source -> attached liquidity -> tactical reaction band -> M15 health -> M1 entry.
+
+No price level is hard-coded.  Band depth is volatility-derived from M15 ATR and
+is bounded by the genuine HTF source/attachment reach.  Remote liquidity cannot
+manufacture a zone.
 """
 
 from .config import SETTINGS
 from .engine import atr
 from .models import Direction
 
-CONTRACT = "MASTER_SNIPER_SOURCE_ANCHORED_STRUCTURAL_ENVELOPE_V6582"
+CONTRACT = "MASTER_SNIPER_TACTICAL_MAP_V6586"
 
 
 def _candidate_atr_limit(candidate, snapshot) -> float:
@@ -24,17 +29,64 @@ def _candidate_atr_limit(candidate, snapshot) -> float:
     return SETTINGS.zone_liquidity_envelope_max_h1_atr * base
 
 
+def _m15_atr(snapshot) -> float:
+    return max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
+
+
 def _sweep_buffer(snapshot) -> float:
-    base = max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
-    return max(0.0, SETTINGS.zone_liquidity_sweep_buffer_m15_atr * base)
+    return max(0.0, SETTINGS.zone_liquidity_sweep_buffer_m15_atr * _m15_atr(snapshot))
+
+
+def _tactical_depth(snapshot) -> float:
+    """Depth of the alert band; volatility-derived, never a fixed dollar width."""
+    # Manual Master Sniper zoning is a reaction AREA around structural liquidity,
+    # not the complete parent candle.  One M15 ATR is stable enough for the map
+    # while remaining independent of broker point-size and absolute XAU price.
+    return _m15_atr(snapshot)
+
+
+def _tactical_band(candidate, core_low: float, core_high: float, liquidity_price: float, snapshot):
+    """Return the actionable map band inside genuine structural reach.
+
+    SELL: premium band surrounding BSL and extending to the native refinement.
+    BUY:  discount band surrounding SSL and extending to the native refinement.
+    The parent source remains a provenance/attachment guard, not the published
+    tactical zone itself.
+    """
+    source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+    depth = _tactical_depth(snapshot)
+    sweep = _sweep_buffer(snapshot)
+    price = float(liquidity_price)
+
+    if candidate.direction == Direction.SELL:
+        if price < core_low:
+            return None
+        low = max(source_low, min(core_low, price - depth))
+        high = min(max(source_high, price + sweep), source_high + _candidate_atr_limit(candidate, snapshot))
+        # Do not publish the whole parent merely because it is large: the proximal
+        # edge is the structural reaction band; the distal edge preserves sweep room.
+        high = max(core_high, price + sweep, min(source_high, price + depth))
+    else:
+        if price > core_high:
+            return None
+        low = min(source_low, price - sweep)
+        low = min(low, price - depth)
+        low = max(low, source_low - _candidate_atr_limit(candidate, snapshot))
+        high = min(source_high, max(core_high, price + depth))
+
+    if high <= low:
+        return None
+    if not (low - 1e-9 <= core_high and core_low <= high + 1e-9):
+        return None
+    return float(low), float(high)
 
 
 def _install_engine_geometry() -> None:
     from . import institutional_two_zone as zoning
 
     def normalize_core(candidate, snapshot):
-        # Master Sniper core = real source body / H1 refinement. Never normalize
-        # the core to a fixed point width.
+        # Native source body/H1 refinement is execution evidence.  It is not
+        # widened to a fixed point width and is not automatically the map band.
         return tuple(sorted((float(candidate.core_low), float(candidate.core_high))))
 
     def select_liquidity(candidate, core_low, core_high, liq, snapshot):
@@ -60,9 +112,6 @@ def _install_engine_geometry() -> None:
                     continue
                 attachment = max(0.0, source_low - price)
                 edge = abs(core_low - price)
-            # Liquidity already inside the source is ideal. External structural
-            # liquidity is allowed only when still attached to the source within
-            # the existing HTF ATR reach guard. This prevents remote fabrication.
             if attachment > reach + 1e-9:
                 continue
             options.append((0 if attachment == 0.0 else 1, tf_rank.get(tf, 9), attachment, edge, float(level.distance), level))
@@ -77,25 +126,20 @@ def _install_engine_geometry() -> None:
         if core_low < source_low - 1e-9 or core_high > source_high + 1e-9:
             return None
         reach = _candidate_atr_limit(candidate, snapshot)
-        buffer = _sweep_buffer(snapshot)
         if candidate.direction == Direction.SELL:
-            if price < core_low:
-                return None
             attachment = max(0.0, price - source_high)
-            if attachment > reach + 1e-9:
-                return None
-            low = source_low
-            high = max(source_high, price + buffer)
-            room = high - price
         else:
-            if price > core_high:
-                return None
             attachment = max(0.0, source_low - price)
-            if attachment > reach + 1e-9:
-                return None
-            low = min(source_low, price - buffer)
-            high = source_high
-            room = price - low
+        if attachment > reach + 1e-9:
+            return None
+
+        band = _tactical_band(candidate, core_low, core_high, price, snapshot)
+        if band is None:
+            return None
+        low, high = band
+        room = (high - price) if candidate.direction == Direction.SELL else (price - low)
+        if room + 1e-9 < _sweep_buffer(snapshot):
+            return None
         return low, high, max(0.0, room)
 
     zoning._normalize_core = normalize_core
@@ -118,10 +162,9 @@ def _install_engine_geometry() -> None:
                     "The zone was not widened to remote liquidity."
                 )
             elif code == "ZONE_GEOMETRY_CANNOT_FIT_SWEEP":
-                out["rejection_code"] = "STRUCTURAL_ENVELOPE_INVALID"
+                out["rejection_code"] = "TACTICAL_MAP_GEOMETRY_INVALID"
                 out["rejection_reason"] = (
-                    "The source core and attached structural liquidity cannot form a valid directional envelope. "
-                    "No fixed 200-300 point width rule is used."
+                    "The native refinement and attached structural liquidity cannot form a valid Master Sniper tactical reaction band."
                 )
             return zone, out
         candidate_with_truth._master_sniper_adaptive_diag = True
@@ -129,7 +172,7 @@ def _install_engine_geometry() -> None:
 
 
 def install_master_sniper_adaptive_geometry() -> None:
-    """Make the service's legacy geometry installer finish on Master Sniper V6582."""
+    """Make service runtime finish on the Master Sniper tactical-map contract."""
     from . import zone_runtime_policy as runtime
 
     if getattr(runtime, "_MASTER_SNIPER_ADAPTIVE_WRAPPED", False):
@@ -150,28 +193,29 @@ def install_master_sniper_adaptive_geometry() -> None:
         zone_map = dict(policy.get("public_zone_map") or {})
         zone_map.update({
             "prompt_contract_ref": CONTRACT,
-            "geometry_authority": "MASTER_SNIPER_SOURCE_ANCHORED_STRUCTURAL_ENVELOPE",
+            "geometry_authority": "MASTER_SNIPER_STRUCTURAL_TACTICAL_MAP",
+            "source_geometry_role": "PROVENANCE_AND_ATTACHMENT_GUARD_NOT_PUBLISHED_ZONE",
             "core_geometry": "EXACT_INSTITUTIONAL_SOURCE_BODY_OR_H1_REFINEMENT",
-            "envelope_geometry": "SOURCE_RANGE_PLUS_ATTACHED_STRUCTURAL_LIQUIDITY_ONLY",
+            "published_zone_geometry": "ATTACHED_LIQUIDITY_PLUS_M15_ATR_REACTION_BAND",
             "fixed_width_padding": False,
             "fixed_200_300_point_veto": False,
             "remote_liquidity_envelope_expansion": False,
-            "structural_liquidity_may_define_distal_envelope": True,
+            "hardcoded_manual_prices": False,
+            "m15_atr_is_band_depth_not_location_source": True,
         })
         policy["public_zone_map"] = zone_map
         policy["zone_geometry"] = {
             "authority": CONTRACT,
+            "source": "HTF_PROVENANCE_GUARD",
             "core": "EXACT_SOURCE_BODY_OR_NATIVE_H1_REFINEMENT",
-            "envelope": "SOURCE_ANCHORED_TO_ATTACHED_STRUCTURAL_LIQUIDITY",
+            "published_zone": "STRUCTURAL_LIQUIDITY_REACTION_BAND",
             "fixed_width_padding": False,
-            "atr_is_attachment_guard_not_padding": True,
+            "hardcoded_prices": False,
             "remote_liquidity_expansion": False,
         }
         analysis.execution_policy = policy
         brief = str(analysis.trader_brief or "")
-        stale = "Structural liquidity must already exist inside the source envelope."
-        brief = brief.replace(stale, "Structural liquidity must be genuinely attached to the source; when it sits just beyond the source candle it may define the distal envelope within the HTF structural-reach guard.")
-        brief += " MASTER SNIPER V6582: source core is exact; the envelope follows genuine attached structural liquidity and is never rejected by a fixed 200-300 point width cap. Remote liquidity is never pulled in to manufacture a zone."
+        brief += " MASTER SNIPER V6586: the H4/H1 source candle is provenance, not the published alert zone. Published BUY/SELL zones are volatility-scaled tactical reaction bands around genuine attached SSL/BSL plus the native refinement; no manual price is hard-coded."
         analysis.trader_brief = brief
         return analysis
 
