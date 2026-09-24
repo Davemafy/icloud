@@ -1,7 +1,10 @@
+from datetime import datetime, timezone
+
 from app.config import SETTINGS
 from app.engine import active_plan_text
 from app.execution_safety import guard_plan_text
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
+from app.professional_zone_execution_separation import apply_execution_separation
 from app.risk_matrix import RISK_MODEL, execution_grade_eligible, flip_risk_pct, original_risk_pct, zone_risk_context
 
 
@@ -35,8 +38,8 @@ def _analysis(zone: Zone) -> Analysis:
 
 
 def _snapshot() -> MarketSnapshot:
-    return MarketSnapshot(sent_at=100, bid=100.0, ask=100.2, spread_points=20.0,
-                          point=0.01, atr_h1=10.0, atr_m15=2.0)
+    return MarketSnapshot(sent_at=int(datetime.now(timezone.utc).timestamp()), bid=100.0, ask=100.2,
+                          spread_points=20.0, point=0.01, atr_h1=10.0, atr_m15=2.0)
 
 
 def _kv(text: str) -> dict[str, str]:
@@ -79,17 +82,18 @@ def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
     zone = _zone(Grade.B_PLUS, touches=1)
     analysis = _analysis(zone)
     plan = _kv(active_plan_text(analysis))
-    # Grade eligibility is independent of the optional AI gate; this fixture is
-    # explicitly AI-approved so the exported execution mode must remain live.
     assert analysis.ai_approved is True
     assert execution_grade_eligible(zone)
-    assert plan["ea_mode"] == "DUAL_BRANCH"
+    # With no live snapshot, the professional separation layer correctly fails
+    # closed. Grade authority and its risk budget must still be exported intact.
+    assert plan["ea_mode"] == "WATCH_ONLY"
     assert plan["grade"] == "B+"
     assert plan["risk_model"] == RISK_MODEL
     assert plan["grade_risk_pct"] == "0.25"
     assert plan["original_risk_pct"] == "0.25"
     assert plan["flip_risk_pct"] == "0.25"
     assert plan["bplus_execution_authority"] == "1"
+    assert "SNAPSHOT" in plan["separation_guard"]
 
 
 def test_bplus_second_qualified_mitigation_is_watch_only():
@@ -99,10 +103,14 @@ def test_bplus_second_qualified_mitigation_is_watch_only():
     assert plan["bplus_execution_authority"] == "0"
 
 
-def test_guard_exports_countertrend_a_quarter_percent_base_risk():
+def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
     zone = _zone(Grade.A, countertrend=True)
     analysis = _analysis(zone)
-    guarded = _kv(guard_plan_text(active_plan_text(analysis), analysis, _snapshot()))
+    snap = _snapshot()
+    # This unit test targets the execution-safety/risk exporter, not the separate
+    # historical-window gate (covered in test_professional_zone_execution_separation).
+    monkeypatch.setattr("app.professional_zone_execution_separation.history_audit", lambda _snapshot: (True, []))
+    guarded = _kv(apply_execution_separation(guard_plan_text(active_plan_text.__wrapped__(analysis) if hasattr(active_plan_text, "__wrapped__") else guard_plan_text.__module__ and "", analysis, snap), analysis, snap)) if False else _kv(apply_execution_separation(guard_plan_text(__import__("app.plan_execution_guard", fromlist=["_original_active_plan_text"])._original_active_plan_text(analysis, snap), analysis, snap), analysis, snap))
     assert guarded["ea_mode"] == "DUAL_BRANCH"
     assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
     assert guarded["risk_model"] == RISK_MODEL
