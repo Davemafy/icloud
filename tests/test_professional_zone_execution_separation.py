@@ -12,7 +12,7 @@ def _bars(start, end, step):
     return [SimpleNamespace(ts=t) for t in range(start, end + 1, step)]
 
 
-def _snapshot(full=True):
+def _snapshot(full=True, dxy_h4_full=True):
     day = 86400
     end = 400 * day
     return SimpleNamespace(
@@ -21,6 +21,7 @@ def _snapshot(full=True):
         xau_h1=_bars(0, end, 3600),
         xau_m15=_bars(390 * day, end, 900),
         dxy_d1=_bars(0, end, day),
+        dxy_h4=_bars(0, end, 4 * 3600) if dxy_h4_full else _bars(390 * day, end, 4 * 3600),
         dxy_h1=_bars(0, end, 3600),
     )
 
@@ -47,6 +48,13 @@ def test_incomplete_d1_history_fails_closed_without_deleting_map_context():
     ok, failures = history_audit(_snapshot(False))
     assert not ok
     assert "XAU_D1_1Y" in failures
+    assert zone_layer(_zone(), ok, True) == "MAP_CONTEXT"
+
+
+def test_incomplete_dxy_h4_history_fails_closed_without_deleting_map_context():
+    ok, failures = history_audit(_snapshot(True, dxy_h4_full=False))
+    assert not ok
+    assert "DXY_H4_4M" in failures
     assert zone_layer(_zone(), ok, True) == "MAP_CONTEXT"
 
 
