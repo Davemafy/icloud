@@ -357,7 +357,7 @@ def test_dashboard_exposes_target_ladder_truth():
     from pathlib import Path
 
     html = Path("static/index.html").read_text(encoding="utf-8")
-    assert "Target ladder status" in html
+    assert "Target lifecycle" in html
     assert "Target ladder truth" in html
-    assert "Target activation reference" in html
-    assert "Verified open liquidity objective" in html
+    assert "Activation reference" in html
+    assert "Target ladder valid for current phase" in html
