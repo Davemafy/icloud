@@ -19,7 +19,9 @@ def test_v338_context_grade_fixed_capital_risk_contract():
     assert "ResearchRiskPctCountertrendA=0.25" in text
     assert 'if(grade=="A+")' in text
     assert 'if(grade=="A")' in text
-    assert 'if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;' in text
+    # v3.38 is retained as immutable historical evidence. B+ execution authority
+    # was introduced in the later v3.41 release and must not be back-written here.
+    assert 'if(grade!="A+"&&grade!="A")return 0.0;' in text
     assert "CONTEXT_GRADE_MATRIX_10000_V2" in text
     assert "TZ38_DefaultContextRiskPct" in text
     assert "TZ38_LoadRiskContract" in text
