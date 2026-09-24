@@ -344,3 +344,10 @@ def test_dashboard_renders_raw_mitigation_contacts_separately_from_qualified_eve
     assert "RAW CORE CONTACT #" in cleaned
     assert "OBSERVATION ONLY • " in cleaned
     assert "RECONTACT_WITHIN_OPEN_CAMPAIGN" not in cleaned  # runtime value, not hard-coded classification logic
+
+
+def test_dashboard_distinguishes_campaign_origin_from_immediate_raw_touch_side():
+    cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
+    assert "Campaign '+auditText(r.campaign_approach_side||r.approach_side||'—')" in cleaned
+    assert "Immediate '+auditText(r.immediate_approach_side||'—')" in cleaned
+    assert "r.immediate_approach_ts" in cleaned
