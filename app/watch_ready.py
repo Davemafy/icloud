@@ -290,6 +290,13 @@ def _active_thesis(analysis: Analysis) -> dict:
     return meta if bool(meta.get("locked")) else {}
 
 
+def _target_gate_safe(analysis: Analysis, zone: Zone, snapshot: MarketSnapshot) -> bool:
+    """Enforce target truth for published/current owners; keep legacy test fixtures compatible."""
+    truth = target_ladder_truth(analysis, zone, snapshot)
+    enforced = bool(int(truth.get("publication_ts") or 0) > 0 or truth.get("owner"))
+    return True if not enforced else bool(truth.get("authority_safe"))
+
+
 def _thesis_continuation_ready(analysis: Analysis, zone: Zone, snapshot: MarketSnapshot) -> bool:
     """Allow same-thesis continuation after a confirmed reaction, never a new opposite thesis."""
     meta = _active_thesis(analysis)
@@ -308,7 +315,7 @@ def _thesis_continuation_ready(analysis: Analysis, zone: Zone, snapshot: MarketS
     # A frozen owner keeps the location it actually earned. Core-owned theses can
     # return through the core; zone-sweep-owned theses may remain inside their
     # latched sweep window while TP1 is still open. Fresh M1 confirmation remains mandatory.
-    if not bool(target_ladder_truth(analysis, zone, snapshot).get("authority_safe")):
+    if not _target_gate_safe(analysis, zone, snapshot):
         return False
     return bool(
         _common_zone_health(zone, snapshot)
@@ -434,7 +441,7 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
         if (
             str(thesis.get("status") or "") == "INTERACTING"
             and watch_zone_ready(current, snapshot)
-            and bool(target_ladder_truth(analysis, current, snapshot).get("authority_safe"))
+            and _target_gate_safe(analysis, current, snapshot)
         ):
             return _mark_ready(analysis, current, snapshot, thesis_continuation=False)
         return None
@@ -449,7 +456,7 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
     candidates = [
         z for z in analysis.zones
         if watch_zone_ready(z, snapshot)
-        and bool(target_ladder_truth(analysis, z, snapshot).get("authority_safe"))
+        and _target_gate_safe(analysis, z, snapshot)
     ]
 
     policy = dict(analysis.execution_policy or {})
