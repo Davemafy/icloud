@@ -103,6 +103,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       if(!zoneId)continue;
       const audit=z.mitigation_audit||raw.mitigation_audit||{};
       const events=Array.isArray(audit.events)?audit.events:[];
+      const rawContacts=Array.isArray(audit.raw_contacts)?audit.raw_contacts:[];
       const expected=String(audit.expected_approach_side||z.mitigation_expected_approach_side||'—');
       const historyComplete=audit.history_complete===true || z.mitigation_history_complete===true;
       const cycle=(String(side).toUpperCase()==='SELL')
@@ -117,6 +118,19 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           ' • New A/A+ execution authority is blocked.</td></tr>'
         );
       }
+      rawContacts.forEach((r)=>{
+        rows.push(
+          '<tr><td>'+auditText(zoneId)+'</td>'+
+          '<td>'+cycle+'</td>'+
+          '<td>RAW CORE CONTACT #'+auditText(r.raw_contact_index||'—')+'</td>'+
+          '<td>'+auditText(r.approach_side||'—')+'</td>'+
+          '<td>'+auditTime(r.armed_at)+'</td>'+
+          '<td>'+auditTime(r.core_touched_at)+'</td>'+
+          '<td>—</td>'+
+          '<td><b>NO</b></td>'+
+          '<td>OBSERVATION ONLY • '+auditText(r.contact_role||'RAW_CONTACT_ONLY')+'</td></tr>'
+        );
+      });
       if(!events.length){
         rows.push(
           '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
