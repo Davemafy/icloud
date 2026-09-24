@@ -153,6 +153,7 @@ def audit_directional_mitigations(
 
     for index, bar in enumerate(ordered):
         ts = int(bar.ts)
+        previous_bar = ordered[index - 1] if index > 0 else None
         abs_index = absolute_index.get(ts, len(all_ordered) - 1)
         history = all_ordered[: abs_index + 1]
         invalidated, reason = _accepted_invalidation(
@@ -206,11 +207,28 @@ def audit_directional_mitigations(
         if hit_core and not raw_core_engaged:
             raw_core_contacts += 1
             raw_core_engaged = True
+            immediate_approach_side = "UNAVAILABLE"
+            immediate_approach_ts = 0
+            if previous_bar is not None:
+                immediate_approach_ts = int(previous_bar.ts)
+                if float(previous_bar.low) > float(core_high):
+                    immediate_approach_side = "ABOVE_CORE"
+                elif float(previous_bar.high) < float(core_low):
+                    immediate_approach_side = "BELOW_CORE"
+                else:
+                    immediate_approach_side = "CORE_ADJACENT_OR_OVERLAP"
+
             raw_contacts.append(
                 {
                     "raw_contact_index": raw_core_contacts,
+                    # Campaign origin is the last fully outside-envelope close that
+                    # armed freshness. It is NOT necessarily the side from which a
+                    # later raw re-contact immediately re-entered the core.
                     "armed_at": int(last_outside_ts or 0),
+                    "campaign_approach_side": last_outside_side or "UNARMED",
                     "approach_side": last_outside_side or "UNARMED",
+                    "immediate_approach_side": immediate_approach_side,
+                    "immediate_approach_ts": immediate_approach_ts,
                     "core_touched_at": ts,
                     "touch_bar_open": float(bar.open),
                     "touch_bar_high": float(bar.high),
