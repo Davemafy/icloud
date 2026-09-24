@@ -2,15 +2,9 @@ from __future__ import annotations
 
 """Master Sniper structural geometry correction (PAPER/DEMO only).
 
-Contract V6586 fixes the architectural error where the full H4/H1 source candle
-was published as the actionable zone. The source candle is evidence/guardrail;
-the published tactical map is the structural reaction band around the attached
-BSL/SSL and the native refinement. This mirrors the manual Master Sniper process:
-HTF source -> attached liquidity -> tactical reaction band -> M15 health -> M1 entry.
-
-No price level is hard-coded. Band depth is volatility-derived from M15 ATR and
-is bounded by genuine HTF source/attachment reach. Remote liquidity cannot
-manufacture a zone.
+Contract V6586: HTF source candles are provenance/guardrails; the published map
+is the tactical structural reaction band around genuine attached liquidity and
+native refinement. No manual price is hard-coded.
 """
 
 from .config import SETTINGS
@@ -20,17 +14,24 @@ from .models import Direction
 CONTRACT = "MASTER_SNIPER_TACTICAL_MAP_V6586"
 
 
+def _safe_atr(snapshot, field: str, bars_field: str) -> float:
+    direct = float(getattr(snapshot, field, 0.0) or 0.0)
+    bars = getattr(snapshot, bars_field, []) or []
+    derived = float(atr(bars)) if bars else 0.0
+    return max(direct, derived, 1e-9)
+
+
 def _candidate_atr_limit(candidate, snapshot) -> float:
     tf = str(candidate.source_tf).upper()
     if tf in {"H4", "H4>H1"}:
-        base = max(float(atr(snapshot.xau_h4)), float(snapshot.atr_h1 or 0.0), 1e-9)
-        return SETTINGS.zone_liquidity_envelope_max_h4_atr * base
-    base = max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9)
-    return SETTINGS.zone_liquidity_envelope_max_h1_atr * base
+        h4 = _safe_atr(snapshot, "atr_h4", "xau_h4")
+        h1 = _safe_atr(snapshot, "atr_h1", "xau_h1")
+        return SETTINGS.zone_liquidity_envelope_max_h4_atr * max(h4, h1)
+    return SETTINGS.zone_liquidity_envelope_max_h1_atr * _safe_atr(snapshot, "atr_h1", "xau_h1")
 
 
 def _m15_atr(snapshot) -> float:
-    return max(float(snapshot.atr_m15 or atr(snapshot.xau_m15)), 1e-9)
+    return _safe_atr(snapshot, "atr_m15", "xau_m15")
 
 
 def _sweep_buffer(snapshot) -> float:
@@ -38,34 +39,26 @@ def _sweep_buffer(snapshot) -> float:
 
 
 def _tactical_depth(snapshot) -> float:
-    """Depth of the alert band; volatility-derived, never a fixed dollar width."""
     return _m15_atr(snapshot)
 
 
 def _tactical_band(candidate, core_low: float, core_high: float, liquidity_price: float, snapshot):
-    """Build the actionable map band without publishing the whole parent candle."""
     source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
     depth = _tactical_depth(snapshot)
     sweep = _sweep_buffer(snapshot)
     price = float(liquidity_price)
-
     if candidate.direction == Direction.SELL:
         if price < core_low:
             return None
-        # Premium reaction band: one volatility unit below BSL through native
-        # refinement/distal sweep room, clipped to genuine source/attachment reach.
         low = max(source_low, min(core_low, price - depth))
         high = max(core_high, price + sweep, min(source_high, price + depth))
         high = min(high, source_high + _candidate_atr_limit(candidate, snapshot))
     else:
         if price > core_high:
             return None
-        # Discount reaction band: one volatility unit below SSL through native
-        # refinement. Do not drag the proximal band down to the parent-candle low.
         low = min(core_low, price - sweep, max(source_low, price - depth))
         low = max(low, source_low - _candidate_atr_limit(candidate, snapshot))
         high = min(source_high, max(core_high, price + depth))
-
     if high <= low:
         return None
     if not (low - 1e-9 <= core_high and core_low <= high + 1e-9):
@@ -153,7 +146,6 @@ def _install_engine_geometry() -> None:
 
 
 def install_master_sniper_adaptive_geometry() -> None:
-    """Make service runtime finish on the Master Sniper tactical-map contract."""
     from . import zone_runtime_policy as runtime
     if getattr(runtime, "_MASTER_SNIPER_ADAPTIVE_WRAPPED", False):
         return
