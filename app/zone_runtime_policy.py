@@ -401,6 +401,10 @@ def apply_pip_display_contract(analysis: Analysis, snapshot: MarketSnapshot) -> 
             entry = dict(entry)
             # DataBridge scans literal zone_id keys after zones[]. Removing this
             # duplicate keeps MAP count equal to the real primary zones[] count.
+            # Preserve the identifier under an observability-only key so the
+            # human mitigation ledger can still name the exact zone.
+            if entry.get("zone_id"):
+                entry["audit_zone_id"] = str(entry["zone_id"])
             entry.pop("zone_id", None)
             for old, new in (
                 ("core_width_points", "core_width_pips"),
