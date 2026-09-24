@@ -3,7 +3,7 @@ from __future__ import annotations
 from .engine import atr
 from .models import Grade, MarketSnapshot, Zone
 
-PROMPT_SELECTION_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V659"
+PROMPT_SELECTION_CONTRACT = "MASTER_SNIPER_TOTAL_AUTHORITY_V6578"
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -30,14 +30,15 @@ def _reachability(zone: Zone, snapshot: MarketSnapshot) -> tuple[int, float]:
 
 
 def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
-    """Rank already-valid zones by the user's master-sniper prompt.
+    """Rank every already-valid Master Sniper zone symmetrically.
 
-    Structural qualification happens before this function. For the intraday alert
-    map, an A/A+ location that is materially nearer to current price must outrank
-    a remote A/A+ context zone solely because the remote zone has one fewer touch.
-    Freshness still matters after today's reachability is established.
+    BUY and SELL use the same rules. Trend and countertrend use their structural
+    grades/risk matrix, but neither side receives a special price exception.
+    Current-price side and reachability are relevance inputs only; they cannot erase
+    an institutional source. B+ remains in the ranking tier for the agreed scaled
+    risk path rather than being silently converted to research-only here.
     """
-    execution_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A} else 1
+    execution_tier = 0 if zone.grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} else 1
     reach_bucket, distance_atr = _reachability(zone, snapshot)
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(str(zone.source_tf), 9)
@@ -57,7 +58,6 @@ def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
 
 
 def install_prompt_intraday_selection() -> None:
-    """Install selection only; source/liquidity/M15/M1 rules are unchanged."""
+    """Install Master Sniper selection only; never manufacture zone geometry."""
     from . import institutional_two_zone as zoning
-
     zoning._rank = prompt_intraday_rank
