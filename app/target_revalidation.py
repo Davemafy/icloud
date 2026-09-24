@@ -4,20 +4,8 @@ from typing import Any
 
 from .models import Analysis, Direction, MarketSnapshot, Zone
 
-TARGET_REVALIDATION_CONTRACT = "TARGET_LADDER_REVALIDATION_V6571"
+TARGET_REVALIDATION_CONTRACT = "TARGET_LADDER_ACTIVATION_TRUTH_V6572"
 _M15_SECONDS = 15 * 60
-
-
-def _note_int(zone: Zone, prefix: str, default: int = 0) -> int:
-    for note in list(zone.notes or []):
-        text = str(note)
-        if not text.startswith(prefix):
-            continue
-        try:
-            return int(float(text.split(":", 1)[1]))
-        except (TypeError, ValueError, IndexError):
-            return default
-    return default
 
 
 def _target_gap(snapshot: MarketSnapshot) -> float:
@@ -46,16 +34,8 @@ def _crossed_since(
     target: float,
     start_ts: int,
 ) -> tuple[bool, int, str]:
-    """Return conservative M15 evidence that an objective has already traded.
-
-    The M15 bar containing start_ts is included. Its high/low can contain price
-    action from just before the exact timestamp, so a crossing on that bar is
-    deliberately treated as consumed/ambiguous rather than silently OPEN. That
-    is fail-closed for execution and prevents a stale objective from being
-    recycled after price has already traded through it.
-    """
     if start_ts <= 0:
-        return False, 0, "NO_START_TIMESTAMP"
+        return False, 0, "NO_ACTIVATION_TIMESTAMP"
 
     bars = sorted(list(snapshot.xau_m15 or []), key=lambda b: int(b.ts))
     for bar in bars:
@@ -64,124 +44,97 @@ def _crossed_since(
             continue
         if _crossed(direction, target, float(bar.high), float(bar.low)):
             basis = (
-                "START_BAR_CROSS_OR_AMBIGUOUS"
+                "ACTIVATION_BAR_CROSS_OR_AMBIGUOUS"
                 if ts < int(start_ts)
-                else "POST_START_M15_CROSS"
+                else "POST_ACTIVATION_M15_CROSS"
             )
             return True, ts, basis
     return False, 0, "NO_CROSS"
 
 
-def _history_complete(snapshot: MarketSnapshot, required_from: int) -> tuple[bool, int, str]:
-    bars = sorted(list(snapshot.xau_m15 or []), key=lambda b: int(b.ts))
-    if required_from <= 0:
-        return False, 0, "NO_PUBLICATION_TIMESTAMP"
-    if not bars:
-        return False, 0, "NO_M15_HISTORY"
-    first = int(bars[0].ts)
-    if first > int(required_from):
-        return False, first, "M15_HISTORY_STARTS_AFTER_PUBLICATION"
-    return True, first, "OK"
-
-
-def target_ladder_truth(
-    analysis: Analysis | None,
-    zone: Zone,
-    snapshot: MarketSnapshot,
-) -> dict[str, Any]:
-    """Classify every original objective as OPEN, COMPLETED, or BEHIND_ACTIVATION_PRICE.
-
-    Before ownership, the live quote is the provisional activation reference.
-    A target already behind that reference is unavailable. A target that traded
-    after exact-geometry publication is also unavailable even if price later
-    retraces back across it.
-
-    After ownership, the frozen ownership anchor is authoritative. Objective-hit
-    metadata and best-price progress determine completion; targets that were
-    already behind the ownership anchor are never relabelled as thesis profits.
-    """
-    direction = zone.original_direction
-    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {}) if analysis else {}
-    is_owner = bool(
-        meta.get("locked")
-        and str(meta.get("owner_zone_id") or "") == zone.zone_id
-        and str(meta.get("direction") or "") == direction.value
-    )
-
-    publication_ts = _note_int(zone, "geometry_published_at:", 0)
-    ownership_ts = int(meta.get("ownership_acquired_at") or 0) if is_owner else 0
-    ownership_anchor = float(meta.get("ownership_anchor_price") or 0.0) if is_owner else 0.0
-
-    if is_owner and ownership_anchor > 0:
-        activation_reference = ownership_anchor
-        reference_basis = "OWNERSHIP_ANCHOR"
-    else:
-        activation_reference = float(snapshot.ask if direction == Direction.BUY else snapshot.bid)
-        reference_basis = "LIVE_PRE_ENTRY_REFERENCE"
-
-    history_complete, history_start_ts, history_reason = _history_complete(snapshot, publication_ts)
-    gap = _target_gap(snapshot)
-    best = float(meta.get("best_price") or 0.0) if is_owner else 0.0
-
-    raw_targets = [
+def _raw_targets(zone: Zone) -> list[tuple[str, int, float]]:
+    return [
         ("TP1", 1, float(zone.original_target1 or 0.0)),
         ("TP2", 2, float(zone.original_target2 or 0.0)),
         ("TP3", 3, float(zone.original_target3 or 0.0)),
         ("RUNNER", 4, float(zone.original_runner or 0.0)),
     ]
 
+
+def planned_target_truth(zone: Zone) -> dict[str, Any]:
+    """Return pre-activation target truth.
+
+    A published zone is only a PLAN until an execution handoff actually acquires
+    thesis ownership. Price may trade through its future TP levels before the zone
+    is ever reached; those crossings do NOT consume the targets because no trade
+    thesis was active from that zone.
+    """
+    objectives = [
+        {
+            "label": label,
+            "index": idx,
+            "price": round(price, 5),
+            "state": "PLANNED",
+            "reason": "ZONE_NOT_ACTIVATED",
+            "crossed_at": 0,
+            "crossed_basis": "",
+        }
+        for label, idx, price in _raw_targets(zone)
+        if price > 0
+    ]
+    planned = [float(x["price"]) for x in objectives]
+    return {
+        "contract": TARGET_REVALIDATION_CONTRACT,
+        "zone_id": zone.zone_id,
+        "direction": zone.original_direction.value,
+        "owner": False,
+        "activated": False,
+        "activation_reference": 0.0,
+        "activation_reference_basis": "NONE_UNTIL_EXECUTION_HANDOFF",
+        "activation_ts": 0,
+        "history_complete": True,
+        "history_reason": "PRE_ACTIVATION_HISTORY_NOT_APPLICABLE",
+        "objectives": objectives,
+        "planned_targets": planned,
+        "open_targets": [],
+        "completed_targets": [],
+        "behind_activation_targets": [],
+        "next_open_target": 0.0,
+        "authority_safe": False,
+        "execution_evaluable": False,
+        "remap_required": False,
+        "status": "PLANNED_NOT_ACTIVATED",
+        "pre_activation_crossings_consume_targets": False,
+        "invalidation_logic_unchanged": True,
+    }
+
+
+def activation_target_truth(
+    zone: Zone,
+    snapshot: MarketSnapshot,
+    activation_reference: float,
+    *,
+    activation_ts: int = 0,
+    reference_basis: str = "EXECUTION_HANDOFF_ANCHOR",
+) -> dict[str, Any]:
+    """Evaluate the planned ladder at the instant execution authority activates.
+
+    Only now do TP levels become execution objectives. A level already behind the
+    activation price is unavailable; a level still on the profit side is OPEN.
+    Market travel before activation is intentionally ignored.
+    """
+    reference = float(activation_reference)
+    gap = _target_gap(snapshot)
     objectives: list[dict[str, Any]] = []
-    for label, idx, price in raw_targets:
+    for label, idx, price in _raw_targets(zone):
         if price <= 0:
             continue
-
-        state = "OPEN"
-        reason = "VERIFIED_OPEN"
-        crossed_at = 0
-        crossed_basis = ""
-
-        if not _ahead(direction, price, activation_reference, gap):
+        if _ahead(zone.original_direction, price, reference, gap):
+            state = "OPEN"
+            reason = "OPEN_AT_ACTIVATION"
+        else:
             state = "BEHIND_ACTIVATION_PRICE"
             reason = f"{reference_basis}_ALREADY_BEYOND_OBJECTIVE"
-        elif is_owner:
-            hit_at = int(meta.get(f"target{idx}_hit_at") or 0) if idx <= 3 else 0
-            crossed_best = bool(
-                best > 0
-                and (
-                    (direction == Direction.SELL and best <= price)
-                    or (direction == Direction.BUY and best >= price)
-                )
-            )
-            crossed_live, live_ts, live_basis = _crossed_since(
-                snapshot,
-                direction,
-                price,
-                ownership_ts,
-            ) if ownership_ts > 0 else (False, 0, "NO_OWNERSHIP_TIMESTAMP")
-            if hit_at or crossed_best or crossed_live:
-                state = "COMPLETED"
-                crossed_at = hit_at or live_ts
-                crossed_basis = (
-                    "OWNER_TARGET_HIT"
-                    if hit_at
-                    else "OWNER_BEST_PRICE_CROSS"
-                    if crossed_best
-                    else live_basis
-                )
-                reason = crossed_basis
-        else:
-            crossed, crossed_at, crossed_basis = _crossed_since(
-                snapshot,
-                direction,
-                price,
-                publication_ts,
-            )
-            if crossed:
-                state = "COMPLETED"
-                reason = f"PRE_ENTRY_{crossed_basis}"
-            elif not history_complete:
-                reason = "OPEN_BUT_HISTORY_UNVERIFIED"
-
         objectives.append(
             {
                 "label": label,
@@ -189,10 +142,110 @@ def target_ladder_truth(
                 "price": round(price, 5),
                 "state": state,
                 "reason": reason,
-                "crossed_at": int(crossed_at or 0),
-                "crossed_basis": crossed_basis,
+                "crossed_at": 0,
+                "crossed_basis": "",
             }
         )
+
+    open_targets = [float(x["price"]) for x in objectives if x["state"] == "OPEN"]
+    behind = [
+        float(x["price"])
+        for x in objectives
+        if x["state"] == "BEHIND_ACTIVATION_PRICE"
+    ]
+    return {
+        "contract": TARGET_REVALIDATION_CONTRACT,
+        "zone_id": zone.zone_id,
+        "direction": zone.original_direction.value,
+        "owner": False,
+        "activated": True,
+        "activation_reference": round(reference, 5),
+        "activation_reference_basis": reference_basis,
+        "activation_ts": int(activation_ts or snapshot.sent_at),
+        "history_complete": True,
+        "history_reason": "ACTIVATION_STARTS_TARGET_LIFECYCLE",
+        "objectives": objectives,
+        "planned_targets": [float(x["price"]) for x in objectives],
+        "open_targets": open_targets,
+        "completed_targets": [],
+        "behind_activation_targets": behind,
+        "next_open_target": open_targets[0] if open_targets else 0.0,
+        "authority_safe": bool(open_targets),
+        "execution_evaluable": True,
+        "remap_required": not bool(open_targets),
+        "status": "OPEN_TARGETS_AVAILABLE" if open_targets else "REMAP_REQUIRED_AT_ACTIVATION",
+        "pre_activation_crossings_consume_targets": False,
+        "invalidation_logic_unchanged": True,
+    }
+
+
+def owner_target_truth(
+    analysis: Analysis,
+    zone: Zone,
+    snapshot: MarketSnapshot,
+) -> dict[str, Any]:
+    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    ownership_ts = int(meta.get("ownership_acquired_at") or 0)
+    ownership_anchor = float(meta.get("ownership_anchor_price") or 0.0)
+    if ownership_anchor <= 0:
+        ownership_anchor = float(
+            snapshot.ask if zone.original_direction == Direction.BUY else snapshot.bid
+        )
+
+    truth = activation_target_truth(
+        zone,
+        snapshot,
+        ownership_anchor,
+        activation_ts=ownership_ts,
+        reference_basis="OWNERSHIP_ANCHOR",
+    )
+    truth["owner"] = True
+
+    best = float(meta.get("best_price") or 0.0)
+    objectives: list[dict[str, Any]] = []
+    for item in list(truth["objectives"]):
+        current = dict(item)
+        idx = int(current.get("index") or 0)
+        price = float(current.get("price") or 0.0)
+
+        if current.get("state") == "OPEN":
+            hit_at = int(meta.get(f"target{idx}_hit_at") or 0) if idx <= 3 else 0
+            crossed_best = bool(
+                best > 0
+                and (
+                    (
+                        zone.original_direction == Direction.SELL
+                        and best <= price
+                    )
+                    or (
+                        zone.original_direction == Direction.BUY
+                        and best >= price
+                    )
+                )
+            )
+            crossed_live, live_ts, live_basis = (
+                _crossed_since(
+                    snapshot,
+                    zone.original_direction,
+                    price,
+                    ownership_ts,
+                )
+                if ownership_ts > 0
+                else (False, 0, "NO_ACTIVATION_TIMESTAMP")
+            )
+            if hit_at or crossed_best or crossed_live:
+                current["state"] = "COMPLETED"
+                current["crossed_at"] = int(hit_at or live_ts or 0)
+                current["crossed_basis"] = (
+                    "OWNER_TARGET_HIT"
+                    if hit_at
+                    else "OWNER_BEST_PRICE_CROSS"
+                    if crossed_best
+                    else live_basis
+                )
+                current["reason"] = current["crossed_basis"]
+
+        objectives.append(current)
 
     open_targets = [float(x["price"]) for x in objectives if x["state"] == "OPEN"]
     completed = [float(x["price"]) for x in objectives if x["state"] == "COMPLETED"]
@@ -202,43 +255,49 @@ def target_ladder_truth(
         if x["state"] == "BEHIND_ACTIVATION_PRICE"
     ]
 
-    history_safe = True if is_owner else bool(history_complete)
-    authority_safe = bool(open_targets) and history_safe
+    truth.update(
+        {
+            "objectives": objectives,
+            "open_targets": open_targets,
+            "completed_targets": completed,
+            "behind_activation_targets": behind,
+            "next_open_target": open_targets[0] if open_targets else 0.0,
+            "authority_safe": bool(open_targets),
+            "execution_evaluable": True,
+            "remap_required": not bool(open_targets),
+            "status": (
+                "ACTIVE_TARGETS_OPEN"
+                if open_targets
+                else "ACTIVE_TARGETS_COMPLETE_OR_EXHAUSTED"
+            ),
+            "history_reason": "TARGET_LIFECYCLE_STARTED_AT_OWNERSHIP",
+        }
+    )
+    return truth
 
-    if not history_safe:
-        status = "HISTORY_UNVERIFIED_BLOCK"
-    elif not open_targets:
-        status = "REMAP_REQUIRED"
-    else:
-        status = "OPEN_TARGETS_AVAILABLE"
 
-    return {
-        "contract": TARGET_REVALIDATION_CONTRACT,
-        "zone_id": zone.zone_id,
-        "direction": direction.value,
-        "owner": is_owner,
-        "publication_ts": int(publication_ts),
-        "ownership_acquired_at": int(ownership_ts),
-        "activation_reference": round(float(activation_reference), 5),
-        "activation_reference_basis": reference_basis,
-        "history_complete": bool(history_complete),
-        "history_start_ts": int(history_start_ts),
-        "history_reason": history_reason,
-        "objectives": objectives,
-        "open_targets": open_targets,
-        "completed_targets": completed,
-        "behind_activation_targets": behind,
-        "next_open_target": open_targets[0] if open_targets else 0.0,
-        "authority_safe": authority_safe,
-        "remap_required": not bool(open_targets),
-        "status": status,
-        "fail_closed": True,
-        "invalidation_logic_unchanged": True,
-    }
+def target_ladder_truth(
+    analysis: Analysis | None,
+    zone: Zone,
+    snapshot: MarketSnapshot,
+) -> dict[str, Any]:
+    """Return PLAN truth before activation and lifecycle truth after activation."""
+    if analysis is None:
+        return planned_target_truth(zone)
+
+    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    is_owner = bool(
+        meta.get("locked")
+        and str(meta.get("owner_zone_id") or "") == zone.zone_id
+        and str(meta.get("direction") or "") == zone.original_direction.value
+    )
+    if not is_owner:
+        return planned_target_truth(zone)
+    return owner_target_truth(analysis, zone, snapshot)
 
 
 def apply_target_revalidation(analysis: Analysis, snapshot: MarketSnapshot) -> None:
-    """Attach target truth to the analysis without changing zone/invalidation logic."""
+    """Attach target lifecycle truth without changing zone/invalidation logic."""
     per_zone: dict[str, Any] = {}
     for zone in analysis.zones:
         per_zone[zone.zone_id] = target_ladder_truth(analysis, zone, snapshot)
@@ -247,24 +306,17 @@ def apply_target_revalidation(analysis: Analysis, snapshot: MarketSnapshot) -> N
     policy["target_revalidation"] = {
         "contract": TARGET_REVALIDATION_CONTRACT,
         "per_zone": per_zone,
-        "new_execution_authority_requires_verified_open_target": True,
-        "consumed_target_never_reopens_after_retrace": True,
-        "no_open_target_requires_fresh_liquidity_remap": True,
+        "target_lifecycle_begins_at_execution_activation": True,
+        "pre_activation_crossings_consume_targets": False,
+        "new_execution_authority_checks_targets_at_handoff_anchor": True,
         "zone_validity_independent_of_target_status": True,
         "invalidation_logic_unchanged": True,
     }
     analysis.execution_policy = policy
 
     selected = per_zone.get(str(analysis.selected_zone_id or ""))
-    if selected:
-        if selected["status"] == "REMAP_REQUIRED":
-            analysis.trader_brief += (
-                " Target-ladder revalidation: all published objectives are consumed "
-                "or behind the activation reference; fresh liquidity remap is required "
-                "before new execution authority."
-            )
-        elif selected["status"] == "HISTORY_UNVERIFIED_BLOCK":
-            analysis.trader_brief += (
-                " Target-ladder revalidation: objective history is incomplete; new "
-                "execution authority is blocked until target truth can be verified."
-            )
+    if selected and selected.get("status") == "ACTIVE_TARGETS_COMPLETE_OR_EXHAUSTED":
+        analysis.trader_brief += (
+            " Target-ladder lifecycle: the active thesis has no remaining open "
+            "objective; no further same-thesis entry is allowed."
+        )
