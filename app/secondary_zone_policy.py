@@ -4,7 +4,7 @@ from .engine import atr
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
 from .risk_matrix import execution_grade_eligible, original_risk_pct, zone_risk_context
 
-SECONDARY_ZONE_CONTRACT = "ZONE_FORMATION_PROMPT_2026_09_14_V659_SECONDARY_RESERVE"
+SECONDARY_ZONE_CONTRACT = "MASTER_SNIPER_FOUR_ZONE_RESERVE_V6588"
 XAU_POINTS_PER_PIP = 10.0
 RESERVE_GRADES = {Grade.A_PLUS, Grade.A}
 
@@ -26,24 +26,16 @@ def _same_source(a: Zone, b: Zone) -> bool:
 
 
 def _clean_level_two(primary: Zone, reserve: Zone) -> bool:
-    """Level 2 must sit beyond the primary invalidation side and not overlap it."""
+    """L2 is a separate tactical reaction band beyond L1, never an overlap clone."""
     if reserve.original_direction != primary.original_direction:
         return False
     if _same_source(primary, reserve):
         return False
-    if reserve.grade not in RESERVE_GRADES:
+    if reserve.grade not in RESERVE_GRADES or not execution_grade_eligible(reserve):
         return False
-    if not execution_grade_eligible(reserve):
-        return False
-
     if primary.original_direction == Direction.SELL:
-        # If SELL L1 fails by accepted price above its envelope, L2 must be a
-        # distinct higher supply zone that has not already been crossed.
-        return float(reserve.zone_low) >= float(primary.zone_high)
-
-    # If BUY L1 fails by accepted price below its envelope, L2 must be a
-    # distinct lower demand zone that has not already been crossed.
-    return float(reserve.zone_high) <= float(primary.zone_low)
+        return float(reserve.zone_low) >= float(primary.zone_high) - 1e-9
+    return float(reserve.zone_high) <= float(primary.zone_low) + 1e-9
 
 
 def _note_value(zone: Zone, prefix: str) -> float:
@@ -100,17 +92,12 @@ def _reserve_payload(primary: Zone, reserve: Zone, snapshot: MarketSnapshot) -> 
         "must_remain_correct_side_of_price": True,
         "must_retain_structural_liquidity": True,
         "m1_handoff_disabled_while_primary_valid": True,
+        "geometry_authority": "MASTER_SNIPER_TACTICAL_REACTION_BAND",
     }
 
 
 def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
-    """Publish one non-executable reserve zone per side behind the primary.
-
-    PAPER/DEMO ONLY. This function does not add the reserve to analysis.zones,
-    does not change selected_zone_id, and does not grant M1 execution authority.
-    On a later fresh analysis, if the primary has been invalidated by M15 accepted
-    price and the reserve still qualifies, normal primary selection can promote it.
-    """
+    """Publish one distinct, non-executable tactical reserve per side (PAPER/DEMO)."""
     if analysis is None:
         return analysis
 
@@ -131,7 +118,6 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         primary = primary_by_side.get(direction)
         if primary is None:
             continue
-
         options = [z for z in accepted[direction] if _clean_level_two(primary, z)]
         if not options:
             continue
@@ -148,13 +134,14 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
     zone_map = dict(policy.get("public_zone_map") or {})
     zone_map["secondary_zone_contract"] = SECONDARY_ZONE_CONTRACT
     zone_map["secondary_zone_policy"] = {
-        "purpose": "BACKUP_LEVEL_AFTER_PRIMARY_INVALIDATION",
+        "purpose": "MASTER_SNIPER_LEVEL_2_AFTER_PRIMARY_INVALIDATION",
         "max_secondary_per_side": 1,
         "secondary_is_context_only": True,
         "secondary_has_no_execution_authority": True,
+        "secondary_uses_same_tactical_geometry_as_primary": True,
         "secondary_must_be_distinct_and_non_overlapping": True,
-        "sell_secondary_must_be_above_primary": True,
-        "buy_secondary_must_be_below_primary": True,
+        "sell_secondary_must_be_at_or_above_primary_distal_edge": True,
+        "buy_secondary_must_be_at_or_below_primary_distal_edge": True,
         "primary_m15_invalidation_required_before_promotion": True,
         "fresh_requalification_required_before_promotion": True,
         "m1_confirmation_still_required_after_promotion": True,
@@ -166,12 +153,11 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
 
     if brief_parts:
         analysis.trader_brief += (
-            " Secondary reserve map (context only): " + "; ".join(brief_parts)
-            + ". Level 2 has no M1 authority while Level 1 is valid. After M15 accepted invalidation of Level 1, a fresh analysis must requalify Level 2 before it can become primary."
+            " Secondary Master Sniper reserve map (context only): " + "; ".join(brief_parts)
+            + ". L2 uses the same tactical geometry as L1 and has no M1 authority while L1 remains valid. After M15 accepted invalidation of L1, fresh analysis must requalify L2 before promotion."
         )
     else:
         analysis.trader_brief += (
-            " Secondary reserve map: none currently qualifies. No backup level is forced; a reserve must be a separate execution-grade A+/A source beyond the primary invalidation side."
+            " Secondary Master Sniper reserve map: none currently qualifies. No L2 is forced; it must be a separate A+/A tactical source beyond L1."
         )
-
     return analysis
