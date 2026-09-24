@@ -93,12 +93,12 @@ def test_sell_zone_keeps_bsl_inside_professional_source_tf_envelope(monkeypatch)
 
     assert len(zones) == 1
     zone = zones[0]
-    # Professional H4 geometry may expand beyond the raw source candle so the
-    # structural BSL and the required 50-pip distal raid room both fit inside.
-    assert zone.zone_low == 95.0
-    assert zone.zone_high == 113.0
+    # MASTER SNIPER SOURCE-EXACT: preserve the actual H4 source envelope.
+    # Attached structural liquidity validates the source but must not manufacture
+    # a legacy fixed-width / ATR-expanded envelope around it.
+    assert zone.zone_low == candidate.zone_low
+    assert zone.zone_high == candidate.zone_high
     assert zone.zone_low <= 108.0 <= zone.zone_high
-    assert zone.zone_high - 108.0 >= 5.0
     assert "LIQUIDITY_IN_MARKED_ZONE" in zone.confluences
     assert "BSL_IN_MARKED_ZONE" in zone.confluences
     assert analysis.execution_policy["public_zone_map"]["map_count"] == 1
@@ -115,7 +115,7 @@ def test_sell_candidate_is_rejected_when_bsl_is_not_inside_zone(monkeypatch):
 
     assert zones == []
     diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
-    assert diag["rejection_code"] == "MISSING_BSL_IN_MARKED_ZONE"
+    assert diag["rejection_code"] == "NO_ATTACHED_STRUCTURAL_BSL"
 
 
 def test_distance_does_not_delete_a_valid_prompt_zone(monkeypatch):
@@ -312,14 +312,10 @@ def test_countertrend_second_qualified_mitigation_is_a_not_forced_bplus(monkeypa
 
 def test_sell_mitigation_requires_below_core_below_complete_cycle():
     bars = [
-        # Arm from the correct SELL approach side.
         policy.Bar(ts=200, open=97.5, high=97.9, low=97.0, close=97.5),
-        # Touch the core from below but remain inside the envelope.
         policy.Bar(ts=300, open=99.0, high=100.5, low=98.8, close=100.2),
         policy.Bar(ts=400, open=100.2, high=100.9, low=99.7, close=100.4),
-        # Only this closed return below the envelope completes mitigation #1.
         policy.Bar(ts=500, open=99.0, high=99.2, low=97.0, close=97.5),
-        # A second correct approach/reaction cycle.
         policy.Bar(ts=600, open=98.0, high=100.4, low=97.7, close=100.1),
         policy.Bar(ts=700, open=99.0, high=99.1, low=97.1, close=97.4),
     ]
