@@ -127,6 +127,7 @@ def audit_directional_mitigations(
             "history_required_from_ts": int(source_ts),
             "history_gap_reason": "" if history_complete else "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
             "events": [],
+            "raw_contacts": [],
             "invalidated_at": 0,
             "invalidation_reason": "",
             "expected_approach_side": expected_side,
@@ -141,6 +142,7 @@ def audit_directional_mitigations(
     raw_core_contacts = 0
     raw_core_engaged = False
     events: list[dict] = []
+    raw_contacts: list[dict] = []
     invalidated_at = 0
     invalidation_reason = ""
 
@@ -200,12 +202,31 @@ def audit_directional_mitigations(
             break
 
         hit_core = float(bar.high) >= float(core_low) and float(bar.low) <= float(core_high)
+        close_side = _close_side(bar, zone_low, zone_high)
         if hit_core and not raw_core_engaged:
             raw_core_contacts += 1
             raw_core_engaged = True
+            raw_contacts.append(
+                {
+                    "raw_contact_index": raw_core_contacts,
+                    "armed_at": int(last_outside_ts or 0),
+                    "approach_side": last_outside_side or "UNARMED",
+                    "core_touched_at": ts,
+                    "touch_bar_open": float(bar.open),
+                    "touch_bar_high": float(bar.high),
+                    "touch_bar_low": float(bar.low),
+                    "touch_bar_close": float(bar.close),
+                    "close_side": close_side,
+                    "contact_role": (
+                        "RECONTACT_WITHIN_OPEN_CAMPAIGN"
+                        if campaign is not None or interaction_open
+                        else "NEW_CORE_CONTACT_EPISODE"
+                    ),
+                    "counts_freshness_by_itself": False,
+                }
+            )
         elif not hit_core:
             raw_core_engaged = False
-        close_side = _close_side(bar, zone_low, zone_high)
 
         # A previously valid approach has already touched the core. The cycle is
         # only completed by a closed return to the expected reaction side.
@@ -327,6 +348,7 @@ def audit_directional_mitigations(
         "history_required_from_ts": int(source_ts),
         "history_gap_reason": "" if history_complete else "M15_HISTORY_STARTS_AFTER_SOURCE_READY",
         "events": events,
+        "raw_contacts": raw_contacts,
         "invalidated_at": invalidated_at,
         "invalidation_reason": invalidation_reason,
         "expected_approach_side": expected_side,
