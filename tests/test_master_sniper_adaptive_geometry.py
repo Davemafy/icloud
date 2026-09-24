@@ -1,7 +1,7 @@
 import pytest
 from types import SimpleNamespace
 
-from app.master_sniper_adaptive_geometry import _install_engine_geometry
+from app.master_sniper_adaptive_geometry import _install_engine_geometry, _sweep_buffer
 from app.models import Direction, LiquidityLevel
 from app import institutional_two_zone as engine
 
@@ -28,7 +28,7 @@ def _candidate(direction):
     )
 
 
-def test_sell_attached_bsl_defines_native_distal_envelope_without_synthetic_padding():
+def test_sell_attached_bsl_defines_tactical_envelope_without_fixed_width_padding():
     _install_engine_geometry()
     s = _snapshot()
     c = _candidate(Direction.SELL)
@@ -38,9 +38,10 @@ def test_sell_attached_bsl_defines_native_distal_envelope_without_synthetic_padd
     assert level is not None
     low, high, room = engine._build_geometry(c, *core, level, s)
     assert low == core[0] == 100.0
-    assert high == pytest.approx(level.price, abs=2e-9)
-    assert room == pytest.approx(0.0, abs=2e-9)
+    assert high == pytest.approx(level.price + _sweep_buffer(s), abs=2e-9)
+    assert room == pytest.approx(_sweep_buffer(s), abs=2e-9)
     assert c.zone_low < low
+    assert high < c.zone_high + 20.0
 
 
 def test_remote_bsl_is_not_pulled_into_zone():
