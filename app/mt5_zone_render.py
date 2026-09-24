@@ -109,6 +109,28 @@ def _secondary_records(policy: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _wrong_side_for_live_price(rec: dict[str, Any], current_mid: float | None) -> bool:
+    """Visual truth only: do not paint an alert zone on the wrong side of live price.
+
+    BUY demand belongs below/at current price; SELL supply belongs above/at current
+    price. Active thesis ownership is lifecycle truth and is never hidden here.
+    """
+    if current_mid is None or bool(rec.get("active_thesis")):
+        return False
+    try:
+        mid = float(current_mid)
+        low = min(float(rec.get("zone_low") or 0.0), float(rec.get("zone_high") or 0.0))
+        high = max(float(rec.get("zone_low") or 0.0), float(rec.get("zone_high") or 0.0))
+    except (TypeError, ValueError):
+        return False
+    direction = _value(rec.get("direction")).upper()
+    if direction == "BUY":
+        return low > mid
+    if direction == "SELL":
+        return high < mid
+    return False
+
+
 def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     selected_zone_id = _value(getattr(a, "selected_zone_id", ""))
@@ -142,7 +164,7 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
     return out
 
 
-def mt5_zone_render_text(a: Any) -> str:
+def mt5_zone_render_text(a: Any, current_mid: float | None = None) -> str:
     """Flat render contract for MT5 chart shading and execution-ownership labels.
 
     Visual-only feed: it exposes the already-qualified primary/reserve geometry
@@ -188,6 +210,14 @@ def mt5_zone_render_text(a: Any) -> str:
         if reserve["id"] not in primary_ids:
             records.append(reserve)
 
+    # The cloud analysis is a snapshot, but chart rendering is live. A stale
+    # context BUY must not remain painted above current price, and a stale context
+    # SELL must not remain painted below it. This is presentation-only; the
+    # execution plan keeps failed geometry long enough for accepted-invalidation
+    # / flip monitoring.
+    hidden_wrong_side = [r["id"] for r in records if _wrong_side_for_live_price(r, current_mid)]
+    records = [r for r in records if not _wrong_side_for_live_price(r, current_mid)]
+
     # Maximum intended public map is 2 primaries + 2 reserves.
     records = records[:4]
 
@@ -196,6 +226,9 @@ def mt5_zone_render_text(a: Any) -> str:
         f"analysis_id={_value(getattr(a, 'analysis_id', ''))}",
         f"generated_at={_int(getattr(a, 'generated_at', 0))}",
         f"selected_zone_id={selected_zone_id}",
+        f"live_mid={_num(current_mid) if current_mid is not None else '0.00000'}",
+        f"wrong_side_hidden_count={len(hidden_wrong_side)}",
+        f"wrong_side_hidden_ids={','.join(hidden_wrong_side)}",
         f"zone_count={len(records)}",
         f"active_thesis_locked={_bool01(thesis_locked)}",
         f"active_thesis_direction={owner_direction}",
