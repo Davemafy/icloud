@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "mt5" / "stable" / "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5"
+SOURCE = ROOT / "mt5" / "stable" / "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5"
 
 
 def _text() -> str:
@@ -10,8 +10,8 @@ def _text() -> str:
 
 def test_v340_adds_failed_zone_breaker_flip_without_instant_reverse():
     text = _text()
-    assert '#property version   "3.40"' in text
-    assert '#define TZ_SEQUENCE_VERSION "3.40"' in text
+    assert '#property version   "3.41"' in text
+    assert '#define TZ_SEQUENCE_VERSION "3.41"' in text
     assert "#define BuildFlip TZ21_BaseBuildFlip" in text
     assert "#undef BuildFlip" in text
     assert "TZ40_FailedZoneBreakerPD" in text

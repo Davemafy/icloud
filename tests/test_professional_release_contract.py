@@ -11,13 +11,13 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.75"
+    assert SETTINGS.app_version == "6.5.81"
     assert manifest["release"] == "6.3.30"
-    assert manifest["data_bridge_version"] == "1.49"
-    assert manifest["sequence_ea_version"] == "3.40"
+    assert manifest["data_bridge_version"] == "1.50"
+    assert manifest["sequence_ea_version"] == "3.41"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -30,7 +30,7 @@ def test_professional_release_contract_is_self_consistent():
     assert bridge_core_digest == bridge_core["sha256"] == "990cc537380baa9df89551a882a31a124a3177693d694be367ff521526a8d8e9"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()

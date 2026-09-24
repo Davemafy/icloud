@@ -79,7 +79,7 @@ def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
 
 
 def _execution_touch_limit(zone: Zone) -> int:
-    """Context-grade matrix: A+ <=1 touch, A <=2 touches, B+ no new authority."""
+    """Context-grade matrix: A+ <=1 touch, A <=2 touches, B+ <=1 touch at reduced-risk authority."""
     return execution_touch_limit(zone)
 
 

@@ -151,7 +151,7 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    M15 exit closes. Continuous chop inside one envelope remains one campaign. The mitigation clock starts only
    after the H1/H4 source candle (and any H1 refinement) has CLOSED and the exact source is causally knowable.
    If the supplied M15 history does not reach back to that source-ready timestamp, freshness is UNVERIFIED and
-   the zone must be WATCH/B+ for new execution rather than assumed fresh. Accepted distal M15 invalidation
+   the zone must not be promoted to A/A+; B+ may retain only its reduced 0.25% execution authority if every normal gate passes. Accepted distal M15 invalidation
    terminates the original zone's mitigation history permanently; later crossings belong to flip/reclaim logic.
 9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
    strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/

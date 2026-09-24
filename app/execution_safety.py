@@ -156,7 +156,7 @@ def _serialize_plan(order: list[str], kv: dict[str, str]) -> str:
 
 
 def _confirmed_thesis_bplus_override(analysis: Analysis, zone: Zone, plan_state: str) -> bool:
-    """Legacy compatibility seam. B+ is context-only in the V2 risk matrix."""
+    """Legacy compatibility seam retained; B+ authority is handled by the shared execution-grade contract."""
     return False
 
 
