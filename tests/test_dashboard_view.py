@@ -289,3 +289,50 @@ def test_recovery_zone_table_matches_current_twelve_column_contract():
     assert "colspan=\"12\"" in cleaned
     assert "publication_execution_status" in cleaned
     assert "raw_core_contact_episodes_before_invalidation" in cleaned
+
+
+def test_public_zone_map_preserves_noncanonical_audit_identity():
+    from app import zone_runtime_policy
+    from app.models import Analysis, Direction, Grade, Zone, ZoneState
+
+    z = Zone(
+        zone_id="PZ_H1_BUY_9",
+        original_direction=Direction.BUY,
+        flip_direction=Direction.SELL,
+        setup_type="REVERSAL",
+        source_tf="H1",
+        grade=Grade.B_PLUS,
+        state=ZoneState.ACTIVE,
+        core_low=100.0,
+        core_high=101.0,
+        core_method="WATCH",
+        location_score=5.0,
+        zone_low=99.0,
+        zone_high=102.0,
+        mitigation_audit={"qualified_mitigations": 1, "events": []},
+        invalidation_level=99.0,
+        invalidation_rule="x",
+    )
+    a = Analysis(
+        analysis_id="A1",
+        generated_at=1,
+        snapshot_at=1,
+        zones=[z],
+        selected_zone_id="",
+        execution_policy={"public_zone_map":{"buy":{"zone_id":"PZ_H1_BUY_9","mitigation_audit":z.mitigation_audit}}},
+    )
+
+    class S:
+        point = 0.01
+
+    zone_runtime_policy.apply_pip_display_contract(a, S())
+    entry = a.execution_policy["public_zone_map"]["buy"]
+    assert "zone_id" not in entry
+    assert entry["audit_zone_id"] == "PZ_H1_BUY_9"
+    assert entry["mitigation_audit"]["qualified_mitigations"] == 1
+
+
+def test_mitigation_dashboard_accepts_audit_zone_id():
+    cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
+    assert "mapped.audit_zone_id||mapped.zone_id" in cleaned
+    assert "const zoneId=mappedId||rawId" in cleaned
