@@ -11,17 +11,17 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert SETTINGS.app_version == "6.5.72"
-    assert manifest["release"] == "6.3.29"
-    assert manifest["data_bridge_version"] == "1.48"
-    assert manifest["sequence_ea_version"] == "3.39"
+    assert SETTINGS.app_version == "6.5.73"
+    assert manifest["release"] == "6.3.30"
+    assert manifest["data_bridge_version"] == "1.49"
+    assert manifest["sequence_ea_version"] == "3.40"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_48_ProfessionalConfirmationTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
-    assert bridge_digest == bridge["sha256"] == "6ff46496b324a95c8ef7ceb40c3a703c3e588c5e14fa0cd0fbd551c7b75b8aac"
+    assert bridge_digest == bridge["sha256"] == "901f94bf0ae25413afe5e32e14eef573e7e5512438621eec2686be90b7008d60"
 
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
@@ -30,11 +30,11 @@ def test_professional_release_contract_is_self_consistent():
     assert bridge_core_digest == bridge_core["sha256"] == "990cc537380baa9df89551a882a31a124a3177693d694be367ff521526a8d8e9"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_39_ProfessionalConfirmation_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    assert digest == seq["sha256"] == "7be166d30d0dc292e1e92409f216661a0660c85d6e03207bcbefefbecf7e7a40"
+    assert digest == seq["sha256"] == "bb3ee50731966f32a4f471edf61aa036aa97d16c03f60b6f250d2b439fbbcfbb"
 
     required = {
         "outer_zone_liquidity_sweep_execution_authority",
@@ -109,5 +109,10 @@ def test_professional_release_contract_is_self_consistent():
         "professional_confirmation_floor",
         "sequence_339_truth_overlay",
         "databridge_148_sequence_339_truth",
+        "publication_time_zone_rendering",
+        "no_retrospective_prepublication_zone_shading",
+        "accepted_zone_breaker_pd_array",
+        "accepted_zone_breaker_retest_mss_displacement_entry",
+        "accepted_zone_breaker_no_chase",
     }
     assert required.issubset(set(manifest["channel_features"]))
