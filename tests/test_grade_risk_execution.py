@@ -77,7 +77,12 @@ def test_second_touch_a_remains_eligible_but_a_plus_and_bplus_do_not():
 
 def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
     zone = _zone(Grade.B_PLUS, touches=1)
-    plan = _kv(active_plan_text(_analysis(zone)))
+    analysis = _analysis(zone)
+    plan = _kv(active_plan_text(analysis))
+    # Grade eligibility is independent of the optional AI gate; this fixture is
+    # explicitly AI-approved so the exported execution mode must remain live.
+    assert analysis.ai_approved is True
+    assert execution_grade_eligible(zone)
     assert plan["ea_mode"] == "DUAL_BRANCH"
     assert plan["grade"] == "B+"
     assert plan["risk_model"] == RISK_MODEL
