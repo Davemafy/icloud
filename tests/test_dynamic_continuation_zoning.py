@@ -173,3 +173,40 @@ def test_fvg_cannot_create_dynamic_zone_without_structural_liquidity(monkeypatch
     zone = policy._build_dynamic_zone(_event(), analysis, _snapshot())
 
     assert zone is None
+
+
+def test_sync_public_map_preserves_structural_aplus_gap_for_surviving_zone():
+    sell = _zone("PZ_H1_SELL_16", Direction.SELL, Grade.A, 0, 4303.77, 4309.77, 4302.19, 4324.19)
+    sell.notes.extend(
+        [
+            "structural_grade:A",
+            "current_execution_grade:A",
+            "grade_degrade_reason:NONE",
+            "structural_aplus_missing:score_ge_8",
+            "structural_a_missing:NONE",
+            "grade_location_score:4.2200",
+            "grade_source_strength:2.2600",
+        ]
+    )
+    analysis = _analysis([sell])
+    analysis.execution_policy["public_zone_map"] = {
+        "sell": {
+            "zone_id": "PZ_H1_SELL_16",
+            "structural_grade": "A",
+            "grade": "A",
+            "structural_aplus_missing": "score_ge_8",
+            "structural_a_missing": "NONE",
+            "grade_degrade_reason": "NONE",
+        }
+    }
+
+    policy._sync_public_map(analysis)
+
+    row = analysis.execution_policy["public_zone_map"]["sell"]
+    assert row["structural_grade"] == "A"
+    assert row["grade"] == "A"
+    assert row["current_execution_grade"] == "A"
+    assert row["structural_aplus_missing"] == "score_ge_8"
+    assert row["structural_a_missing"] == "NONE"
+    assert row["grade_location_score"] == 4.22
+    assert row["grade_source_strength"] == 2.26
