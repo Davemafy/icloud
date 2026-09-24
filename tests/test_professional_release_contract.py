@@ -11,9 +11,12 @@ MANIFEST = ROOT / "mt5" / "stable" / "manifest.json"
 
 def test_professional_release_contract_is_self_consistent():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    # Cloud version advances independently from the MT5 stable package. Do not
-    # pin this integration test to an obsolete cloud build number.
-    assert SETTINGS.app_version == "6.5.85"
+    # Cloud version advances independently from the MT5 stable package. Validate
+    # that code exposes a semantic cloud release, but do not pin it to an obsolete
+    # cloud build number when the MT5 package itself has not changed.
+    cloud_parts = SETTINGS.app_version.split(".")
+    assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
+    assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
     assert manifest["release"] == "6.3.31"
     assert manifest["data_bridge_version"] == "1.50"
     assert manifest["sequence_ea_version"] == "3.41"
