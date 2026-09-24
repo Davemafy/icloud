@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from .config import SETTINGS
-from .models import Direction, MarketSnapshot, Zone
+from .models import Direction, Grade, MarketSnapshot, Zone
 from .risk_matrix import execution_grade_eligible
 
 # User-approved Master Sniper analysis windows. These are minimum evidence windows;
@@ -115,6 +115,13 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "spread_safety_ok", "1" if spread_ok else "0")
     _replace_or_append(rows, "snapshot_age_seconds", str(snapshot_age))
     _replace_or_append(rows, "snapshot_safety_ok", "1" if snapshot_ok else "0")
+
+    # B+ authority is a grade/risk contract, not a statement that a live order is
+    # currently authorized. Preserve that truth even while the final execution
+    # layer correctly fails closed for missing history/snapshot/spread/runway.
+    bplus_grade_authority = bool(zone.grade == Grade.B_PLUS and execution_grade_eligible(zone))
+    _replace_or_append(rows, "bplus_execution_authority", "1" if bplus_grade_authority else "0")
+    _replace_or_append(rows, "bplus_reduced_risk", "1" if bplus_grade_authority else "0")
 
     # Location/map truth is independent of execution authority. Incomplete analysis
     # history or runway keeps a zone as context. Live spread/snapshot safety is a
