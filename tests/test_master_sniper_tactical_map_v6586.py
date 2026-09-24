@@ -75,7 +75,7 @@ def test_sep24_2026_manual_master_sniper_four_zone_regression():
         # label, direction, source, native core, attached liquidity, expected band
         ("SELL1", Direction.SELL, (4276.0, 4290.0), (4282.0, 4288.0), 4287.445, (4280.0, 4290.0)),
         ("SELL2", Direction.SELL, (4291.0, 4305.0), (4297.0, 4303.0), 4302.445, (4295.0, 4305.0)),
-        ("BUY1", Direction.BUY, (4250.0, 4264.0), (4252.0, 4258.0), 4257.445, (4250.0, 4264.0)),
+        ("BUY1", Direction.BUY, (4250.0, 4260.0), (4252.0, 4258.0), 4257.445, (4250.0, 4260.0)),
         ("BUY2", Direction.BUY, (4235.0, 4250.0), (4237.0, 4243.0), 4242.445, (4235.0, 4250.0)),
     ]
 
@@ -87,11 +87,8 @@ def test_sep24_2026_manual_master_sniper_four_zone_regression():
         bands[label] = band
         assert band == expected, label
 
-    # Four-zone map ordering and side authority are part of the contract.
     assert bands["BUY2"][1] <= bands["BUY1"][0]
     assert bands["BUY1"][1] < snap.mid
     assert snap.mid < bands["SELL1"][0]
     assert bands["SELL1"][1] <= bands["SELL2"][0]
-
-    # Regression guard: never publish the old giant structural envelope as SELL1.
     assert bands["SELL1"] != (4252.0, 4290.0)
