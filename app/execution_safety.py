@@ -12,7 +12,7 @@ from .risk_matrix import (
     original_risk_pct,
     zone_risk_context,
 )
-from .target_revalidation import TARGET_REVALIDATION_CONTRACT, target_ladder_truth
+from .target_revalidation import TARGET_REVALIDATION_CONTRACT, activation_target_truth, target_ladder_truth
 
 # DEMO/PAPER execution safety contract. Primary M1 SEARCH authority may begin at
 # the tactical core OR after a qualified outer-envelope interaction proves the
@@ -413,17 +413,25 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     )
 
     target_truth = target_ladder_truth(analysis, zone, snapshot)
-    target_truth_enforced = bool(
-        int(target_truth.get("publication_ts") or 0) > 0
-        or bool(target_truth.get("owner"))
-    )
+    if handoff_ready and not bool(target_truth.get("owner")):
+        target_truth = activation_target_truth(
+            zone,
+            snapshot,
+            live_reference,
+            activation_ts=int(snapshot.sent_at),
+            reference_basis="LIVE_EXECUTION_HANDOFF_REFERENCE",
+        )
+    target_truth_enforced = bool(target_truth.get("execution_evaluable"))
     truth_open = [float(x) for x in list(target_truth.get("open_targets") or [])]
     if target_truth_enforced:
         exported_original = truth_open
         live_valid = truth_open
         original_valid = truth_open
     else:
-        exported_original = live_valid if handoff_ready else original_valid
+        # Pre-activation plan: preserve the future liquidity ladder. Price may
+        # trade through those levels before the zone is ever reached; that does
+        # not consume them because the thesis has not activated.
+        exported_original = original_valid
 
     _pack_targets(kv, "original", exported_original)
     kv["original_targets_removed_wrong_side"] = str(original_removed)
@@ -474,11 +482,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     if handoff_ready and not live_valid:
         guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
     if handoff_ready and target_truth_enforced and not target_authority_safe:
-        target_reason = (
-            "TARGET_HISTORY_UNVERIFIED"
-            if str(target_truth.get("status") or "") == "HISTORY_UNVERIFIED_BLOCK"
-            else "TARGET_REMAP_REQUIRED"
-        )
+        target_reason = "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
         guard_reasons.append(target_reason)
         handoff_ready = False
         authority = "NONE"
@@ -517,11 +521,7 @@ def live_target_guard_reasons(text: str, snapshot: MarketSnapshot | None) -> lis
     if str(kv.get("live_target_direction_valid", "1")) != "1":
         reasons.append("LIVE_TARGET_DIRECTION_INVALID")
     if str(kv.get("target_revalidation_enforced", "0")) == "1" and str(kv.get("target_authority_safe", "1")) != "1":
-        reasons.append(
-            "TARGET_HISTORY_UNVERIFIED"
-            if str(kv.get("target_revalidation_status", "")) == "HISTORY_UNVERIFIED_BLOCK"
-            else "TARGET_REMAP_REQUIRED"
-        )
+        reasons.append("TARGET_REMAP_REQUIRED_AT_ACTIVATION")
     return reasons
 
 
