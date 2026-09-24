@@ -48,3 +48,36 @@ def test_startup_bootstrap_requires_fresh_complete_snapshot(monkeypatch):
     assert scheduler._fresh_complete_snapshot(fresh,1100) is True
     assert scheduler._fresh_complete_snapshot(stale,1100) is False
     assert scheduler._fresh_complete_snapshot(incomplete,1100) is False
+
+
+def test_wrong_side_context_triggers_requalification_but_selected_zone_is_preserved(monkeypatch):
+    settings = SimpleNamespace(paper_only=True)
+    monkeypatch.setattr(scheduler, "SETTINGS", settings)
+
+    sell = SimpleNamespace(
+        zone_id="PZ_H1_SELL_16",
+        original_direction=SimpleNamespace(value="SELL"),
+        zone_low=4302.19,
+        zone_high=4324.19,
+    )
+    buy = SimpleNamespace(
+        zone_id="PZ_H1_BUY_7",
+        original_direction=SimpleNamespace(value="BUY"),
+        zone_low=4256.34,
+        zone_high=4272.20,
+    )
+    analysis = SimpleNamespace(
+        selected_zone_id="PZ_H1_SELL_16",
+        zones=[sell, buy],
+    )
+    snap = SimpleNamespace(sent_at=1_000, mid=4255.33)
+
+    monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: analysis)
+    monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
+
+    assert scheduler._wrong_side_context_ids(snap) == {"PZ_H1_BUY_7"}
+
+    # A selected plan is deliberately not discarded by this scheduler helper;
+    # selected/owned geometry may still be needed for accepted-invalidation/flip monitoring.
+    analysis.selected_zone_id = "PZ_H1_BUY_7"
+    assert scheduler._wrong_side_context_ids(snap) == set()
