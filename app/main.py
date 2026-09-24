@@ -756,6 +756,11 @@ def _journal_snapshot():
     }
     score = sum(1 for v in checks.values() if v)
     target_progress = _journal_target_progress(a, z)
+    if target_progress.get("scope") == "PLAN":
+        # In plan mode, show only objectives that remain verified OPEN. The raw
+        # original ladder is still visible in the zone fields and target-truth
+        # panel, but consumed/behind levels must not look executable.
+        target_progress["remaining"] = list(target_truth.get("open_targets") or [])
     sequence_debug = _sequence_debug_snapshot()
     cloud_authority = str(
         dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE"
