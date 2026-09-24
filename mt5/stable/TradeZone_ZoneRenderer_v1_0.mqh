@@ -24,6 +24,7 @@ struct TZR_Zone
    string grade;
    string source_tf;
    datetime source_ts;
+   datetime published_at;
    int touches;
    double zone_low;
    double zone_high;
@@ -72,6 +73,7 @@ void TZR_ResetOne(int idx)
    g_tzrZones[idx].grade="";
    g_tzrZones[idx].source_tf="";
    g_tzrZones[idx].source_ts=0;
+   g_tzrZones[idx].published_at=0;
    g_tzrZones[idx].touches=0;
    g_tzrZones[idx].zone_low=0;
    g_tzrZones[idx].zone_high=0;
@@ -131,6 +133,7 @@ bool TZR_ReadFeed()
       z.grade=TZR_KV(text,p+"grade");
       z.source_tf=TZR_KV(text,p+"source_tf");
       z.source_ts=(datetime)StringToInteger(TZR_KV(text,p+"source_ts"));
+      z.published_at=(datetime)StringToInteger(TZR_KV(text,p+"published_at"));
       z.touches=(int)StringToInteger(TZR_KV(text,p+"touches"));
       z.zone_low=StringToDouble(TZR_KV(text,p+"zone_low"));
       z.zone_high=StringToDouble(TZR_KV(text,p+"zone_high"));
@@ -222,9 +225,15 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
    if(now<=0)now=TimeCurrent();
    int hist=MathMax(1,RenderZoneHistoryHours);
    int future=MathMax(1,RenderZoneFutureHours);
-   datetime left=z.source_ts;
+   // Never paint a current cloud zone backwards into price action that
+   // occurred before the exact geometry was actually published. Source time is
+   // provenance; publication time is when the trader/system could first know
+   // and act on this geometry.
+   datetime left=z.published_at;
    datetime floor_time=now-hist*3600;
-   if(left<=0 || left>now || left<floor_time)left=floor_time;
+   if(left<=0)left=now;
+   if(left>now)left=now;
+   if(left<floor_time)left=floor_time;
    datetime right=now+future*3600;
 
    string base=TZR_PREFIX+IntegerToString(idx+1)+"_"+TZR_SafeName(z.id)+"_";
