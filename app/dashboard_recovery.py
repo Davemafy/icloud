@@ -65,6 +65,7 @@ _RECOVERY_SCRIPT = r'''
   function renderAnalysisRecovery(a){
     if(!a || typeof a!=='object')return;
     window.tradeZoneExecutionPolicy=a.execution_policy||{};
+    window.tradeZoneAnalysisZones=Array.isArray(a.zones)?a.zones:[];
 
     const brief=document.getElementById('brief');
     if(brief)brief.textContent=a.trader_brief||'—';
@@ -72,9 +73,22 @@ _RECOVERY_SCRIPT = r'''
     const zones=document.getElementById('zones');
     if(zones){
       const rows=Array.isArray(a.zones)?a.zones:[];
-      zones.innerHTML=rows.length?rows.map(z=>
-        `<tr><td>${safeEsc(z.zone_id)}</td><td>${safeEsc(z.original_direction)}</td><td>${safeEsc(z.flip_direction)}</td><td>${safeEsc(z.state)}</td><td>${safeNum(z.core_low)}–${safeNum(z.core_high)}<br><span class="muted">${safeEsc(z.core_method||'')}</span></td><td>${safeNum(z.zone_low)}–${safeNum(z.zone_high)}</td><td>${safeEsc(z.grade)}</td><td>${safeEsc(z.setup_type)}</td><td>${safeEsc(z.touch_count)}</td></tr>`
-      ).join(''):'<tr><td colspan="9" class="muted">No prompt-qualified primary zones.</td></tr>';
+      zones.innerHTML=rows.length?rows.map(z=>{
+        const pm=a?.execution_policy?.public_zone_map?.[String(z.original_direction||'').toLowerCase()]||{};
+        const audit=z.mitigation_audit||{};
+        const sg=pm.structural_grade||z.grade||'—';
+        const cg=pm.grade||z.grade||'—';
+        const reason=pm.grade_degrade_reason&&pm.grade_degrade_reason!=='NONE'?String(pm.grade_degrade_reason).replaceAll('_',' '):'NONE';
+        const gap=pm.structural_aplus_missing&&pm.structural_aplus_missing!=='NONE'?String(pm.structural_aplus_missing).replaceAll('_',' '):'NONE';
+        const qm=pm.qualified_mitigations??audit.qualified_mitigations??z.touch_count??'—';
+        const raw=pm.raw_core_touch_episodes??audit.raw_core_contact_episodes_before_invalidation;
+        const pub=pm.publication_execution_status||'UNKNOWN';
+        const pubAt=pm.geometry_published_at?new Date(Number(pm.geometry_published_at)*1000).toLocaleString():'—';
+        const liveAt=pm.live_core_touched_at?new Date(Number(pm.live_core_touched_at)*1000).toLocaleString():'—';
+        const baseQ=pm.publication_qualified_mitigations??'—';
+        const baseR=pm.publication_raw_core_contacts??'—';
+        return `<tr><td>${safeEsc(z.zone_id)}</td><td>${safeEsc(z.original_direction)}</td><td>${safeEsc(z.flip_direction)}</td><td>${safeEsc(z.state)}</td><td>${safeNum(z.core_low)}–${safeNum(z.core_high)}<br><span class="muted">${safeEsc(z.core_method||'')}</span></td><td>${safeNum(z.zone_low)}–${safeNum(z.zone_high)}</td><td><b>${safeEsc(sg)}</b></td><td><b>${safeEsc(cg)}</b></td><td>${safeEsc(reason)}<br><span class="muted">A+ gap: ${safeEsc(gap)}</span></td><td><b>${safeEsc(String(pub).replaceAll('_',' '))}</b><br><span class="muted">published ${safeEsc(pubAt)} • baseline ${safeEsc(baseQ)} qualified / ${safeEsc(baseR)} raw • live touch ${safeEsc(liveAt)}</span></td><td>${safeEsc(z.setup_type)}</td><td>${safeEsc(qm)} qualified${raw===undefined?'':(' / '+safeEsc(raw)+' raw')}</td></tr>`;
+      }).join(''):'<tr><td colspan="12" class="muted">No prompt-qualified primary zones.</td></tr>';
     }
 
     try{
