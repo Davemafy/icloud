@@ -280,7 +280,7 @@ def test_mitigation_audit_falls_back_to_raw_zone_ledger():
 
     assert "window.tradeZoneAnalysisZones" in cleaned
     assert "const raw=analysisZones.find" in cleaned
-    assert "const z=mapped.zone_id?mapped:raw" in cleaned
+    assert "const z=(mappedId||Object.keys(mapped).length)?mapped:raw" in cleaned
     assert "audit.qualified_mitigations??z.qualified_mitigations??z.touch_count??0" in cleaned
 
 
