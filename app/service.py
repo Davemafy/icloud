@@ -196,7 +196,11 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
     target_policy["per_zone"] = per_zone
     policy["target_revalidation"] = target_policy
 
-    if not bool(target_truth.get("authority_safe")):
+    target_truth_enforced = bool(
+        int(target_truth.get("publication_ts") or 0) > 0
+        or bool(target_truth.get("owner"))
+    )
+    if target_truth_enforced and not bool(target_truth.get("authority_safe")):
         attempted = authority
         block_reason = (
             "TARGET_HISTORY_UNVERIFIED"
