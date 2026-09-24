@@ -746,7 +746,10 @@ def _journal_snapshot():
         "clear_run": bool(z and z.clear_run > 0),
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
         "grade_executable": bool(z and execution_grade_eligible(z)),
-        "target_ladder_open": bool(target_truth.get("authority_safe")),
+        "target_ladder_phase_valid": bool(
+            str(target_truth.get("status") or "") == "PLANNED_NOT_ACTIVATED"
+            or bool(target_truth.get("authority_safe"))
+        ),
         "m1_handoff_ready": bool(z and readiness == "M1_READY"),
         "live_data_safe": bool(
             s
@@ -756,11 +759,8 @@ def _journal_snapshot():
     }
     score = sum(1 for v in checks.values() if v)
     target_progress = _journal_target_progress(a, z)
-    if target_progress.get("scope") == "PLAN":
-        # In plan mode, show only objectives that remain verified OPEN. The raw
-        # original ladder is still visible in the zone fields and target-truth
-        # panel, but consumed/behind levels must not look executable.
-        target_progress["remaining"] = list(target_truth.get("open_targets") or [])
+    # Before a zone activates, its TP ladder remains a forward PLAN. Historical
+    # price travel through those future TP prices does not consume the ladder.
     sequence_debug = _sequence_debug_snapshot()
     cloud_authority = str(
         dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE"
