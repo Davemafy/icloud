@@ -5,7 +5,7 @@ SOURCE = ROOT / "mt5" / "stable" / "InstitutionalSMC_DataBridge_v1_50_BPlusAutho
 RENDERER = ROOT / "mt5" / "stable" / "TradeZone_ZoneRenderer_v1_0.mqh"
 
 
-def test_v149_tracks_sequence_340_and_publication_render_contract():
+def test_v150_tracks_sequence_341_and_publication_render_contract():
     text = SOURCE.read_text(encoding="utf-8")
     renderer = RENDERER.read_text(encoding="utf-8")
 
@@ -13,7 +13,7 @@ def test_v149_tracks_sequence_340_and_publication_render_contract():
     assert '#define TZ_BRIDGE_VERSION "1.50"' in text
     assert '#define TZ_SEQUENCE_EXPECTED "3.41"' in text
     assert '#define TZ_ZONE_RENDER_CONTRACT "V660"' in text
-    assert "TZ_SendHeartbeatV149" in text
+    assert "TZ_SendHeartbeatV150" in text
 
     assert "datetime published_at;" in renderer
     assert 'p+"published_at"' in renderer
