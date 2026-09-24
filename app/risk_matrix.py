@@ -5,15 +5,17 @@ from typing import Any
 from .config import SETTINGS
 from .models import Direction, Grade, Zone
 
-RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V4"
+RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V5_BPLUS_EXEC"
 RISK_CONTEXT_TREND = "TREND"
 RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
 
 # Master Sniper permanent execution contract:
-# - A+ and A are the only grades allowed to acquire NEW execution authority.
-# - B+ remains visible research/WATCH context with zero new-entry risk.
+# - A+, A and B+ may acquire NEW execution authority after all normal gates pass.
+# - B+ is deliberately reduced-risk execution authority at 0.25%.
+# - B+ remains first-qualified-mitigation only so lower structural quality is not
+#   confused with A/A+ freshness.
 # - Freshness is measured by qualified directional mitigation cycles only.
-EXECUTION_GRADES = {Grade.A_PLUS, Grade.A}
+EXECUTION_GRADES = {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
 
 
 def zone_risk_context(zone: Zone) -> str:
@@ -38,7 +40,8 @@ def risk_pct_for_grade(grade: Grade, context: str) -> float:
             if context == RISK_CONTEXT_COUNTERTREND
             else SETTINGS.research_risk_pct_trend_a
         )
-    # B+ and REJECT have no new execution budget under Master Sniper.
+    if grade == Grade.B_PLUS:
+        return float(SETTINGS.research_risk_pct_b_plus)
     return 0.0
 
 
@@ -52,11 +55,14 @@ def flip_risk_pct(zone: Zone) -> float:
 
 def execution_touch_limit(zone: Zone) -> int:
     # A+ is executable through 0-1 qualified mitigations. A may remain executable
-    # through the second. Three-plus is B+/WATCH and B+ never gets new authority.
+    # through the second. B+ has reduced-risk authority only while still first-touch
+    # fresh; every contact must satisfy the directional qualified-mitigation audit.
     if zone.grade == Grade.A_PLUS:
         return 1
     if zone.grade == Grade.A:
         return 2
+    if zone.grade == Grade.B_PLUS:
+        return 1
     return -1
 
 
@@ -65,6 +71,7 @@ def execution_grade_eligible(zone: Zone) -> bool:
 
 
 def matrix_payload() -> dict[str, Any]:
+    bplus = float(SETTINGS.research_risk_pct_b_plus)
     return {
         "model": RISK_MODEL,
         "validation_initial_capital": float(SETTINGS.research_validation_initial_capital),
@@ -73,22 +80,22 @@ def matrix_payload() -> dict[str, Any]:
         "trend": {
             "A+": float(SETTINGS.research_risk_pct_trend_a_plus),
             "A": float(SETTINGS.research_risk_pct_trend_a),
-            "B+": 0.0,
+            "B+": bplus,
         },
         "countertrend": {
             "A+": float(SETTINGS.research_risk_pct_countertrend_a_plus),
             "A": float(SETTINGS.research_risk_pct_countertrend_a),
-            "B+": 0.0,
+            "B+": bplus,
         },
-        "B+": 0.0,
-        "bplus_execution_authority": False,
-        "touch_limits": {"A+": 1, "A": 2, "B+": 0},
+        "B+": bplus,
+        "bplus_execution_authority": True,
+        "touch_limits": {"A+": 1, "A": 2, "B+": 1},
         "freshness_basis": "QUALIFIED_DIRECTIONAL_MITIGATION_CYCLES_ONLY",
         "grading_contract": {
             "TREND": "continuation-source strength + qualified-mitigation freshness",
             "COUNTERTREND": "HTF extremity + structural liquidity sweep/rejection + reversal-response quality + qualified-mitigation freshness",
         },
-        "note": "Master Sniper base thesis risk is context x grade before entry-share/model multipliers. B+ is WATCH/research only and has zero new execution authority.",
+        "note": "Master Sniper base thesis risk is context x grade before entry-share/model multipliers. B+ has executable authority at the dedicated 0.25% reduced-risk budget and still requires every normal M15/M1/AI/safety gate.",
     }
 
 
