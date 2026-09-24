@@ -1,0 +1,45 @@
+name: Build B+ authority release artifact
+on:
+  push:
+    paths: ['.github/bplus-artifact-trigger.txt']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build coordinated files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          def edit(path,repls):
+            p=Path(path); s=p.read_text()
+            for a,b in repls:s=s.replace(a,b)
+            p.write_text(s)
+          edit('app/config.py',[('app_version: str = "6.5.80"','app_version: str = "6.5.81"')])
+          edit('app/service.py',[('zone_map["bplus_is_research_context_only"] = True','zone_map["bplus_is_research_context_only"] = False\n    zone_map["bplus_execution_authority"] = True')])
+          edit('app/dashboard_view.py',[('A+ ≤1 • A ≤2 • B+ watch-only','A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%'),('New A/A+ execution authority is blocked.','New A+/A/B+ execution authority is blocked.')])
+          edit('app/watch_ready.py',[('A+ <=1 touch, A <=2 touches, B+ no new authority.','A+ <=1 touch, A <=2 touches, B+ <=1 touch at reduced-risk authority.')])
+          edit('app/execution_safety.py',[('Legacy compatibility seam. B+ is context-only in the V2 risk matrix.','Legacy compatibility seam retained; B+ authority is handled by the shared execution-grade contract.')])
+          edit('app/liquidity_reversal_handoff.py',[('B+ may act as contextual origin evidence even though it is not executable.','B+ may act as contextual origin evidence and is executable only at the reduced 0.25% authority after all normal gates pass.')])
+          edit('docs/ZONE_FORMATION_PROMPT_CONTRACT_2026-09-14.md',[('A+ and A are the only new execution grades. B+ remains visible research context / WATCH ONLY.','A+, A and B+ are new execution grades. B+ is reduced-risk execution authority at 0.25% and still requires every normal M15/M1/AI/safety gate.')])
+          edit('app/ai.py',[('the zone must be WATCH/B+ for new execution rather than assumed fresh.','the zone must not be promoted to A/A+; B+ may retain only its reduced 0.25% execution authority if every normal gate passes.')])
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5');s=p.read_text()
+          s=s.replace('#property version   "3.40"','#property version   "3.41"').replace('#define TZ_SEQUENCE_VERSION "3.40"','#define TZ_SEQUENCE_VERSION "3.41"').replace('input double ResearchRiskPctCountertrendA=0.25;','input double ResearchRiskPctCountertrendA=0.25;\ninput double ResearchRiskPctBPlus=0.25;').replace('   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   return 0.0;','   if(grade=="A")\n      return context=="COUNTERTREND"?ResearchRiskPctCountertrendA:ResearchRiskPctTrendA;\n   if(grade=="B+")return ResearchRiskPctBPlus;\n   return 0.0;').replace('   if(grade=="B+"){original=0.0;flipPct=0.0;}\n','').replace('   if(grade!="A+"&&grade!="A")return 0.0;','   if(grade!="A+"&&grade!="A"&&grade!="B+")return 0.0;').replace('SMC Research v3.40','SMC Research v3.41')
+          q=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5');q.write_text(s)
+          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5');b=p.read_text().replace('#property version "1.49"','#property version "1.50"').replace('#define TZ_BRIDGE_VERSION "1.49"','#define TZ_BRIDGE_VERSION "1.50"').replace('#define TZ_SEQUENCE_EXPECTED "3.40"','#define TZ_SEQUENCE_EXPECTED "3.41"').replace('Sequence 3.40','Sequence 3.41').replace('v1.49','v1.50').replace('V149','V150')
+          Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5').write_text(b)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bplus-authority-release-files
+          path: |
+            app/config.py
+            app/service.py
+            app/dashboard_view.py
+            app/watch_ready.py
+            app/execution_safety.py
+            app/liquidity_reversal_handoff.py
+            app/ai.py
+            docs/ZONE_FORMATION_PROMPT_CONTRACT_2026-09-14.md
+            mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5
+            mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5
