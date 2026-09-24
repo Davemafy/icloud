@@ -1,5 +1,5 @@
 from app.models import Analysis, Bar, Direction, Grade, MarketSnapshot, Zone, ZoneState
-from app.target_revalidation import target_ladder_truth
+from app.target_revalidation import activation_target_truth, target_ladder_truth
 
 
 def _bar(ts, open_, high, low, close):
@@ -31,7 +31,19 @@ def _sell_zone() -> Zone:
     )
 
 
-def _snapshot(mid: float, bars: list[Bar]) -> MarketSnapshot:
+def _analysis(zone: Zone, execution_policy=None) -> Analysis:
+    return Analysis(
+        analysis_id="A1",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        execution_policy=execution_policy or {},
+    )
+
+
+def _snapshot(mid: float, bars=None) -> MarketSnapshot:
     return MarketSnapshot(
         sent_at=2000,
         bid=mid - 0.08,
@@ -40,118 +52,103 @@ def _snapshot(mid: float, bars: list[Bar]) -> MarketSnapshot:
         point=0.01,
         atr_m15=4.0,
         atr_h1=20.0,
-        xau_m15=bars,
+        xau_m15=list(bars or []),
     )
 
 
-def test_consumed_targets_do_not_reopen_after_price_retraces():
+def test_unactivated_sell_targets_remain_planned_even_when_price_is_below_them():
     zone = _sell_zone()
-    analysis = Analysis(
-        analysis_id="A1",
-        generated_at=1000,
-        snapshot_at=1000,
-        overall_bias=Direction.SELL,
-        zones=[zone],
-        selected_zone_id=zone.zone_id,
-    )
     bars = [
-        _bar(900, 4300.0, 4302.0, 4298.0, 4300.0),
         _bar(1050, 4295.0, 4297.0, 4288.0, 4290.0),
         _bar(1200, 4288.0, 4290.0, 4280.0, 4283.0),
         _bar(1350, 4275.0, 4277.0, 4268.0, 4270.0),
     ]
-    # Price has retraced back above TP3, but TP3 was already traded through.
-    truth = target_ladder_truth(analysis, zone, _snapshot(4273.20, bars))
+    truth = target_ladder_truth(_analysis(zone), zone, _snapshot(4273.20, bars))
+
+    assert truth["status"] == "PLANNED_NOT_ACTIVATED"
+    assert truth["activated"] is False
+    assert truth["planned_targets"] == [4291.5, 4282.39, 4272.62]
+    assert truth["open_targets"] == []
+    assert truth["completed_targets"] == []
+    assert truth["behind_activation_targets"] == []
+    assert truth["remap_required"] is False
+    assert truth["pre_activation_crossings_consume_targets"] is False
+    assert {x["state"] for x in truth["objectives"]} == {"PLANNED"}
+
+
+def test_same_sell_targets_become_open_when_zone_later_activates_near_core():
+    zone = _sell_zone()
+    truth = activation_target_truth(
+        zone,
+        _snapshot(4305.0),
+        4304.92,
+        activation_ts=2000,
+        reference_basis="LIVE_EXECUTION_HANDOFF_REFERENCE",
+    )
+
+    assert truth["status"] == "OPEN_TARGETS_AVAILABLE"
+    assert truth["open_targets"] == [4291.5, 4282.39, 4272.62]
+    assert truth["behind_activation_targets"] == []
+    assert truth["authority_safe"] is True
+
+
+def test_only_targets_behind_actual_activation_price_are_unavailable():
+    zone = _sell_zone()
+    truth = activation_target_truth(
+        zone,
+        _snapshot(4280.0),
+        4279.92,
+        activation_ts=2000,
+        reference_basis="LIVE_EXECUTION_HANDOFF_REFERENCE",
+    )
 
     states = {x["label"]: x["state"] for x in truth["objectives"]}
     assert states["TP1"] == "BEHIND_ACTIVATION_PRICE"
     assert states["TP2"] == "BEHIND_ACTIVATION_PRICE"
-    assert states["TP3"] == "COMPLETED"
-    assert truth["open_targets"] == []
-    assert truth["authority_safe"] is False
-    assert truth["remap_required"] is True
-    assert truth["status"] == "REMAP_REQUIRED"
-
-
-def test_fresh_open_target_remains_authority_safe():
-    zone = _sell_zone()
-    zone.original_target1 = 4261.34
-    zone.original_target2 = 0.0
-    zone.original_target3 = 0.0
-    analysis = Analysis(
-        analysis_id="A2",
-        generated_at=1000,
-        snapshot_at=1000,
-        overall_bias=Direction.SELL,
-        zones=[zone],
-        selected_zone_id=zone.zone_id,
-    )
-    bars = [
-        _bar(900, 4300.0, 4302.0, 4298.0, 4300.0),
-        _bar(1050, 4290.0, 4291.0, 4280.0, 4285.0),
-        _bar(1200, 4285.0, 4287.0, 4270.0, 4275.0),
-    ]
-    truth = target_ladder_truth(analysis, zone, _snapshot(4273.20, bars))
-
-    assert truth["open_targets"] == [4261.34]
+    assert states["TP3"] == "OPEN"
+    assert truth["open_targets"] == [4272.62]
     assert truth["authority_safe"] is True
-    assert truth["status"] == "OPEN_TARGETS_AVAILABLE"
 
 
-def test_missing_publication_history_blocks_new_authority():
+def test_active_owner_target_progress_starts_from_ownership_not_publication():
     zone = _sell_zone()
-    zone.notes = ["geometry_published_at:1000"]
-    analysis = Analysis(
-        analysis_id="A3",
-        generated_at=1000,
-        snapshot_at=1000,
-        overall_bias=Direction.SELL,
-        zones=[zone],
-        selected_zone_id=zone.zone_id,
-    )
-    # History begins after publication, so earlier target consumption is unknowable.
-    bars = [_bar(1200, 4300.0, 4302.0, 4298.0, 4300.0)]
-    truth = target_ladder_truth(analysis, zone, _snapshot(4305.0, bars))
-
-    assert truth["history_complete"] is False
-    assert truth["authority_safe"] is False
-    assert truth["status"] == "HISTORY_UNVERIFIED_BLOCK"
-
-
-def test_owner_targets_use_frozen_activation_anchor():
-    zone = _sell_zone()
-    zone.original_target1 = 4291.50
-    zone.original_target2 = 4261.34
-    zone.original_target3 = 0.0
-    analysis = Analysis(
-        analysis_id="A4",
-        generated_at=1000,
-        snapshot_at=1000,
-        overall_bias=Direction.SELL,
-        zones=[zone],
-        selected_zone_id=zone.zone_id,
-        execution_policy={
+    analysis = _analysis(
+        zone,
+        {
             "active_thesis": {
                 "locked": True,
                 "owner_zone_id": zone.zone_id,
                 "direction": "SELL",
-                "ownership_acquired_at": 1100,
-                "ownership_anchor_price": 4285.0,
-                "best_price": 4270.0,
+                "ownership_acquired_at": 1500,
+                "ownership_anchor_price": 4305.0,
+                "best_price": 4280.0,
                 "target1_hit_at": 0,
                 "target2_hit_at": 0,
                 "target3_hit_at": 0,
             }
         },
     )
-    bars = [
-        _bar(900, 4300.0, 4302.0, 4298.0, 4300.0),
-        _bar(1200, 4283.0, 4284.0, 4270.0, 4272.0),
-    ]
-    truth = target_ladder_truth(analysis, zone, _snapshot(4273.20, bars))
-    states = {x["label"]: x["state"] for x in truth["objectives"]}
+    truth = target_ladder_truth(analysis, zone, _snapshot(4281.0))
 
-    assert states["TP1"] == "BEHIND_ACTIVATION_PRICE"
-    assert states["TP2"] == "OPEN"
-    assert truth["open_targets"] == [4261.34]
-    assert truth["authority_safe"] is True
+    states = {x["label"]: x["state"] for x in truth["objectives"]}
+    assert states["TP1"] == "COMPLETED"
+    assert states["TP2"] == "COMPLETED"
+    assert states["TP3"] == "OPEN"
+    assert truth["open_targets"] == [4272.62]
+    assert truth["completed_targets"] == [4291.5, 4282.39]
+    assert truth["status"] == "ACTIVE_TARGETS_OPEN"
+
+
+def test_no_open_target_at_actual_activation_requires_remap():
+    zone = _sell_zone()
+    truth = activation_target_truth(
+        zone,
+        _snapshot(4260.0),
+        4259.92,
+        activation_ts=2000,
+    )
+
+    assert truth["open_targets"] == []
+    assert truth["authority_safe"] is False
+    assert truth["remap_required"] is True
+    assert truth["status"] == "REMAP_REQUIRED_AT_ACTIVATION"
