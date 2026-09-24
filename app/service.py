@@ -20,7 +20,7 @@ from .risk_matrix import matrix_payload
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
-from .target_revalidation import apply_target_revalidation, target_ladder_truth
+from .target_revalidation import activation_target_truth, apply_target_revalidation
 from .thesis_hard_release import hard_release_stale_thesis
 from .thesis_ownership_policy import (
     acquire_execution_ownership,
@@ -175,9 +175,10 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         a.execution_policy = policy
         return authority, thesis
 
-    # New ownership is not allowed to attach to a stale objective ladder. This is
-    # independent of zone validity/invalidation: the zone may remain structurally
-    # valid while execution fails closed until fresh liquidity is mapped.
+    # Planned targets do not begin a lifecycle until this exact execution
+    # handoff. Pre-activation price travel through future TP levels is irrelevant.
+    # At the handoff instant, require at least one target still beyond the actual
+    # execution reference; only then may ownership be acquired.
     target_zone = next((z for z in a.zones if z.zone_id == zone_id), None)
     if target_zone is None:
         attempted = authority
@@ -189,24 +190,25 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         a.execution_policy = policy
         return "NONE", None
 
-    target_truth = target_ladder_truth(a, target_zone, s)
+    activation_reference = float(
+        s.ask if target_zone.original_direction.value == "BUY" else s.bid
+    )
+    target_truth = activation_target_truth(
+        target_zone,
+        s,
+        activation_reference,
+        activation_ts=int(s.sent_at),
+        reference_basis="LIVE_EXECUTION_HANDOFF_REFERENCE",
+    )
     target_policy = dict(policy.get("target_revalidation") or {})
     per_zone = dict(target_policy.get("per_zone") or {})
     per_zone[target_zone.zone_id] = target_truth
     target_policy["per_zone"] = per_zone
     policy["target_revalidation"] = target_policy
 
-    target_truth_enforced = bool(
-        int(target_truth.get("publication_ts") or 0) > 0
-        or bool(target_truth.get("owner"))
-    )
-    if target_truth_enforced and not bool(target_truth.get("authority_safe")):
+    if not bool(target_truth.get("authority_safe")):
         attempted = authority
-        block_reason = (
-            "TARGET_HISTORY_UNVERIFIED"
-            if str(target_truth.get("status") or "") == "HISTORY_UNVERIFIED_BLOCK"
-            else "TARGET_REMAP_REQUIRED"
-        )
+        block_reason = "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
         auth_meta["authority"] = "NONE"
         auth_meta["attempted_authority"] = attempted
         auth_meta["ownership_acquired"] = False
@@ -224,13 +226,12 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         policy.pop("paper_ai_fallback", None)
         a.execution_policy = policy
         a.ai_approved = False
-        guard = "TARGET_LADDER_" + block_reason
-        if guard not in a.guards:
-            a.guards.append(guard)
+        if "TARGET_LADDER_REMAP_REQUIRED_AT_ACTIVATION" not in a.guards:
+            a.guards.append("TARGET_LADDER_REMAP_REQUIRED_AT_ACTIVATION")
         a.trader_brief += (
-            " Execution ownership blocked: the published target ladder has no "
-            "verified open objective. Fresh liquidity remap is required; zone "
-            "validity and M15 invalidation logic are unchanged."
+            " Execution ownership blocked at activation because no planned target "
+            "remains beyond the handoff price. Pre-activation target crossings were "
+            "not counted; zone validity and M15 invalidation logic are unchanged."
         )
         return "NONE", None
 
