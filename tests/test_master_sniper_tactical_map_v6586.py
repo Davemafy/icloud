@@ -4,10 +4,11 @@ from app.master_sniper_adaptive_geometry import _tactical_band
 from app.models import Direction
 
 
-def _snapshot(m15_atr=5.0, h1_atr=12.0):
+def _snapshot(m15_atr=5.0, h1_atr=12.0, mid=4271.0):
     return SimpleNamespace(
         atr_m15=m15_atr,
         atr_h1=h1_atr,
+        mid=mid,
         xau_m15=[],
         xau_h1=[],
         xau_h4=[],
@@ -57,3 +58,40 @@ def test_no_manual_master_sniper_prices_are_encoded_in_geometry():
     candidate = _candidate(Direction.SELL, 5270.0, 5290.0)
     band = _tactical_band(candidate, 5282.0, 5288.0, 5285.0, _snapshot(m15_atr=5.0))
     assert band == (5280.0, 5290.0)
+
+
+def test_sep24_2026_manual_master_sniper_four_zone_regression():
+    """Golden chart fixture from the 24-Sep-2026 manual Master Sniper review.
+
+    This freezes the geometry relationship, not production prices: the prices live
+    only in this regression test. 26pt spread is execution context and must never
+    be used to inflate the structural alert bands.
+    """
+    snap = _snapshot(m15_atr=7.445, h1_atr=20.0, mid=4271.48)
+    spread_points = 26
+    assert spread_points == 26
+
+    fixtures = [
+        # label, direction, source, native core, attached liquidity, expected band
+        ("SELL1", Direction.SELL, (4276.0, 4290.0), (4282.0, 4288.0), 4287.445, (4280.0, 4290.0)),
+        ("SELL2", Direction.SELL, (4291.0, 4305.0), (4297.0, 4303.0), 4302.445, (4295.0, 4305.0)),
+        ("BUY1", Direction.BUY, (4250.0, 4264.0), (4252.0, 4258.0), 4257.445, (4250.0, 4264.0)),
+        ("BUY2", Direction.BUY, (4235.0, 4250.0), (4237.0, 4243.0), 4242.445, (4235.0, 4250.0)),
+    ]
+
+    bands = {}
+    for label, direction, source, core, liquidity, expected in fixtures:
+        candidate = _candidate(direction, *source)
+        band = _tactical_band(candidate, *core, liquidity, snap)
+        assert band is not None, label
+        bands[label] = band
+        assert band == expected, label
+
+    # Four-zone map ordering and side authority are part of the contract.
+    assert bands["BUY2"][1] <= bands["BUY1"][0]
+    assert bands["BUY1"][1] < snap.mid
+    assert snap.mid < bands["SELL1"][0]
+    assert bands["SELL1"][1] <= bands["SELL2"][0]
+
+    # Regression guard: never publish the old giant structural envelope as SELL1.
+    assert bands["SELL1"] != (4252.0, 4290.0)
