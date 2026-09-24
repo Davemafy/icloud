@@ -223,3 +223,58 @@ def test_render_feed_uses_exact_geometry_publication_not_source_time():
     assert d["zone1_source_ts"] == "1790190000"
     assert d["zone1_published_at"] == "1790210000"
     assert int(d["zone1_published_at"]) > int(d["zone1_source_ts"])
+
+
+def test_live_renderer_hides_context_buy_once_price_is_below_zone():
+    sell = _zone(
+        "PZ_H1_SELL_16", "SELL",
+        4302.19, 4324.19, 4303.77, 4309.77,
+        "ARMED|PROMPT", "A", "H1", 200, 0,
+    )
+    buy = _zone(
+        "PZ_H1_BUY_7", "BUY",
+        4256.34, 4272.20, 4261.55, 4267.55,
+        "WATCH|PROMPT", "B+", "H1", 100, 4,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_LIVE_SIDE",
+        generated_at=300,
+        selected_zone_id="PZ_H1_SELL_16",
+        zones=[sell, buy],
+        execution_policy={"active_thesis": {"locked": False}},
+    )
+
+    d = _kv(mt5_zone_render_text(a, current_mid=4255.33))
+    assert d["live_mid"] == "4255.33000"
+    assert d["wrong_side_hidden_count"] == "1"
+    assert d["wrong_side_hidden_ids"] == "PZ_H1_BUY_7"
+    assert d["zone_count"] == "1"
+    assert d["zone1_id"] == "PZ_H1_SELL_16"
+
+
+def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_zone():
+    buy = _zone(
+        "BUY_OWNER", "BUY",
+        4256.34, 4272.20, 4261.55, 4267.55,
+        "M1_READY|PROMPT", "A+", "H4>H1", 100, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_OWNER_SIDE",
+        generated_at=300,
+        selected_zone_id="BUY_OWNER",
+        zones=[buy],
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "direction": "BUY",
+                "status": "REACTION_CONFIRMED",
+                "owner_zone_id": "BUY_OWNER",
+            }
+        },
+    )
+
+    d = _kv(mt5_zone_render_text(a, current_mid=4250.00))
+    assert d["wrong_side_hidden_count"] == "0"
+    assert d["zone_count"] == "1"
+    assert d["zone1_id"] == "BUY_OWNER"
+    assert d["zone1_active_thesis"] == "1"
