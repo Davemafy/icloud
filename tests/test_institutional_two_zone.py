@@ -82,7 +82,7 @@ def _patch_common(monkeypatch, candidate, touches=0):
     monkeypatch.setattr(policy, "_dxy", lambda snapshot: Direction.NEUTRAL)
 
 
-def test_sell_zone_keeps_bsl_inside_professional_source_tf_envelope(monkeypatch):
+def test_sell_zone_keeps_bsl_inside_master_sniper_tactical_band(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate)
     analysis = _analysis([
@@ -93,18 +93,20 @@ def test_sell_zone_keeps_bsl_inside_professional_source_tf_envelope(monkeypatch)
 
     assert len(zones) == 1
     zone = zones[0]
-    # MASTER SNIPER SOURCE-EXACT: preserve the actual H4 source envelope.
-    # Attached structural liquidity validates the source but must not manufacture
-    # a legacy fixed-width / ATR-expanded envelope around it.
-    assert zone.zone_low == candidate.zone_low
-    assert zone.zone_high == candidate.zone_high
+    # MASTER SNIPER V6586: the H4 source envelope is a provenance/attachment
+    # guard. The published alert zone is the tactical reaction band formed by
+    # the exact source core plus genuinely attached BSL and M15 reaction depth.
+    # With core 104-106, BSL 108 and M15 ATR 2, the correct SELL band is 104-110.
+    assert zone.zone_low == 104.0
+    assert zone.zone_high == 110.0
+    assert candidate.zone_low <= zone.zone_low <= zone.zone_high <= candidate.zone_high
     assert zone.zone_low <= 108.0 <= zone.zone_high
     assert "LIQUIDITY_IN_MARKED_ZONE" in zone.confluences
     assert "BSL_IN_MARKED_ZONE" in zone.confluences
     assert analysis.execution_policy["public_zone_map"]["map_count"] == 1
 
 
-def test_sell_candidate_is_rejected_when_bsl_is_not_inside_zone(monkeypatch):
+def test_sell_candidate_is_rejected_when_bsl_is_not_attached_to_source(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate)
     analysis = _analysis([
@@ -222,17 +224,12 @@ def test_atr_proximity_does_not_label_sell_zone_interacting_before_live_core_con
     analysis = _analysis([
         LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=4.0)
     ])
-    # Keep the quote just above the core but within the 0.30 x M15 ATR
-    # approach buffer. This remains valid under the installed V659 H4 geometry.
     snap = _snapshot(mid=106.35)
 
     zones = policy.apply_two_zone_institutional_map(analysis, snap)
 
     assert len(zones) == 1
     zone = zones[0]
-    # Prove there is no live quote/core overlap without assuming which side
-    # of the core current price is on. The runtime interaction predicate is
-    # intentionally direction-agnostic geometry overlap.
     assert snap.ask < zone.core_low or snap.bid > zone.core_high
     assert policy.primary_zone_approaching(zone, snap) is True
     assert policy.primary_zone_interacting(zone, snap) is False
