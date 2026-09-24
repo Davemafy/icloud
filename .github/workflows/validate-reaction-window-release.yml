@@ -31,7 +31,6 @@ jobs:
           import json
           import urllib.request
           from pathlib import Path
-
           manifest = json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
           repo = manifest['repository']
           ref = manifest['ref']
@@ -43,32 +42,28 @@ jobs:
               with urllib.request.urlopen(url, timeout=30) as response:
                   data = response.read()
               actual = hashlib.sha256(data).hexdigest()
-              assert actual == expected, (
-                  f"Pinned-ref SHA mismatch for {item['path']}: "
-                  f"expected={expected} actual={actual} ref={ref}"
-              )
+              assert actual == expected, f"Pinned-ref SHA mismatch for {item['path']}: expected={expected} actual={actual} ref={ref}"
           print(f"Stable manifest pinned-ref verification OK: {ref}")
           PY
-      - name: DataBridge 1.49 structural checks
+      - name: DataBridge 1.50 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5')
           t=p.read_text(encoding='utf-8')
           core=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5').read_text(encoding='utf-8')
           for text in (t, core):
               for a,b in [('(',')'),('{','}'),('[',']')]:
                   assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
           for needle in [
-              '#property version "1.49"',
-              '#define TZ_BRIDGE_VERSION "1.49"',
-              '#define TZ_SEQUENCE_EXPECTED "3.40"',
+              '#property version "1.50"',
+              '#define TZ_BRIDGE_VERSION "1.50"',
+              '#define TZ_SEQUENCE_EXPECTED "3.41"',
               'BackfillJournalHistory(false);',
               'BackfillJournalHistory(true);',
               'JournalContinuityResyncSeconds=180',
               'TZ_RefreshPlanContextWithJournalContinuity()',
               'previousCloudVersion!=g_cloudVersion',
-              'TZ_SendHeartbeatV149();',
               'WAITING FOR CLOSED M1 VALUE REACTION',
               'stage=="ENTRY_CONFIRMATION"',
               'stage=="FLIP_CONFIRMATION"',
@@ -78,99 +73,42 @@ jobs:
           ]:
               assert needle in t,needle
           for needle in [
-              'EnableJournalHistoryBackfill',
-              'CanonicalTradeId',
-              'EventUidDeal',
-              'SendJournalAt',
-              'HistoryDealsTotal()',
-              'recovered_from_mt5_history',
-              'SavePositionMeta',
-              'LoadPositionMeta',
-              'execution_bridge_version',
-              'recovery_bridge_version',
-              'UNAVAILABLE_FROM_MT5_HISTORY',
-              'MQLInfoInteger(MQL_TESTER)',
+              'EnableJournalHistoryBackfill','CanonicalTradeId','EventUidDeal','SendJournalAt',
+              'HistoryDealsTotal()','recovered_from_mt5_history','SavePositionMeta','LoadPositionMeta',
+              'execution_bridge_version','recovery_bridge_version','UNAVAILABLE_FROM_MT5_HISTORY','MQLInfoInteger(MQL_TESTER)',
           ]:
               assert needle in core,needle
           assert 'IsTester()' not in core
-          print('DataBridge 1.49 release structural checks OK')
+          print('DataBridge 1.50 release structural checks OK')
           PY
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_49_PublicationFlipTruth.mq5
+          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5
           sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
-      - name: Sequence 3.40 structural checks
+      - name: Sequence 3.41 structural checks
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5')
+          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
           required=[
-              '#property version   "3.40"',
-              'TZ_BuildEscapePullback',
-              'TZ28_ArmAcceptedFlip',
-              'HTF_ZONE_SWEEP_HANDOFF',
-              'MT5_EXECUTION_OWNER_MIRROR_V1',
-              'TZ31_RefreshCloudState',
-              'Persist/release the owner mirror even while execution is safety-blocked.',
-              'TZ31_BuildPostHandoffContinuation',
-              'owner_mirror_zone_payload_b64',
-              'FileDelete("TradeZone\\\\execution_owner_state.txt")',
-              'ACCEPTED_ZONE_FLIP_HANDOFF',
-              'accepted_flip_state.txt',
-              'ResearchEscapeRiskMultiplier=0.50',
-              'gate_stage',
-              'gate_reason',
-              'ENTRY_CONFIRMATION',
-              'FLIP_CONFIRMATION',
-              'WAITING_FOR_CLOSED_M1_VALUE_REACTION',
-              'NO_OPEN_TARGET_BEYOND_ENTRY',
-              'MT5_ORDER_SEND_FAILED',
-              'TZ34_InitialRiskDistance',
-              'HistorySelectByPosition(positionId)',
-              'RunnerTrailStartR',
-              'TZ35_ReentryEntryReady',
-              'WAITING_FOR_CLOSED_M1_VALUE_REACTION',
-              'PD_ARRAY_ACCEPTED_INVALIDATION',
-              'REENTRY_LIMIT_REACHED',
-              'ENTRY_DECISION',
-              'TZ36_PostHandoffEntryReady',
-              'POST_HANDOFF_OBJECTIVE_ALREADY_TRADED',
-              'MIN_RR_NOT_MET',
-              'nearest_open_target',
-              'rr_at_entry',
-              'ResearchValidationInitialCapital=10000.0',
-              'ResearchRiskPctTrendAPlus=1.00',
-              'ResearchRiskPctTrendA=0.75',
-              'ResearchRiskPctCountertrendAPlus=0.50',
-              'ResearchRiskPctCountertrendA=0.25',
-              'CONTEXT_GRADE_MATRIX_10000_V2',
-              'TZ38_LoadRiskContract',
-              'TZ38_ThesisBudget',
-              'g_tzAcceptedFlipRiskPct',
-              'TZ39_ProfessionalValueReactionReady',
-              'TZ39_InitialEntryReady',
-              'TZ39_FlipEntryReady',
-              'TZ40_FailedZoneBreakerPD',
-              'TZ40_BreakerFlipReady',
-              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED',
-              'ENTRY_CONFIRMATION',
-              'FLIP_CONFIRMATION',
-              'ProfessionalEntryReactionMinBodyATR=0.25',
-              'ProfessionalEntryReactionMaxChaseATR=0.15',
-              'bool reactionRequired=true;',
-              
-              
-              
-              
-              'TZ37_LotsForRisk',
-              'OrderCalcProfit',
-              'TZ37_SendOrders',
-              'LOT_SIZE_ZERO_OR_BELOW_MIN',
+              '#property version   "3.41"','TZ_BuildEscapePullback','TZ28_ArmAcceptedFlip','HTF_ZONE_SWEEP_HANDOFF',
+              'MT5_EXECUTION_OWNER_MIRROR_V1','TZ31_RefreshCloudState','Persist/release the owner mirror even while execution is safety-blocked.',
+              'TZ31_BuildPostHandoffContinuation','owner_mirror_zone_payload_b64','FileDelete("TradeZone\\\\execution_owner_state.txt")',
+              'ACCEPTED_ZONE_FLIP_HANDOFF','accepted_flip_state.txt','ResearchEscapeRiskMultiplier=0.50','gate_stage','gate_reason',
+              'ENTRY_CONFIRMATION','FLIP_CONFIRMATION','WAITING_FOR_CLOSED_M1_VALUE_REACTION','NO_OPEN_TARGET_BEYOND_ENTRY','MT5_ORDER_SEND_FAILED',
+              'TZ34_InitialRiskDistance','HistorySelectByPosition(positionId)','RunnerTrailStartR','TZ35_ReentryEntryReady','PD_ARRAY_ACCEPTED_INVALIDATION',
+              'REENTRY_LIMIT_REACHED','ENTRY_DECISION','TZ36_PostHandoffEntryReady','POST_HANDOFF_OBJECTIVE_ALREADY_TRADED','MIN_RR_NOT_MET',
+              'nearest_open_target','rr_at_entry','ResearchValidationInitialCapital=10000.0','ResearchRiskPctTrendAPlus=1.00',
+              'ResearchRiskPctTrendA=0.75','ResearchRiskPctCountertrendAPlus=0.50','ResearchRiskPctCountertrendA=0.25',
+              'CONTEXT_GRADE_MATRIX_10000_V2','TZ38_LoadRiskContract','TZ38_ThesisBudget','g_tzAcceptedFlipRiskPct',
+              'TZ39_ProfessionalValueReactionReady','TZ39_InitialEntryReady','TZ39_FlipEntryReady','TZ40_FailedZoneBreakerPD','TZ40_BreakerFlipReady',
+              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED','ProfessionalEntryReactionMinBodyATR=0.25','ProfessionalEntryReactionMaxChaseATR=0.15',
+              'bool reactionRequired=true;','TZ37_LotsForRisk','OrderCalcProfit','TZ37_SendOrders','LOT_SIZE_ZERO_OR_BELOW_MIN',
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.40 release structural checks OK')
+          print('Sequence 3.41 release structural checks OK')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_40_AcceptedBreakerFlip_Demo.mq5
+        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5
