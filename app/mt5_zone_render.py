@@ -35,6 +35,18 @@ def _readiness(core_method: Any, fallback: Any = "") -> str:
     return _value(fallback)
 
 
+def _zone_note_int(zone: Any, prefix: str, default: int = 0) -> int:
+    for note in list(getattr(zone, "notes", []) or []):
+        text = str(note)
+        if not text.startswith(prefix):
+            continue
+        try:
+            return int(float(text.split(":", 1)[1]))
+        except (TypeError, ValueError, IndexError):
+            return default
+    return default
+
+
 def _next_objective(thesis: dict[str, Any]) -> float:
     direction = _value(thesis.get("direction")).upper()
     try:
@@ -84,6 +96,7 @@ def _secondary_records(policy: dict[str, Any]) -> list[dict[str, Any]]:
                 "grade": _value(raw.get("grade")),
                 "source_tf": source_tf,
                 "source_ts": source_ts,
+                "published_at": int(raw.get("geometry_published_at") or 0),
                 "touches": int(raw.get("touches") or 0),
                 "zone_low": raw.get("low", 0.0),
                 "zone_high": raw.get("high", 0.0),
@@ -112,6 +125,11 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
                 "grade": _value(getattr(z, "grade", "")),
                 "source_tf": _value(getattr(z, "source_tf", "")),
                 "source_ts": int(getattr(z, "source_ts", 0) or 0),
+                "published_at": _zone_note_int(
+                    z,
+                    "geometry_published_at:",
+                    int(getattr(a, "generated_at", 0) or 0),
+                ),
                 "touches": int(getattr(z, "touch_count", 0) or 0),
                 "zone_low": getattr(z, "zone_low", 0.0),
                 "zone_high": getattr(z, "zone_high", 0.0),
@@ -161,8 +179,11 @@ def mt5_zone_render_text(a: Any) -> str:
     selected_zone_id = _value(getattr(a, "selected_zone_id", ""))
 
     records = _primary_records(a, owner_zone_id, thesis_locked)
+    generated_at = int(getattr(a, "generated_at", 0) or 0)
     primary_ids = {r["id"] for r in records}
     for reserve in _secondary_records(policy):
+        if int(reserve.get("published_at") or 0) <= 0:
+            reserve["published_at"] = generated_at
         # Reserve ids are synthetic, but guard against accidental duplicate geometry labels.
         if reserve["id"] not in primary_ids:
             records.append(reserve)
@@ -202,6 +223,7 @@ def mt5_zone_render_text(a: Any) -> str:
                 f"{p}grade={_value(rec.get('grade'))}",
                 f"{p}source_tf={_value(rec.get('source_tf'))}",
                 f"{p}source_ts={_int(rec.get('source_ts'))}",
+                f"{p}published_at={_int(rec.get('published_at'))}",
                 f"{p}touches={_int(rec.get('touches'))}",
                 f"{p}zone_low={_num(rec.get('zone_low'))}",
                 f"{p}zone_high={_num(rec.get('zone_high'))}",
