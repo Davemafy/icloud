@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.79"
+    app_version: str = "6.5.80"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -79,10 +79,10 @@ class Settings:
     research_risk_pct_trend_a: float = _f("RESEARCH_RISK_PCT_TREND_A", 0.75)
     research_risk_pct_countertrend_a_plus: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A_PLUS", 0.50)
     research_risk_pct_countertrend_a: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A", 0.25)
-    # Backward-compatible env field only. Master Sniper V4 hard-blocks B+ new
-    # execution authority and risk_matrix assigns B+ a 0% new-entry budget.
+    # B+ is an executable reduced-risk grade under the Master Sniper contract.
+    # It still requires every normal structural, M15, M1, AI and safety gate.
     research_risk_pct_b_plus: float = _f("RESEARCH_RISK_PCT_B_PLUS", 0.25)
-    research_risk_epoch: str = os.getenv("RESEARCH_RISK_EPOCH", "MASTER_SNIPER_CONTEXT_GRADE_10000_V4")
+    research_risk_epoch: str = os.getenv("RESEARCH_RISK_EPOCH", "MASTER_SNIPER_CONTEXT_GRADE_10000_V5_BPLUS_EXEC")
 
     m15_single_accept_body_fraction: float = _f("M15_SINGLE_ACCEPT_BODY_FRACTION", 0.60)
     m15_single_accept_body_atr: float = _f("M15_SINGLE_ACCEPT_BODY_ATR", 0.40)
