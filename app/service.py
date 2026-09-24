@@ -237,11 +237,18 @@ def _acquire_final_ownership(a: Analysis, s, authority: str, liquidity_handoff: 
         )
         if guard_code not in a.guards:
             a.guards.append(guard_code)
-        a.trader_brief += (
-            " Execution ownership blocked at activation because no planned target "
-            "remains beyond the handoff price. Pre-activation target crossings were "
-            "not counted; zone validity and M15 invalidation logic are unchanged."
-        )
+        if block_reason == "NO_LIVE_DIRECTIONAL_TARGET":
+            a.trader_brief += (
+                " Liquidity-reversal handoff expired before ownership because no "
+                "same-direction objective remains beyond the live handoff price. "
+                "Pre-activation target crossings were not counted."
+            )
+        else:
+            a.trader_brief += (
+                " Execution ownership blocked at activation because no planned target "
+                "remains beyond the handoff price. Pre-activation target crossings were "
+                "not counted; zone validity and M15 invalidation logic are unchanged."
+            )
         return "NONE", None
 
     if authority == "LIQUIDITY_REVERSAL_HANDOFF":
