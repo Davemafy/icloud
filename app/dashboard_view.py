@@ -94,10 +94,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     for(const side of ['sell','buy']){
       const mapped=map?.[side]||{};
       const raw=analysisZones.find(x=>String(x?.original_direction||'').toLowerCase()===side)||{};
-      // The raw Zone model also carries the full mitigation ledger. Use it as an
-      // observability fallback when a later policy wrapper omits the side entry.
-      const z=mapped.zone_id?mapped:raw;
-      if(!z.zone_id)continue;
+      // public_zone_map deliberately removes the literal zone_id key so DataBridge
+      // does not double-count zones. audit_zone_id restores human audit identity.
+      const mappedId=String(mapped.audit_zone_id||mapped.zone_id||'');
+      const rawId=String(raw.zone_id||'');
+      const z=(mappedId||Object.keys(mapped).length)?mapped:raw;
+      const zoneId=mappedId||rawId;
+      if(!zoneId)continue;
       const audit=z.mitigation_audit||raw.mitigation_audit||{};
       const events=Array.isArray(audit.events)?audit.events:[];
       const expected=String(audit.expected_approach_side||z.mitigation_expected_approach_side||'—');
@@ -107,7 +110,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         : 'ABOVE → CORE → ABOVE';
       if(!historyComplete){
         rows.push(
-          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td><b class="warn">FRESHNESS HISTORY INCOMPLETE</b></td>'+
+          '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td><b class="warn">FRESHNESS HISTORY INCOMPLETE</b></td>'+
           '<td>'+auditText(expected)+'</td><td>'+auditTime(audit.history_start_ts||z.mitigation_history_start_ts)+'</td>'+
           '<td>—</td><td>Required from '+auditTime(audit.history_required_from_ts||z.mitigation_history_required_from_ts)+'</td>'+
           '<td><b>NO</b></td><td>'+auditText(audit.history_gap_reason||z.mitigation_history_gap_reason||'M15 history cannot prove full freshness')+
@@ -116,7 +119,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }
       if(!events.length){
         rows.push(
-          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
+          '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td>NO QUALIFIED EVENT</td>'+
           '<td>'+auditText(expected)+'</td><td>—</td><td>—</td><td>—</td><td><b>NO</b></td>'+
           '<td>Qualified mitigations '+auditText(audit.qualified_mitigations??z.qualified_mitigations??z.touch_count??0)+'</td></tr>'
         );
@@ -130,7 +133,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const effect=(before||after)?((before||'—')+' → '+(after||'—')):'';
         const reason=String(e.reason||'');
         rows.push(
-          '<tr><td>'+auditText(z.zone_id)+'</td>'+
+          '<tr><td>'+auditText(zoneId)+'</td>'+
           '<td>'+cycle+'</td>'+
           '<td>'+auditText(type)+'</td>'+
           '<td>'+auditText(e.approach_side||'—')+'</td>'+
@@ -143,7 +146,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       });
       if(audit.counting_stopped===true){
         rows.push(
-          '<tr><td>'+auditText(z.zone_id)+'</td><td>'+cycle+'</td><td><b class="bad">COUNTER STOPPED</b></td>'+
+          '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td><b class="bad">COUNTER STOPPED</b></td>'+
           '<td>—</td><td>—</td><td>—</td><td>'+auditTime(audit.invalidated_at)+'</td><td><b>NO</b></td>'+
           '<td>'+auditText(audit.invalidation_reason||'ACCEPTED INVALIDATION')+'</td></tr>'
         );
