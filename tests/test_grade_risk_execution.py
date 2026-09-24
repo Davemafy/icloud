@@ -13,54 +13,30 @@ def _zone(grade: Grade, *, countertrend: bool = False, touches: int | None = Non
         original_direction=Direction.BUY if not countertrend else Direction.SELL,
         flip_direction=Direction.SELL if not countertrend else Direction.BUY,
         setup_type="REVERSAL" if countertrend else "CONTINUATION",
-        source_tf="H4>H1",
-        grade=grade,
-        state=ZoneState.ACTIVE,
-        core_low=99.0,
-        core_high=101.0,
-        core_method="M1_READY|PROMPT_SWEEP_ROOM_GEOMETRY",
-        location_score=8.0,
-        zone_low=95.0,
-        zone_high=105.0,
-        touch_count=touches,
+        source_tf="H4>H1", grade=grade, state=ZoneState.ACTIVE,
+        core_low=99.0, core_high=101.0, core_method="M1_READY|PROMPT_SWEEP_ROOM_GEOMETRY",
+        location_score=8.0, zone_low=95.0, zone_high=105.0, touch_count=touches,
         independent_confluence_count=4,
         confluences=["LIQUIDITY_IN_MARKED_ZONE", "SSL_IN_MARKED_ZONE" if not countertrend else "BSL_IN_MARKED_ZONE"],
-        source_ts=10,
-        invalidation_level=95.0,
-        invalidation_rule="M15 accepted invalidation",
+        source_ts=10, invalidation_level=95.0, invalidation_rule="M15 accepted invalidation",
         original_target1=110.0 if not countertrend else 90.0,
         original_target2=115.0 if not countertrend else 85.0,
         original_target3=120.0 if not countertrend else 80.0,
         flip_target1=90.0 if not countertrend else 110.0,
         flip_target2=85.0 if not countertrend else 115.0,
-        clear_run=9.0,
-        countertrend=countertrend,
+        clear_run=9.0, countertrend=countertrend,
     )
 
 
 def _analysis(zone: Zone) -> Analysis:
-    return Analysis(
-        analysis_id="A_RISK",
-        generated_at=100,
-        snapshot_at=100,
-        overall_bias=Direction.BUY,
-        zones=[zone],
-        selected_zone_id=zone.zone_id,
-        approved=True,
-        ai_approved=True,
-    )
+    return Analysis(analysis_id="A_RISK", generated_at=100, snapshot_at=100,
+                    overall_bias=Direction.BUY, zones=[zone], selected_zone_id=zone.zone_id,
+                    approved=True, ai_approved=True)
 
 
 def _snapshot() -> MarketSnapshot:
-    return MarketSnapshot(
-        sent_at=100,
-        bid=100.0,
-        ask=100.2,
-        spread_points=20.0,
-        point=0.01,
-        atr_h1=10.0,
-        atr_m15=2.0,
-    )
+    return MarketSnapshot(sent_at=100, bid=100.0, ask=100.2, spread_points=20.0,
+                          point=0.01, atr_h1=10.0, atr_m15=2.0)
 
 
 def _kv(text: str) -> dict[str, str]:
@@ -73,7 +49,8 @@ def test_context_grade_risk_defaults_are_code_authoritative():
     assert SETTINGS.research_risk_pct_trend_a == 0.75
     assert SETTINGS.research_risk_pct_countertrend_a_plus == 0.50
     assert SETTINGS.research_risk_pct_countertrend_a == 0.25
-    assert SETTINGS.research_risk_epoch == "CONTEXT_GRADE_10000_V2"
+    assert SETTINGS.research_risk_pct_b_plus == 0.25
+    assert SETTINGS.research_risk_epoch == "MASTER_SNIPER_CONTEXT_GRADE_10000_V5_BPLUS_EXEC"
 
 
 def test_context_x_grade_matrix_exact_percentages():
@@ -82,6 +59,8 @@ def test_context_x_grade_matrix_exact_percentages():
         (_zone(Grade.A, countertrend=False), "TREND", 0.75, 0.25),
         (_zone(Grade.A_PLUS, countertrend=True), "COUNTERTREND", 0.50, 1.00),
         (_zone(Grade.A, countertrend=True), "COUNTERTREND", 0.25, 0.75),
+        (_zone(Grade.B_PLUS, countertrend=False), "TREND", 0.25, 0.25),
+        (_zone(Grade.B_PLUS, countertrend=True), "COUNTERTREND", 0.25, 0.25),
     ]
     for zone, context, original, flip in cases:
         assert zone_risk_context(zone) == context
@@ -90,20 +69,28 @@ def test_context_x_grade_matrix_exact_percentages():
         assert execution_grade_eligible(zone)
 
 
-def test_second_touch_a_remains_eligible_but_a_plus_does_not():
+def test_second_touch_a_remains_eligible_but_a_plus_and_bplus_do_not():
     assert execution_grade_eligible(_zone(Grade.A, touches=2))
     assert not execution_grade_eligible(_zone(Grade.A_PLUS, touches=2))
+    assert not execution_grade_eligible(_zone(Grade.B_PLUS, touches=2))
 
 
-def test_bplus_is_watch_only_with_zero_new_entry_budget():
+def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
+    zone = _zone(Grade.B_PLUS, touches=1)
+    plan = _kv(active_plan_text(_analysis(zone)))
+    assert plan["ea_mode"] == "DUAL_BRANCH"
+    assert plan["grade"] == "B+"
+    assert plan["risk_model"] == RISK_MODEL
+    assert plan["grade_risk_pct"] == "0.25"
+    assert plan["original_risk_pct"] == "0.25"
+    assert plan["flip_risk_pct"] == "0.25"
+    assert plan["bplus_execution_authority"] == "1"
+
+
+def test_bplus_second_qualified_mitigation_is_watch_only():
     zone = _zone(Grade.B_PLUS, touches=2)
     plan = _kv(active_plan_text(_analysis(zone)))
     assert plan["ea_mode"] == "WATCH_ONLY"
-    assert plan["grade"] == "B+"
-    assert plan["risk_model"] == RISK_MODEL
-    assert plan["grade_risk_pct"] == "0.00"
-    assert plan["original_risk_pct"] == "0.00"
-    assert plan["flip_risk_pct"] == "0.00"
     assert plan["bplus_execution_authority"] == "0"
 
 
