@@ -457,6 +457,11 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     # such as spread is enforced in /mt5/plan and must not erase the thesis lock.
     authority, ownership_row = _acquire_final_ownership(a, s, authority, liquidity_handoff)
 
+    # Recompute target truth after ownership resolution. Before activation the
+    # ladder remains PLANNED; after ownership the same prices become a live
+    # target lifecycle from the frozen handoff anchor.
+    apply_target_revalidation(a, s)
+
     # save_analysis re-registers idempotently; the pre-registration above is only
     # to make lifecycle truth available before ownership/M1 selection in this run.
     apply_publication_truth(a)
