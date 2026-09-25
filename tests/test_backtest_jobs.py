@@ -92,3 +92,17 @@ def test_async_job_manager_is_single_flight_and_persists_result_outside_request_
     assert '"COMPLETED"' in text
     assert '"FAILED"' in text
     assert "another Master Sniper backtest job is already running" in text
+
+
+def test_async_job_status_carries_live_replay_progress_fields():
+    text = Path("app/backtest_jobs.py").read_text(encoding="utf-8")
+    for required in (
+        '"processed_m1_closes": 0',
+        '"total_m1_closes": 0',
+        '"progress_pct": 0.0',
+        '"analysis_states": 0',
+        'progress_hook(progress: dict)',
+        'historical replay exceeded the 30-minute job limit',
+        '"--progress-out"',
+    ):
+        assert required in text
