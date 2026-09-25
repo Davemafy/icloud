@@ -5,6 +5,7 @@ from math import isclose
 
 
 SNIPER_PARITY_VERSION = "SNIPER_PARITY_V1"
+_PLAN_FINALIZER_INSTALLED = False
 _REQUIRED_SEQUENCE_FIELDS = (
     "analysis_id",
     "zone_id",
@@ -236,3 +237,31 @@ def finalize_plan_contract_text(text: str) -> str:
         if key not in order:
             order.append(key)
     return "".join(f"{key}={kv[key]}\n" for key in order)
+
+
+def install_plan_contract_finalizer() -> None:
+    """Make fingerprinting the outermost plan-export step.
+
+    Several runtime wrappers are allowed to fail the plan closed after the main
+    execution guard runs (for example live thesis ownership synchronization).
+    Any such wrapper can legitimately change ea_mode/execution_authority. The
+    fingerprint must therefore be stamped after *all* wrappers, otherwise the
+    Cloud publishes a stale fingerprint for a plan whose final authority is NONE.
+    """
+    global _PLAN_FINALIZER_INSTALLED
+    if _PLAN_FINALIZER_INSTALLED:
+        return
+
+    from . import engine
+
+    original = engine.active_plan_text
+    if getattr(original, "_tradezone_sniper_contract_finalizer_v1", False):
+        _PLAN_FINALIZER_INSTALLED = True
+        return
+
+    def finalized_active_plan_text(analysis, snapshot=None):
+        return finalize_plan_contract_text(original(analysis, snapshot))
+
+    finalized_active_plan_text._tradezone_sniper_contract_finalizer_v1 = True
+    engine.active_plan_text = finalized_active_plan_text
+    _PLAN_FINALIZER_INSTALLED = True
