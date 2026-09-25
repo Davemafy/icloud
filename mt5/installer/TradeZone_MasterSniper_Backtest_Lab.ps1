@@ -71,6 +71,17 @@ function ReadDate([string]$Prompt,[string]$Default){
   return $dt
 }
 function EscapeMql([string]$s){return $s.Replace('\','\\').Replace('"','\"')}
+function CopyWithRetry([string]$Source,[string]$Destination,[int]$Attempts=20){
+  for($i=1;$i-le$Attempts;$i++){
+    try{
+      Copy-Item -LiteralPath $Source -Destination $Destination -Force -ErrorAction Stop
+      return
+    }catch{
+      if($i-eq$Attempts){throw}
+      Start-Sleep -Milliseconds 500
+    }
+  }
+}
 
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ' Trade Zone - MASTER SNIPER BACKTEST LAB' -ForegroundColor Cyan
@@ -127,15 +138,18 @@ try{
   $source=$source.Replace('input string DxySymbol="DXYUSD";','input string DxySymbol="'+(EscapeMql $dxy)+'";')
   $source=$source.Replace("input datetime TestStart=D'2026.06.01 00:00';","input datetime TestStart=D'"+$start.ToString('yyyy.MM.dd')+" 00:00';")
   $source=$source.Replace("input datetime TestEnd=D'2026.08.31 23:59';","input datetime TestEnd=D'"+$end.ToString('yyyy.MM.dd')+" 23:59';")
+  $runToken=(Get-Date).ToString('yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,8)
+  $relativeExportDir='TradeZoneBacktest\\MasterSniperV659Runs\\'+$runToken
+  $source=$source.Replace('input string OutputFolder="TradeZoneBacktest\\MasterSniperV659";','input string OutputFolder="'+(EscapeMql $relativeExportDir)+'";')
   [IO.File]::WriteAllText($exportSrc,$source,[Text.UTF8Encoding]::new($false))
 
   CompileOne $meta $exportSrc (Join-Path $tmp 'history_exporter_compile.log')
   CompileOne $meta $backtestSrc (Join-Path $tmp 'backtest_ea_compile.log')
 
   $common=Join-Path $env:APPDATA 'MetaQuotes\Terminal\Common\Files'
-  $exportDir=Join-Path $common 'TradeZoneBacktest\MasterSniperV659'
-  if(Test-Path $exportDir){Remove-Item $exportDir -Recurse -Force}
+  $exportDir=Join-Path $common $relativeExportDir
   New-Item -ItemType Directory -Force -Path $exportDir|Out-Null
+  Write-Host "This run uses a fresh export folder: $relativeExportDir" -ForegroundColor DarkGray
 
   Write-Host ''
   Write-Host 'ONE ACTION INSIDE MT5:' -ForegroundColor Yellow
@@ -165,8 +179,16 @@ try{
   }
   Write-Host 'PASS: required XAU/DXY history files exported.' -ForegroundColor Green
 
+  $uploadStaging=Join-Path $tmp 'history_upload'
+  New-Item -ItemType Directory -Force -Path $uploadStaging|Out-Null
+  foreach($name in $required + @('news.csv','export_manifest.txt')){
+    $srcFile=Join-Path $exportDir $name
+    if(Test-Path $srcFile){
+      CopyWithRetry $srcFile (Join-Path $uploadStaging $name)
+    }
+  }
   $upload=Join-Path $tmp 'history.zip'
-  Compress-Archive -Path (Join-Path $exportDir '*') -DestinationPath $upload -CompressionLevel Optimal -Force
+  Compress-Archive -Path (Join-Path $uploadStaging '*') -DestinationPath $upload -CompressionLevel Optimal -Force
 
   $manifestKv=@{}
   Get-Content $manifest | ForEach-Object {
