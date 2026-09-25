@@ -1,6 +1,6 @@
 #property strict
 #property script_show_inputs
-#property description "Trade Zone Master Sniper 6.5.89 historical data exporter. NO TRADING."
+#property description "Trade Zone Master Sniper 6.5.90 historical data exporter. NO TRADING."
 
 input string XauSymbol="XAUUSD";
 input string DxySymbol="DXYUSD";
@@ -41,9 +41,10 @@ bool EnsureHistory(string symbol,ENUM_TIMEFRAMES tf,datetime from,datetime to)
       Print("HISTORY_EXPORT FAIL symbol select ",symbol," err=",GetLastError());
       return false;
    }
-   MqlRates tmp[];
+
+   MqlRates probe[];
    ResetLastError();
-   int copied=CopyRates(symbol,tf,from,to,tmp);
+   int copied=CopyRates(symbol,tf,from,to,probe);
    if(copied<=0)
    {
       Print("HISTORY_EXPORT FAIL CopyRates ",symbol," tf=",EnumToString(tf)," err=",GetLastError());
@@ -59,10 +60,10 @@ int ExportBars(string fileName,string symbol,ENUM_TIMEFRAMES tf)
    if(!EnsureHistory(symbol,tf,from,to))return -1;
 
    int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
-   MqlRates rates[];
-   ArraySetAsSeries(rates,false);
+   MqlRates bars[];
+   ArraySetAsSeries(bars,false);
    ResetLastError();
-   int copied=CopyRates(symbol,tf,from,to,rates);
+   int copied=CopyRates(symbol,tf,from,to,bars);
    if(copied<=0)
    {
       Print("HISTORY_EXPORT FAIL CopyRates ",symbol," tf=",EnumToString(tf)," err=",GetLastError());
@@ -76,20 +77,20 @@ int ExportBars(string fileName,string symbol,ENUM_TIMEFRAMES tf)
       Print("HISTORY_EXPORT FAIL FileOpen ",path," err=",GetLastError());
       return -1;
    }
+
    FileWrite(h,"ts","open","high","low","close","tick_volume");
    int rows=0;
    for(int i=0;i<copied;i++)
    {
-      if(rates[i].time<=0)continue;
-      if(rates[i].time<TestStart-500*86400 && tf==PERIOD_D1)continue;
+      if(bars[i].time<=0)continue;
       FileWrite(
          h,
-         (long)rates[i].time,
-         DoubleToString(rates[i].open,digits),
-         DoubleToString(rates[i].high,digits),
-         DoubleToString(rates[i].low,digits),
-         DoubleToString(rates[i].close,digits),
-         (long)rates[i].tick_volume
+         (long)bars[i].time,
+         DoubleToString(bars[i].open,digits),
+         DoubleToString(bars[i].high,digits),
+         DoubleToString(bars[i].low,digits),
+         DoubleToString(bars[i].close,digits),
+         (long)bars[i].tick_volume
       );
       rows++;
    }
@@ -100,14 +101,14 @@ int ExportBars(string fileName,string symbol,ENUM_TIMEFRAMES tf)
 
 int ExportNewsCsv()
 {
-   string path=OutputFolder+"\
-ews.csv";
+   string path=OutputFolder+"\\news.csv";
    int h=FileOpen(path,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
    if(h==INVALID_HANDLE)
    {
       Print("HISTORY_EXPORT FAIL news FileOpen err=",GetLastError());
       return -1;
    }
+
    FileWrite(h,"ts","currency","title","impact");
    if(!ExportUsdNews)
    {
@@ -136,19 +137,22 @@ ews.csv";
    {
       if(values[i].time<from||values[i].time>to)continue;
       if(values[i].event_id==lastEvent&&values[i].time==lastTime)continue;
-      MqlCalendarEvent ev;
-      if(!CalendarEventById(values[i].event_id,ev))continue;
+
+      MqlCalendarEvent eventInfo;
+      if(!CalendarEventById(values[i].event_id,eventInfo))continue;
+
       FileWrite(
          h,
          (long)values[i].time,
          "USD",
-         ev.name,
-         ImpactName(ev.importance)
+         eventInfo.name,
+         ImpactName(eventInfo.importance)
       );
       lastEvent=values[i].event_id;
       lastTime=values[i].time;
       rows++;
    }
+
    FileClose(h);
    Print("HISTORY_EXPORT PASS news.csv rows=",rows);
    return rows;
@@ -164,13 +168,34 @@ bool ValidRange()
    return true;
 }
 
+void WriteManifest(ExportStat &stats[],int newsRows)
+{
+   string manifest=OutputFolder+"\\export_manifest.txt";
+   int h=FileOpen(manifest,FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(h==INVALID_HANDLE)
+   {
+      Print("HISTORY_EXPORT FAIL manifest FileOpen err=",GetLastError());
+      return;
+   }
+
+   FileWriteString(h,"contract=MASTER_SNIPER_V659_HISTORY_EXPORT_V1\r\n");
+   FileWriteString(h,"xau_symbol="+XauSymbol+"\r\n");
+   FileWriteString(h,"dxy_symbol="+DxySymbol+"\r\n");
+   FileWriteString(h,"test_start="+IntegerToString((int)TestStart)+"\r\n");
+   FileWriteString(h,"test_end="+IntegerToString((int)TestEnd)+"\r\n");
+   FileWriteString(h,"news_rows="+IntegerToString(newsRows)+"\r\n");
+   for(int i=0;i<ArraySize(stats);i++)
+      FileWriteString(h,stats[i].name+"_rows="+IntegerToString(stats[i].rows)+"\r\n");
+   FileClose(h);
+}
+
 void OnStart()
 {
-   Print("HISTORY_EXPORT START | NO TRADING | Master Sniper 6.5.89 replay input");
+   Print("HISTORY_EXPORT START | NO TRADING | Master Sniper 6.5.90 replay input");
    if(!ValidRange())return;
 
-   if(!FolderCreate(OutputFolder,FILE_COMMON) && GetLastError()!=5010)
-      Print("HISTORY_EXPORT INFO output folder already exists or could not be created err=",GetLastError());
+   FolderCreate("TradeZoneBacktest",FILE_COMMON);
+   FolderCreate(OutputFolder,FILE_COMMON);
 
    ExportStat stats[];
    ArrayResize(stats,8);
@@ -185,29 +210,10 @@ void OnStart()
 
    int newsRows=ExportNewsCsv();
    bool ok=(newsRows>=0);
-   for(int i=0;i<ArraySize(stats);i++)if(stats[i].rows<=0)ok=false;
+   for(int i=0;i<ArraySize(stats);i++)
+      if(stats[i].rows<=0)ok=false;
 
-   string manifest=OutputFolder+"\\export_manifest.txt";
-   int h=FileOpen(manifest,FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
-   if(h!=INVALID_HANDLE)
-   {
-      FileWriteString(h,"contract=MASTER_SNIPER_V659_HISTORY_EXPORT_V1\r
-");
-      FileWriteString(h,"xau_symbol="+XauSymbol+"\r
-");
-      FileWriteString(h,"dxy_symbol="+DxySymbol+"\r
-");
-      FileWriteString(h,"test_start="+IntegerToString((int)TestStart)+"\r
-");
-      FileWriteString(h,"test_end="+IntegerToString((int)TestEnd)+"\r
-");
-      FileWriteString(h,"news_rows="+IntegerToString(newsRows)+"\r
-");
-      for(int i=0;i<ArraySize(stats);i++)
-         FileWriteString(h,stats[i].name+"_rows="+IntegerToString(stats[i].rows)+"\r
-");
-      FileClose(h);
-   }
+   WriteManifest(stats,newsRows);
 
    if(ok)
    {
