@@ -1,6 +1,7 @@
 from .plan_execution_guard import install_plan_execution_guard
 from .clinical_review_hardening import install_clinical_review_hardening
 from .dashboard_recovery import install_dashboard_recovery
+from .dashboard_execution_truth import install_dashboard_execution_truth
 from .live_ownership_sync import install_live_ownership_sync
 from .master_sniper_zone_authority import install_master_sniper_zone_authority
 from .master_sniper_adaptive_geometry import install_master_sniper_adaptive_geometry
@@ -26,6 +27,11 @@ install_clinical_review_hardening()
 # Read-only dashboard transport recovery. Keep the dashboard live even if the SSE
 # aggregate is degraded or buffered; execution logic remains untouched.
 install_dashboard_recovery()
+
+# Surface the backend's Master Sniper risk/authority contract directly beside each
+# published zone. Display only: no grade, risk, plan, or Sequence decision is made
+# in the browser.
+install_dashboard_execution_truth()
 
 # Keep live persisted thesis/objective state synchronized with dashboard, chart
 # ownership rendering and the plan guard. A just-released owner fails closed until
