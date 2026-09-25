@@ -116,6 +116,13 @@ def test_mql_backtest_harness_uses_sidecar_authority_and_does_not_modify_stable_
     assert 'input string TesterContractFile="SMC_v659_tester_plans_contract.csv";' in text
     assert "TZBT_LoadTesterContracts" in text
     assert "TZBT_FindContract" in text
+    assert 'input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";' in text
+    assert 'input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";' in text
+    assert "void TZBT_InitJournal()" in text
+    assert "void TZBT_LogDeal(ulong deal)" in text
+    assert "void OnTradeTransaction(" in text
+    assert "double OnTester()" in text
+    assert "TesterStatistics(STAT_PROFIT)" in text
     assert "g_tzExecutionAuthority=(c.execution_authority" in text
     assert "g_tzQualifiedMitigations=c.qualified_mitigations" in text
     assert "g_tzOriginalRiskPct=(c.original_risk_pct>0?c.original_risk_pct:c.base_risk_pct)" in text
