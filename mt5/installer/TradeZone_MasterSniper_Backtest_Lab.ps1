@@ -178,6 +178,26 @@ try{
   $startEpoch=[long]$manifestKv['test_start']
   $endEpoch=[long]$manifestKv['test_end']
   if($startEpoch-le0-or$endEpoch-le$startEpoch){throw 'History exporter manifest contains invalid replay epochs.'}
+  $minimumRows=@{
+    'XAU_D1.csv_rows'=80;
+    'XAU_H4.csv_rows'=120;
+    'XAU_H1.csv_rows'=160;
+    'XAU_M15.csv_rows'=160;
+    'DXY_D1.csv_rows'=60;
+    'DXY_H4.csv_rows'=80;
+    'DXY_H1.csv_rows'=100
+  }
+  foreach($key in $minimumRows.Keys){
+    $actual=[int]$manifestKv[$key]
+    if($actual-lt[int]$minimumRows[$key]){
+      throw "Insufficient warm-up history: $key has $actual rows, needs at least $($minimumRows[$key])."
+    }
+  }
+  $newsRows=[int]$manifestKv['news_rows']
+  if((New-TimeSpan -Start $start -End $end).TotalDays -gt 7 -and $newsRows -le 0){
+    throw 'USD economic-calendar history is empty; full Master Sniper prompt replay cannot be certified.'
+  }
+  Write-Host "PASS: history warm-up contract complete; USD news rows=$newsRows." -ForegroundColor Green
   $startIso=[DateTimeOffset]::FromUnixTimeSeconds($startEpoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss+00:00')
   $endIso=[DateTimeOffset]::FromUnixTimeSeconds($endEpoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss+00:00')
   $tz=[uri]::EscapeDataString('Africa/Lagos')
