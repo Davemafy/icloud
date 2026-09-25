@@ -12,7 +12,7 @@ def test_integrated_lab_compiles_exports_replays_and_prepares_real_tick_test():
         "InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo.mq5",
         "CompileOne $meta $exportSrc",
         "CompileOne $meta $backtestSrc",
-        "TradeZoneBacktest\\MasterSniperV659",
+        "TradeZoneBacktest\\\\MasterSniperV659Runs\\\\",
         "/validation/backtest/v659/jobs",
         "Cloud replay status:",
         "/download",
@@ -62,3 +62,15 @@ def test_backtest_lab_does_not_modify_stable_manifest_or_live_ea_paths():
     assert "mt5/stable/manifest.json" not in text
     assert "Experts\\TradeZoneValidation" in text
     assert "Scripts\\TradeZoneValidation" in text
+
+
+
+def test_each_lab_run_uses_fresh_export_directory_and_stages_before_zip():
+    text = LAB.read_text(encoding="utf-8")
+    assert "MasterSniperV659Runs" in text
+    assert "$runToken=(Get-Date).ToString" in text
+    assert "$relativeExportDir" in text
+    assert "CopyWithRetry" in text
+    assert "$uploadStaging=Join-Path $tmp 'history_upload'" in text
+    assert "Compress-Archive -Path (Join-Path $uploadStaging '*')" in text
+    assert "Remove-Item $exportDir -Recurse -Force" not in text
