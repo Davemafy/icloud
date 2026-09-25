@@ -10,7 +10,7 @@ import threading
 import zipfile
 import uuid
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -103,12 +103,14 @@ def _next_readme(start: datetime, end: datetime) -> str:
         "Timeframe: M1\n"
         "Model: Every tick based on real ticks\n"
         f"From: {start.strftime('%Y.%m.%d')}\n"
-        f"To: {end.strftime('%Y.%m.%d')}\n"
+        f"Requested through: {end.strftime('%Y.%m.%d')} inclusive\n"
+        f"MT5 ToDate: {(end + timedelta(days=1)).strftime('%Y.%m.%d')} (exclusive)\n"
         "Optimization: Off\n"
         "Initial deposit: 10000 USD\n\n"
         "The legacy geometry file is named SMC_v6_tester_plans.csv so the "
         "backtest EA can use its default TesterPlanFile.\n"
         "The Sequence 3.42 sidecar is SMC_v659_tester_plans_contract.csv.\n"
+        "After the test, the result collector also includes MasterSniper_v659_tester_gate_audit.csv so every closed M1 bar has its final execution gate/reason.\n"
     )
 
 
