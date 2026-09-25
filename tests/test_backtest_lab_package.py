@@ -78,3 +78,15 @@ def test_each_lab_run_uses_fresh_export_directory_and_stages_before_zip():
     assert "$uploadStaging=Join-Path $tmp 'history_upload'" in text
     assert "Compress-Archive -Path (Join-Path $uploadStaging '*')" in text
     assert "Remove-Item $exportDir -Recurse -Force" not in text
+
+
+
+def test_lab_launcher_keeps_unexpected_failures_visible():
+    ps = LAB.read_text(encoding="utf-8")
+    bat = LAB_BAT.read_text(encoding="utf-8")
+    assert "MasterSniper_Backtest_Lab_LastRun.log" in ps
+    assert "Start-Transcript" in ps
+    assert "Stop-Transcript" in ps
+    assert "BACKTEST LAB POWERSHELL EXITED WITH CODE" in bat
+    assert "pause" in bat.lower()
+    assert "MasterSniper_Backtest_Lab_LastRun.log" in bat
