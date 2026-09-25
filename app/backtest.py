@@ -403,8 +403,8 @@ async def generate_v659(
     from .thesis_hard_release import hard_release_stale_thesis
     from .timezones import safe_zoneinfo
 
-    if SETTINGS.app_version != "6.5.89":
-        raise RuntimeError(f"BACKTEST_VERSION_DRIFT: expected Cloud 6.5.89, found {SETTINGS.app_version}")
+    if SETTINGS.app_version != "6.5.90":
+        raise RuntimeError(f"BACKTEST_VERSION_DRIFT: expected Cloud 6.5.90, found {SETTINGS.app_version}")
     if not SETTINGS.paper_only:
         raise RuntimeError("BACKTEST_REQUIRES_PAPER_ONLY")
 
