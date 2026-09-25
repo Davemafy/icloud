@@ -1,11 +1,13 @@
-"""Fail-closed release transformer for Master Sniper contract parity.
+"""Fail-closed verifier for the staged Master Sniper parity release candidates.
 
-This script is intentionally NOT a manifest promoter. It transforms a checked-out
-release branch only after verifying exact source anchors. Any source drift aborts.
-DEMO / PAPER ONLY until the release gate is completed.
+The native MT5 SHA-256 proof has already unlocked immutable Sequence 3.42 and
+DataBridge 1.51 candidate files on the staging branch. This verifier performs no
+manifest promotion and never rewrites those immutable candidates. Any drift aborts.
+DEMO / PAPER ONLY until every release gate is complete.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,152 +17,120 @@ BRIDGE_OLD = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority
 BRIDGE_NEW = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5"
 PARITY_INCLUDE_SRC = ROOT / "mt5/include/SniperContractParityV1.mqh"
 PARITY_INCLUDE_STABLE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
-
-
-def replace_once(text: str, old: str, new: str, *, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"{label}: expected exactly one source anchor, found {count}")
-    return text.replace(old, new, 1)
+MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 
 def require_all(text: str, needles: tuple[str, ...], *, label: str) -> None:
-    missing = [n for n in needles if n not in text]
+    missing = [needle for needle in needles if needle not in text]
     if missing:
         raise RuntimeError(f"{label}: required anchors missing: {missing}")
 
 
-def refuse_existing_targets() -> None:
-    for path in (SEQ_NEW, BRIDGE_NEW, PARITY_INCLUDE_STABLE):
-        if path.exists():
-            raise RuntimeError(f"refusing to overwrite immutable target: {path}")
-
-
-def build_sequence() -> str:
-    s = SEQ_OLD.read_text(encoding="utf-8")
+def verify_immutable_sources() -> None:
+    old_seq = SEQ_OLD.read_text(encoding="utf-8")
+    old_bridge = BRIDGE_OLD.read_text(encoding="utf-8")
     require_all(
-        s,
-        (
-            '#property version   "3.41"',
-            '#define TZ_SEQUENCE_VERSION "3.41"',
-            '#include <TradeZoneCore\\InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5>',
-            'string g_tzRiskContext="TREND";',
-            'void TZ_SendSequenceHeartbeat()',
-            'TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_tzLastModel),',
-            'g_tzExecutionAuthority=KV(text,"execution_authority");',
-            'TZ38_LoadRiskContract(text,g_plan.grade,g_plan.setup_type);',
-            'FileWriteString(h,"execution_authority="+g_tzExecutionAuthority+"\\r\\n");',
-        ),
-        label="sequence",
+        old_seq,
+        ('#property version   "3.41"', '#define TZ_SEQUENCE_VERSION "3.41"'),
+        label="Sequence 3.41 rollback",
     )
-    s = replace_once(s, '#property version   "3.41"', '#property version   "3.42"', label="sequence property version")
-    s = replace_once(s, '#define TZ_SEQUENCE_VERSION "3.41"', '#define TZ_SEQUENCE_VERSION "3.42"', label="sequence define version")
-    s = replace_once(
-        s,
-        '#include <TradeZoneCore\\InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5>',
-        '#include <TradeZoneCore\\InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5>\n'
-        '#include <TradeZoneCore\\SniperContractParityV1.mqh>',
-        label="sequence parity include",
-    )
-    s = replace_once(
-        s,
-        'string g_tzRiskContext="TREND";',
-        'string g_tzRiskContext="TREND";\n'
-        'int g_tzQualifiedMitigations=0;\n'
-        'string g_tzSniperContractFingerprint="";',
-        label="sequence parity globals",
-    )
-    s = replace_once(
-        s,
-        'TZ38_LoadRiskContract(text,g_plan.grade,g_plan.setup_type);',
-        'TZ38_LoadRiskContract(text,g_plan.grade,g_plan.setup_type);\n'
-        '   string parityGrade=KV(text,"current_grade");\n'
-        '   if(parityGrade!="")g_plan.grade=parityGrade;\n'
-        '   string qmit=KV(text,"qualified_mitigations");\n'
-        '   if(qmit=="")qmit=KV(text,"touch_count");\n'
-        '   g_tzQualifiedMitigations=(int)StringToInteger(qmit);\n'
-        '   g_tzSniperContractFingerprint=TZ_SniperContractFingerprint(\n'
-        '      g_plan.analysis_id,g_plan.zone_id,g_plan.original_direction,g_plan.grade,\n'
-        '      g_tzQualifiedMitigations,g_tzRiskContext,g_tzOriginalRiskPct,g_tzExecutionAuthority);',
-        label="sequence loaded parity contract",
-    )
-    s = replace_once(
-        s,
-        'FileWriteString(h,"execution_authority="+g_tzExecutionAuthority+"\\r\\n");',
-        'FileWriteString(h,"execution_authority="+g_tzExecutionAuthority+"\\r\\n");\n'
-        '   FileWriteString(h,"direction="+g_plan.original_direction+"\\r\\n");\n'
-        '   FileWriteString(h,"current_grade="+g_plan.grade+"\\r\\n");\n'
-        '   FileWriteString(h,"qualified_mitigations="+IntegerToString(g_tzQualifiedMitigations)+"\\r\\n");\n'
-        '   FileWriteString(h,"contract_fingerprint="+g_tzSniperContractFingerprint+"\\r\\n");',
-        label="sequence state parity echo",
-    )
-    old_fmt = (
-        '\"state_persisted\\":true,\\\"analysis_id\\":\\\"%s\\\",\\\"zone_id\\":\\\"%s\\\",'
-        '\\\"plan_valid\\":%s,\\\"execution_authority\\":\\\"%s\\\",\\\"last_execution_model\\":\\\"%s\\\",'
-    )
-    new_fmt = (
-        '\"state_persisted\\":true,\\\"analysis_id\\":\\\"%s\\\",\\\"zone_id\\":\\\"%s\\\",'
-        '\\\"plan_valid\\":%s,\\\"execution_authority\\":\\\"%s\\\",'
-        '\\\"direction\\":\\\"%s\\\",\\\"current_grade\\":\\\"%s\\\",'
-        '\\\"qualified_mitigations\\":%d,\\\"risk_context\\":\\\"%s\\\",'
-        '\\\"base_risk_pct\\":%s,\\\"contract_fingerprint\\":\\\"%s\\\",'
-        '\\\"last_execution_model\\":\\\"%s\\\",'
-    )
-    s = replace_once(s, old_fmt, new_fmt, label="sequence heartbeat parity format")
-    old_args = 'TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_tzLastModel),'
-    new_args = (
-        'TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",'
-        'TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_plan.original_direction),TZ_JsonEscape(g_plan.grade),'
-        'g_tzQualifiedMitigations,TZ_JsonEscape(g_tzRiskContext),DoubleToString(g_tzOriginalRiskPct,8),'
-        'TZ_JsonEscape(g_tzSniperContractFingerprint),TZ_JsonEscape(g_tzLastModel),'
-    )
-    s = replace_once(s, old_args, new_args, label="sequence heartbeat parity args")
-    return s
-
-
-def build_bridge() -> str:
-    b = BRIDGE_OLD.read_text(encoding="utf-8")
     require_all(
-        b,
+        old_bridge,
         ('#property version "1.50"', '#define TZ_BRIDGE_VERSION "1.50"', '#define TZ_SEQUENCE_EXPECTED "3.41"'),
-        label="bridge",
+        label="DataBridge 1.50 rollback",
     )
-    b = replace_once(b, '#property version "1.50"', '#property version "1.51"', label="bridge property version")
-    b = replace_once(b, '#define TZ_BRIDGE_VERSION "1.50"', '#define TZ_BRIDGE_VERSION "1.51"', label="bridge define version")
-    b = replace_once(b, '#define TZ_SEQUENCE_EXPECTED "3.41"', '#define TZ_SEQUENCE_EXPECTED "3.42"', label="bridge sequence expectation")
-    return b
 
 
-def build_parity_include() -> str:
-    text = PARITY_INCLUDE_SRC.read_text(encoding="utf-8")
+def verify_sequence_candidate() -> None:
+    seq = SEQ_NEW.read_text(encoding="utf-8")
     require_all(
-        text,
+        seq,
+        (
+            '#property version   "3.42"',
+            '#define TZ_SEQUENCE_VERSION "3.42"',
+            '#include <TradeZoneCore\\SniperContractParityV1.mqh>',
+            "void TZ42_RefreshSniperParityFromPlan(string text)",
+            "bool TZ42_NewEntryParitySafe()",
+            "bool TZ42_RevalidateParityBeforeOrder()",
+            'TZ_SetGate("PARITY","SNIPER_CONTRACT_UNVERIFIED")',
+            'TZ_SetGate("PARITY","SNIPER_CONTRACT_MISMATCH")',
+            "g_tzExpectedSniperContractFingerprint",
+            "g_tzSniperContractAuthority",
+            "g_tzSniperContractVerified",
+            "g_tzFlipSniperContractVerified",
+            "sniper_contract_verified=",
+            "sniper_contract_fingerprint=",
+            '\"direction\":\"%s\"',
+            '\"current_grade\":\"%s\"',
+            '\"qualified_mitigations\":%d',
+            '\"risk_context\":\"%s\"',
+            '\"base_risk_pct\":%s',
+            '\"contract_fingerprint\":\"%s\"',
+            '\"expected_contract_fingerprint\":\"%s\"',
+            '\"contract_execution_authority\":\"%s\"',
+            '\"contract_parity_status\":\"%s\"',
+            "TZ_PreCoreSync();ManagePositions();Evaluate();",
+            "if(!TZ42_NewEntryParitySafe())return false;",
+            "if(!TZ42_RevalidateParityBeforeOrder())return;",
+        ),
+        label="Sequence 3.42 candidate",
+    )
+    if "v3.41" in seq:
+        raise RuntimeError("Sequence 3.42 candidate still contains stale v3.41 runtime labels")
+
+
+def verify_bridge_candidate() -> None:
+    bridge = BRIDGE_NEW.read_text(encoding="utf-8")
+    require_all(
+        bridge,
+        (
+            '#property version "1.51"',
+            '#define TZ_BRIDGE_VERSION "1.51"',
+            '#define TZ_SEQUENCE_EXPECTED "3.42"',
+        ),
+        label="DataBridge 1.51 candidate",
+    )
+
+
+def verify_parity_include() -> None:
+    source = PARITY_INCLUDE_SRC.read_text(encoding="utf-8")
+    staged = PARITY_INCLUDE_STABLE.read_text(encoding="utf-8")
+    if source != staged:
+        raise RuntimeError("staged parity include differs from the native-vector-proven source")
+    require_all(
+        source,
         (
             '#define TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"',
-            'string TZ_SniperCanonicalContract(',
-            'string TZ_SniperSHA256(const string text)',
-            'string TZ_SniperContractFingerprint(',
+            "string TZ_SniperCanonicalContract(",
+            "string TZ_SniperSHA256(const string text)",
+            "string TZ_SniperContractFingerprint(",
         ),
         label="parity include",
     )
-    return text
+
+
+def verify_manifest_still_locked() -> None:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    expected = (
+        str(manifest.get("release") or ""),
+        str(manifest.get("data_bridge_version") or ""),
+        str(manifest.get("sequence_ea_version") or ""),
+    )
+    if expected != ("6.3.31", "1.50", "3.41"):
+        raise RuntimeError(f"manifest advanced before candidate gates completed: {expected}")
 
 
 def main() -> None:
-    refuse_existing_targets()
-    seq = build_sequence()
-    bridge = build_bridge()
-    parity_include = build_parity_include()
-
-    # Write only after every source anchor has validated and every transformed
-    # artifact has been built in memory. This prevents a partial release branch.
-    SEQ_NEW.write_text(seq, encoding="utf-8")
-    BRIDGE_NEW.write_text(bridge, encoding="utf-8")
-    PARITY_INCLUDE_STABLE.write_text(parity_include, encoding="utf-8")
-    print(f"generated {SEQ_NEW.relative_to(ROOT)}")
-    print(f"generated {BRIDGE_NEW.relative_to(ROOT)}")
-    print(f"generated {PARITY_INCLUDE_STABLE.relative_to(ROOT)}")
-    print("manifest intentionally unchanged; promotion remains a separate release gate")
+    for path in (SEQ_NEW, BRIDGE_NEW, PARITY_INCLUDE_STABLE):
+        if not path.exists():
+            raise RuntimeError(f"required immutable candidate missing: {path}")
+    verify_immutable_sources()
+    verify_sequence_candidate()
+    verify_bridge_candidate()
+    verify_parity_include()
+    verify_manifest_still_locked()
+    print("Master Sniper parity candidates verified.")
+    print("Stable manifest remains locked at 6.3.31 / 1.50 / 3.41.")
 
 
 if __name__ == "__main__":
