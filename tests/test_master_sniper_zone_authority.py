@@ -44,7 +44,9 @@ def test_interacting_zone_is_not_rejected_by_side_rule():
     snap = SimpleNamespace(mid=4250.0, bid=4249.9, ask=4250.1)
     buy = _zone("BUY_INTERACT", Direction.BUY, 4245.0, 4255.0)
     sell = _zone("SELL_INTERACT", Direction.SELL, 4245.0, 4255.0)
-    # Interaction is intentionally neutral in the first rank fields for both
-    # directions: once price is inside the zone, it is a legitimate live test.
-    assert engine._rank(buy, snap)[0:2] == (0, 0)
-    assert engine._rank(sell, snap)[0:2] == (0, 0)
+    # Interaction neutralizes the side and interaction penalties for both
+    # directions. Source-evidence quality remains an independent rank field.
+    assert engine._rank(buy, snap)[0] == 0
+    assert engine._rank(buy, snap)[2] == 0
+    assert engine._rank(sell, snap)[0] == 0
+    assert engine._rank(sell, snap)[2] == 0
