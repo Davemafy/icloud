@@ -26,6 +26,7 @@ from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
 from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
 from .sniper_validation_ledger import build_validation_ledger, export_validation_csv
+from .backtest_jobs import BacktestJobError, run_replay_job
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -290,6 +291,42 @@ def heartbeat(h: Heartbeat):
     save_heartbeat(h)
     restored = recover_owner_from_sequence_heartbeat(h)
     return {"ok": True, "owner_mirror_restored": restored}
+
+
+@app.post("/validation/backtest/v659/replay", dependencies=[Depends(require_api_key)])
+async def master_sniper_backtest_replay(
+    request: Request,
+    start: str,
+    end: str,
+    timezone_name: str = "Africa/Lagos",
+    spread_points: float = 16.0,
+    point: float = 0.01,
+):
+    """Authenticated research-only historical replay.
+
+    The uploaded ZIP is processed in a disposable replay database and never
+    writes to the live Cloud snapshot/analysis/journal tables.
+    """
+    payload = await request.body()
+    try:
+        result = await asyncio.to_thread(
+            run_replay_job,
+            payload,
+            start=start,
+            end=end,
+            timezone_name=timezone_name,
+            spread_points=spread_points,
+            point=point,
+        )
+    except BacktestJobError as exc:
+        message = str(exc)
+        status = 409 if "already running" in message else 400
+        raise HTTPException(status_code=status, detail=message)
+    return Response(
+        content=result,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=master_sniper_v659_backtest_package.zip"},
+    )
 
 
 @app.post("/mt5/feedback", dependencies=[Depends(require_api_key)])
