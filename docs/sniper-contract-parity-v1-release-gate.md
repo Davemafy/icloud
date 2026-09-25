@@ -41,6 +41,7 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 - [x] Native-vector-proven parity include staged separately from the rollback stack.
 - [x] Stable manifest remains 6.3.31 / 1.50 / 3.41.
 - [x] Native MetaEditor candidate compile PASS: DataBridge 1.51 and Sequence 3.42 both 0 errors / 0 warnings; working EAs not replaced or attached.
+- [x] Live runtime parity PASS after Cloud finalizer hotfix: MATCH / UNVERIFIED / MISMATCH / OVERALL all PASS; no orders sent.
 
 ## Promotion gates
 
@@ -56,9 +57,9 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 - [x] Native MetaEditor compile proves DataBridge 1.51: 0 errors / 0 warnings.
 - [x] Native MetaEditor compile proves Sequence 3.42: 0 errors / 0 warnings.
 - [ ] Candidate SHA-256 values are frozen for promotion.
-- [ ] End-to-end runtime test proves MATCH permits the intended new-entry path.
-- [ ] End-to-end runtime test proves UNVERIFIED fails closed for new entries.
-- [ ] End-to-end runtime test proves MISMATCH fails closed for new entries.
+- [x] End-to-end runtime test proves MATCH permits the intended new-entry path.
+- [x] End-to-end runtime test proves UNVERIFIED fails closed for new entries.
+- [x] End-to-end runtime test proves MISMATCH fails closed for new entries.
 - [ ] Runtime test proves existing-position management remains available under mismatch/unverified telemetry.
 - [ ] Dashboard/version truth shows the promoted versions consistently.
 - [ ] Manifest/updater is promoted only after all preceding gates pass.
