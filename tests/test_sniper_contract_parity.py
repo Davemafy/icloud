@@ -1,4 +1,4 @@
-from app.sniper_contract_parity import evaluate_sequence_parity
+from app.sniper_contract_parity import contract_fingerprint, evaluate_sequence_parity
 
 
 def _cloud():
@@ -26,6 +26,32 @@ def test_complete_matching_contract_is_verified():
     assert out["status"] == "MATCH"
     assert out["verified"] is True
     assert out["new_entry_safe"] is True
+    assert out["cloud_fingerprint"] == out["computed_sequence_fingerprint"]
+
+
+def test_fingerprint_is_stable_across_numeric_wire_representations():
+    a = _cloud()
+    b = _cloud()
+    b["qualified_mitigations"] = "1"
+    b["base_risk_pct"] = "1.00000000"
+    assert contract_fingerprint(a) == contract_fingerprint(b)
+
+
+def test_fingerprint_changes_for_every_authoritative_field():
+    baseline = contract_fingerprint(_cloud())
+    for field, value in {
+        "analysis_id": "A2",
+        "zone_id": "Z2",
+        "direction": "BUY",
+        "current_grade": "A",
+        "qualified_mitigations": 2,
+        "risk_context": "COUNTERTREND",
+        "base_risk_pct": 0.5,
+        "execution_authority": "NONE",
+    }.items():
+        changed = _cloud()
+        changed[field] = value
+        assert contract_fingerprint(changed) != baseline
 
 
 def test_any_contract_difference_fails_closed_for_new_entries():
