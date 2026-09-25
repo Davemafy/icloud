@@ -154,6 +154,34 @@ bool TZ42_NewEntryParitySafe()
    return true;
 }
 
+bool TZ42_RevalidateParityBeforeOrder()
+{
+   if(IsTester()||OperatingMode!=LIVE_CLOUD)return true;
+   string text;
+   if(!HttpGet("/mt5/plan",text))
+   {
+      TZ_SetGate("PARITY","SNIPER_CONTRACT_REVALIDATION_UNAVAILABLE");
+      return false;
+   }
+   if(KV(text,"live_block")=="1")
+   {
+      TZ_SetGate("SAFETY","CLOUD_LIVE_BLOCK:"+KV(text,"live_block_reason"));
+      return false;
+   }
+   string fresh=KV(text,"contract_fingerprint");
+   if(fresh=="")
+   {
+      TZ_SetGate("PARITY","SNIPER_CONTRACT_UNVERIFIED");
+      return false;
+   }
+   if(!g_tzSniperContractVerified||fresh!=g_tzExpectedSniperContractFingerprint)
+   {
+      TZ_SetGate("PARITY","SNIPER_CONTRACT_MISMATCH");
+      return false;
+   }
+   return true;
+}
+
 bool TZ40_FailedZoneBreakerPD(
    bool buy,double oteLo,double oteHi,
    double &pdLo,double &pdHi,double &eLo,double &eHi,string &pdType)
@@ -1661,6 +1689,7 @@ void Evaluate()
    if(!TZ36_MinRRValid(entry,sl,openTarget,rr,rrRequired))
    {TZ_SetGate("TARGET","MIN_RR_NOT_MET");return;}
 
+   if(!TZ42_RevalidateParityBeforeOrder())return;
    double risk=TZ38_ThesisBudget(false,g_plan.grade)*share;g_tzLastRiskMoney=risk;double lots=TZ37_LotsForRisk(sig.buy,entry,sl,risk);g_tzLastIntendedLots=lots;if(lots<=0){TZ_SetGate("RISK","LOT_SIZE_ZERO_OR_BELOW_MIN");return;}
    TZ36_SendEntryDecisionAudit(tag,sig,entry,sl,lots,a,valueReactionIdx,openTarget,rr,rrRequired,reactionRequired,r);
    if(TZ37_SendOrders(sig.buy,entry,sl,lots,false,tag,sig.pd_type))
