@@ -21,6 +21,7 @@ def install_plan_execution_guard() -> None:
         apply_execution_separation,
         install_ai_contract_correction,
     )
+    from .sniper_contract_parity import finalize_plan_contract_text
 
     install_ai_contract_correction()
     original = engine.active_plan_text
@@ -30,7 +31,8 @@ def install_plan_execution_guard() -> None:
 
     def guarded_active_plan_text(analysis, snapshot=None):
         safety_checked = guard_plan_text(original(analysis, snapshot), analysis, snapshot)
-        return apply_execution_separation(safety_checked, analysis, snapshot)
+        separated = apply_execution_separation(safety_checked, analysis, snapshot)
+        return finalize_plan_contract_text(separated)
 
     guarded_active_plan_text._tradezone_execution_guard_v657 = True
     _original_active_plan_text = original
