@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.31"
-    assert manifest["data_bridge_version"] == "1.50"
-    assert manifest["sequence_ea_version"] == "3.41"
+    assert manifest["release"] == "6.3.32"
+    assert manifest["data_bridge_version"] == "1.51"
+    assert manifest["sequence_ea_version"] == "3.42"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -34,8 +34,15 @@ def test_professional_release_contract_is_self_consistent():
     bridge_core_digest = hashlib.sha256(bridge_core_source.read_bytes()).hexdigest()
     assert bridge_core_digest == bridge_core["sha256"]
 
+    parity = next(item for item in manifest["support_files"] if item["role"] == "sniper_contract_parity")
+    parity_source = ROOT / parity["path"]
+    assert parity_source.exists()
+    parity_digest = hashlib.sha256(parity_source.read_bytes()).hexdigest()
+    assert parity_digest == parity["sha256"]
+    assert parity["target"] == "Include\\TradeZoneCore"
+
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -118,5 +125,11 @@ def test_professional_release_contract_is_self_consistent():
         "accepted_zone_breaker_pd_array",
         "accepted_zone_breaker_retest_mss_displacement_entry",
         "accepted_zone_breaker_no_chase",
+        "master_sniper_contract_parity_v1",
+        "cloud_mt5_contract_fingerprint",
+        "qualified_mitigation_truth",
+        "fail_closed_sniper_contract_gate",
+        "sequence_342_parity_runtime",
+        "databridge_151_sequence_342_truth",
     }
     assert required.issubset(set(manifest["channel_features"]))
