@@ -60,11 +60,9 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
 
     A raw core touch never consumes freshness by itself. A qualified mitigation
     requires the correct approach, a core touch, and then a later M15 bar that
-    closes through the expected envelope side. The confirmation bar may wick
-    back into the core; because it is a later bar, that remains part of the same
-    institutional interaction rather than a new mitigation. Same-bar rejection
-    is REACTION_PENDING, not mitigation. Recontacts before confirmed departure
-    remain one institutional campaign.
+    closes back through the expected envelope side while its full range is clear
+    of the core. Same-bar wick rejection is REACTION_PENDING, not mitigation.
+    Recontacts before confirmed departure remain one institutional campaign.
     """
     expected_side = "BELOW" if direction == Direction.SELL else "ABOVE"
     distal_side = "ABOVE" if direction == Direction.SELL else "BELOW"
@@ -89,7 +87,7 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
             "expected_reaction_exit_side": expected_side,
             "distal_invalidation_side": distal_side,
             "counting_stopped": bool(invalidated_at),
-            "confirmation_rule": "SUBSEQUENT_M15_EXPECTED_SIDE_ENVELOPE_CLOSE",
+            "confirmation_rule": "SUBSEQUENT_M15_EXPECTED_SIDE_CLOSE_CLEAR_OF_CORE",
         }
 
     if not ordered:
@@ -149,12 +147,13 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
         elif not hit_core:
             raw_core_engaged = False
 
-        # A campaign qualifies only on a later directional envelope departure.
-        # A wick back into the core on that later bar stays inside the same
-        # campaign and cannot create an additional mitigation.
         if campaign is not None:
             touched_at = int(campaign.get("core_touched_at") or 0)
-            if ts > touched_at and close_side == expected_side:
+            # Institutional mitigation is confirmed only after price has fully
+            # disengaged from the core on a later M15 bar. A bar that closes on
+            # the expected side but still wicks into the core is a recontact in
+            # the same campaign, not a completed mitigation.
+            if ts > touched_at and close_side == expected_side and not hit_core:
                 qualified += 1
                 events.append({**campaign, "event_type": "MITIGATION", "qualified": True, "qualified_index": qualified, "qualified_count_before": qualified - 1, "qualified_at": ts, "exit_side": expected_side, "exit_close": float(bar.close), "reason": "CONFIRMED_DIRECTIONAL_CORE_REACTION_COMPLETE"})
                 campaign = None
@@ -164,10 +163,7 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
                 campaign = None
                 reset_required = True
 
-        # A confirmed departure resets campaign state. A clean outside bar can
-        # re-arm the next campaign, but the confirmation bar cannot itself count
-        # as another mitigation.
-        if reset_required and campaign is None and close_side == expected_side:
+        if reset_required and campaign is None and close_side == expected_side and not hit_core:
             reset_required = False
             last_outside_side = expected_side
             last_outside_ts = ts
