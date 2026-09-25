@@ -123,10 +123,20 @@ def _feedback_event_uid(f: Feedback) -> str:
     return ""
 
 
-def save_snapshot(s: MarketSnapshot) -> None:
+def save_snapshot_record(s: MarketSnapshot) -> None:
+    """Persist snapshot payload only, without advancing lifecycle side effects.
+
+    Live ingestion should continue using save_snapshot(). Historical replay uses
+    this narrow helper only when production code needs latest_snapshot() context,
+    while lifecycle advancement is driven explicitly once per replay minute.
+    """
     with _lock, connect() as db:
         db.execute("INSERT INTO snapshots(ts,payload) VALUES(?,?)", (s.sent_at, s.model_dump_json()))
         db.execute("DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY id DESC LIMIT 6)")
+
+
+def save_snapshot(s: MarketSnapshot) -> None:
+    save_snapshot_record(s)
 
     # PAPER/DEMO ONLY: exact-geometry publication truth is updated first. Only
     # post-publication contact with the currently published map can later create
