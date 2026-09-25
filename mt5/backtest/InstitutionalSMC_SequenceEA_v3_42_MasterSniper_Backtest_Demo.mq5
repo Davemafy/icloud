@@ -1808,6 +1808,7 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
 
 void Evaluate()
 {
+   g_tzCandidateModel="NONE";
    // Critical ordering fix: capture M15 accepted invalidation against the OLD zone
    // before RefreshPlan / cloud authority changes can replace or de-authorize it.
    TZ28_ArmAcceptedFlip();
@@ -1835,8 +1836,6 @@ void Evaluate()
    MqlTick tk;if(!SymbolInfoTick(_Symbol,tk)){TZ_SetGate("MARKET","NO_TICK");return;}
    bool origBuy=(g_plan.original_direction=="BUY"),havePos=AnyOurPosition();
    bool recentZone=TZ_RecentZoneInteraction(r,MathMax(30,ResearchRecentZoneBars));Signal sig;ZeroMemory(sig);string tag="";double share=0;
-   g_tzCandidateModel="NONE";
-
    // Terminal cap truth: after R2 (default MaxReentriesPerThesis=2), the same
    // thesis may continue as context but cannot silently advertise another value wait.
    if(!havePos&&EnableReentries&&MaxReentriesPerThesis>0&&g_reentries>=MaxReentriesPerThesis)
