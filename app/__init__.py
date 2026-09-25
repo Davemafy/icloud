@@ -5,6 +5,7 @@ from .dashboard_execution_truth import install_dashboard_execution_truth
 from .live_ownership_sync import install_live_ownership_sync
 from .master_sniper_zone_authority import install_master_sniper_zone_authority
 from .master_sniper_adaptive_geometry import install_master_sniper_adaptive_geometry
+from .sniper_contract_parity import install_plan_contract_finalizer
 
 # DEMO/PAPER ONLY: fail closed before MT5 receives an executable plan.
 install_plan_execution_guard()
@@ -37,3 +38,7 @@ install_dashboard_execution_truth()
 # ownership rendering and the plan guard. A just-released owner fails closed until
 # the scheduler completes a fresh analysis; no execution gate is bypassed.
 install_live_ownership_sync()
+
+# Fingerprint the final plan only after every authority/safety wrapper above has
+# had the opportunity to fail it closed. This must remain the outermost wrapper.
+install_plan_contract_finalizer()
