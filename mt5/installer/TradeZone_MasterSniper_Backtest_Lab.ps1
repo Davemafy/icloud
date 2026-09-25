@@ -311,6 +311,10 @@ try{
     'mkdir "%OUT%"'+$nl+
     'copy /y "'+$commonRoot+'\MasterSniper_v659_tester_journal.csv" "%OUT%\" >nul'+$nl+
     'copy /y "'+$commonRoot+'\MasterSniper_v659_tester_summary.txt" "%OUT%\" >nul'+$nl+
+    'copy /y "'+$commonRoot+'\MasterSniper_v659_tester_gate_audit.csv" "%OUT%\" >nul'+$nl+
+    'copy /y "'+(Join-Path $resultDir 'SMC_v6_tester_plans.csv')+'" "%OUT%\" >nul'+$nl+
+    'copy /y "'+(Join-Path $resultDir 'SMC_v659_tester_plans_contract.csv')+'" "%OUT%\" >nul'+$nl+
+    'copy /y "'+(Join-Path $resultDir 'replay_stdout.txt')+'" "%OUT%\" >nul'+$nl+
     'copy /y "'+$resultMeta+'" "%OUT%\" >nul'+$nl+
     'copy /y "'+(Join-Path $resultDir 'MasterSniper_Backtest_Job.json')+'" "%OUT%\" >nul'+$nl+
     'powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path ''%OUT%\*'' -DestinationPath ''%USERPROFILE%\Desktop\MasterSniper_Backtest_Result.zip'' -Force"'+$nl+
