@@ -1,7 +1,9 @@
 from app.sniper_contract_parity import (
     contract_fingerprint,
     evaluate_sequence_parity,
+    finalize_plan_contract_text,
     plan_contract_from_kv,
+    plan_contract_from_text,
     sequence_contract_from_details,
 )
 
@@ -148,3 +150,25 @@ def test_sequence_contract_prefers_loaded_contract_authority_over_runtime_gate_a
     out = sequence_contract_from_details(details)
     assert out["execution_authority"] == "PRIMARY"
     assert out["contract_fingerprint"] == contract_fingerprint(_cloud())
+
+
+def test_finalizer_recomputes_fingerprint_after_authority_changes():
+    raw = (
+        "analysis_id=A1\n"
+        "zone_id=Z1\n"
+        "original_direction=SELL\n"
+        "grade=A+\n"
+        "current_grade=A+\n"
+        "qualified_mitigations=1\n"
+        "risk_context=TREND\n"
+        "original_risk_pct=1.00\n"
+        "execution_authority=NONE\n"
+        "contract_fingerprint=stale\n"
+    )
+    final = finalize_plan_contract_text(raw)
+    contract = plan_contract_from_text(final)
+    lines = dict(line.split("=", 1) for line in final.splitlines() if "=" in line)
+    assert lines["base_risk_pct"] == "1.00000000"
+    assert lines["sniper_parity_version"] == "SNIPER_PARITY_V1"
+    assert lines["contract_fingerprint"] == contract_fingerprint(contract)
+    assert lines["contract_fingerprint"] != "stale"
