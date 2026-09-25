@@ -1,6 +1,10 @@
 from pathlib import Path
 import ast
 import csv
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
 
 from app import backtest
 
@@ -133,3 +137,87 @@ def test_mt5_style_date_time_headers_are_accepted(tmp_path):
     assert len(series.rows) == 1
     assert series.rows[0].close == 4293.5
     assert series.rows[0].tick_volume == 123.0
+
+
+def _write_history(path, start_ts, count, step, base):
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["ts", "open", "high", "low", "close", "tick_volume"])
+        first = start_ts - count * step
+        for i in range(count):
+            ts = first + i * step
+            center = base + i * 0.02
+            writer.writerow([ts, center, center + 0.6, center - 0.6, center + 0.1, 100 + i % 20])
+
+
+def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_path):
+    input_dir = tmp_path / "history"
+    input_dir.mkdir()
+    start = int(datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc).timestamp())
+
+    specs = {
+        "XAU_D1": (400, 86400, 4200.0),
+        "XAU_H4": (800, 14400, 4250.0),
+        "XAU_H1": (900, 3600, 4280.0),
+        "XAU_M15": (600, 900, 4290.0),
+        "DXY_D1": (400, 86400, 100.0),
+        "DXY_H4": (800, 14400, 101.0),
+        "DXY_H1": (900, 3600, 102.0),
+    }
+    for name, (count, step, base) in specs.items():
+        _write_history(input_dir / f"{name}.csv", start, count, step, base)
+
+    # Three just-closed M1 clocks are enough for the startup replay smoke test.
+    with (input_dir / "XAU_M1.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["ts", "open", "high", "low", "close", "tick_volume"])
+        for i in range(3):
+            ts = start - 60 + i * 60
+            px = 4293.0 + i * 0.1
+            writer.writerow([ts, px, px + 0.2, px - 0.2, px + 0.05, 100])
+
+    out = tmp_path / "plans.csv"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.backtest",
+            "--input-dir",
+            str(input_dir),
+            "--start",
+            "2026-08-03T12:00:00+00:00",
+            "--end",
+            "2026-08-03T12:02:00+00:00",
+            "--out",
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=45,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
+    contract = tmp_path / "plans_contract.csv"
+    metadata = tmp_path / "plans_metadata.json"
+    assert out.exists()
+    assert contract.exists()
+    assert metadata.exists()
+
+    with out.open(newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        header = next(reader)
+        rows = list(reader)
+    with contract.open(newline="", encoding="utf-8") as handle:
+        contract_reader = csv.reader(handle)
+        contract_header = next(contract_reader)
+        contract_rows = list(contract_reader)
+
+    assert header == backtest.PLAN_FIELDS
+    assert contract_header == backtest.CONTRACT_FIELDS
+    assert rows
+    assert contract_rows
+    meta = json.loads(metadata.read_text(encoding="utf-8"))
+    assert meta["contract"] == backtest.REPLAY_CONTRACT
+    assert meta["no_lookahead"] is True
+    assert meta["cloud_version"] == "6.5.89"
+    assert meta["sequence_contract"] == "3.42"
