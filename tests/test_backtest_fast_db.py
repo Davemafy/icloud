@@ -4,9 +4,9 @@ from app import db
 
 
 def test_replay_fast_db_reuses_one_connection_and_uses_disposable_pragmas(tmp_path, monkeypatch):
-    old_path = db.SETTINGS.db_path
+    replay_path = str(tmp_path / "replay.db")
+    monkeypatch.setattr(db, "_path", lambda: replay_path)
     try:
-        db.SETTINGS.db_path = str(tmp_path / "replay.db")
         monkeypatch.setenv("TRADEZONE_REPLAY_FAST_DB", "1")
         if getattr(db._replay_local, "connection", None) is not None:
             try:
@@ -31,13 +31,13 @@ def test_replay_fast_db_reuses_one_connection_and_uses_disposable_pragmas(tmp_pa
                 pass
         db._replay_local.connection = None
         db._replay_local.path = ""
-        db.SETTINGS.db_path = old_path
+
 
 
 def test_live_db_connect_path_remains_wal_and_not_reused(tmp_path, monkeypatch):
-    old_path = db.SETTINGS.db_path
+    live_path = str(tmp_path / "live.db")
+    monkeypatch.setattr(db, "_path", lambda: live_path)
     try:
-        db.SETTINGS.db_path = str(tmp_path / "live.db")
         monkeypatch.delenv("TRADEZONE_REPLAY_FAST_DB", raising=False)
         first = db.connect()
         second = db.connect()
@@ -46,7 +46,7 @@ def test_live_db_connect_path_remains_wal_and_not_reused(tmp_path, monkeypatch):
         first.close()
         second.close()
     finally:
-        db.SETTINGS.db_path = old_path
+        pass
 
 
 def test_backtest_child_explicitly_enables_fast_replay_db():
