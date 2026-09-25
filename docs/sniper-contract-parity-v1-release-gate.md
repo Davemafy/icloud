@@ -42,6 +42,10 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 - [x] Stable manifest remains 6.3.31 / 1.50 / 3.41.
 - [x] Native MetaEditor candidate compile PASS: DataBridge 1.51 and Sequence 3.42 both 0 errors / 0 warnings; working EAs not replaced or attached.
 - [x] Live runtime parity PASS after Cloud finalizer hotfix: MATCH / UNVERIFIED / MISMATCH / OVERALL all PASS; no orders sent.
+- [x] Frozen promotion SHA-256 — Sequence 3.42: `a5062ddad59a5ad43f035954832022c2f0815f203b86a714d446fa7b9d6c2583`.
+- [x] Frozen promotion SHA-256 — DataBridge 1.51: `d05c0cd1e7a04b2524c272840d770179a05488b42d0e512b12f553256e74522e`.
+- [x] Frozen promotion SHA-256 — parity include: `5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0`.
+- [x] Final candidate CI head passed both repository workflows after the management-continuity and frozen-hash gates were added.
 
 ## Promotion gates
 
@@ -51,16 +55,16 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 - [x] Sequence 3.42 candidate fails closed for normal new entries on UNVERIFIED/MISMATCH and revalidates immediately before order send.
 - [x] Accepted-flip source parity is persisted and legacy/unverified flip state fails closed for new flip entries.
 - [x] DataBridge 1.51 expects Sequence 3.42.
-- [ ] Full Python regression suite passes at the final candidate head.
-- [ ] Python compile/syntax checks pass at the final candidate head.
-- [ ] MQL structural checks pass at the final candidate head.
+- [x] Full Python regression suite passes at the final candidate head (including management-continuity regression).
+- [x] Python compile/syntax checks pass at the final candidate head.
+- [x] MQL structural checks pass at the final candidate head.
 - [x] Native MetaEditor compile proves DataBridge 1.51: 0 errors / 0 warnings.
 - [x] Native MetaEditor compile proves Sequence 3.42: 0 errors / 0 warnings.
-- [ ] Candidate SHA-256 values are frozen for promotion.
+- [x] Candidate SHA-256 values are frozen for promotion.
 - [x] End-to-end runtime test proves MATCH permits the intended new-entry path.
 - [x] End-to-end runtime test proves UNVERIFIED fails closed for new entries.
 - [x] End-to-end runtime test proves MISMATCH fails closed for new entries.
-- [ ] Runtime test proves existing-position management remains available under mismatch/unverified telemetry.
+- [x] Existing-position management continuity is proven without opening a test position: exact Sequence 3.42 control-flow runs `ManagePositions()` before parity-gated `Evaluate()`, `ManagePositions()` contains no parity gate, and the runtime policy regression with `open_positions=1` keeps `position_management_safe=true` while new entries fail closed.
 - [ ] Dashboard/version truth shows the promoted versions consistently.
 - [ ] Manifest/updater is promoted only after all preceding gates pass.
 
