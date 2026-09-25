@@ -1,3 +1,4 @@
+from app.live_ownership_sync import _append_guard_reason
 from app.sniper_contract_parity import (
     contract_fingerprint,
     evaluate_sequence_parity,
@@ -172,3 +173,36 @@ def test_finalizer_recomputes_fingerprint_after_authority_changes():
     assert lines["sniper_parity_version"] == "SNIPER_PARITY_V1"
     assert lines["contract_fingerprint"] == contract_fingerprint(contract)
     assert lines["contract_fingerprint"] != "stale"
+
+
+def test_live_ownership_fail_closed_mutation_is_refingerprinted():
+    raw = (
+        "analysis_id=A1\n"
+        "zone_id=Z1\n"
+        "original_direction=SELL\n"
+        "grade=A+\n"
+        "current_grade=A+\n"
+        "qualified_mitigations=1\n"
+        "risk_context=TREND\n"
+        "original_risk_pct=1.00\n"
+        "execution_authority=HTF_CORE_HANDOFF\n"
+        "ea_mode=DUAL_BRANCH\n"
+    )
+    before = finalize_plan_contract_text(raw)
+    before_lines = dict(line.split("=", 1) for line in before.splitlines() if "=" in line)
+    blocked = _append_guard_reason(before, "LIVE_THESIS_OWNER_SELECTION_MISMATCH")
+    blocked_lines = dict(line.split("=", 1) for line in blocked.splitlines() if "=" in line)
+    assert blocked_lines["execution_authority"] == "NONE"
+    assert blocked_lines["contract_fingerprint"] == before_lines["contract_fingerprint"]
+
+    final = finalize_plan_contract_text(blocked)
+    final_lines = dict(line.split("=", 1) for line in final.splitlines() if "=" in line)
+    contract = plan_contract_from_text(final)
+    assert final_lines["execution_authority"] == "NONE"
+    assert final_lines["contract_fingerprint"] == contract_fingerprint(contract)
+    assert final_lines["contract_fingerprint"] != before_lines["contract_fingerprint"]
+
+
+def test_package_installs_sniper_finalizer_after_live_ownership_wrapper():
+    text = __import__("pathlib").Path("app/__init__.py").read_text(encoding="utf-8")
+    assert text.index("install_live_ownership_sync()") < text.index("install_plan_contract_finalizer()")
