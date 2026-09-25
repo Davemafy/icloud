@@ -7,6 +7,7 @@ DEMO / PAPER ONLY until every release gate is complete.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -18,6 +19,12 @@ BRIDGE_NEW = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContract
 PARITY_INCLUDE_SRC = ROOT / "mt5/include/SniperContractParityV1.mqh"
 PARITY_INCLUDE_STABLE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 MANIFEST = ROOT / "mt5/stable/manifest.json"
+
+FROZEN_SHA256 = {
+    SEQ_NEW: "a5062ddad59a5ad43f035954832022c2f0815f203b86a714d446fa7b9d6c2583",
+    BRIDGE_NEW: "d05c0cd1e7a04b2524c272840d770179a05488b42d0e512b12f553256e74522e",
+    PARITY_INCLUDE_STABLE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
+}
 
 
 def require_all(text: str, needles: tuple[str, ...], *, label: str) -> None:
@@ -109,6 +116,15 @@ def verify_parity_include() -> None:
     )
 
 
+def verify_frozen_candidate_hashes() -> None:
+    for path, expected in FROZEN_SHA256.items():
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != expected:
+            raise RuntimeError(
+                f"candidate SHA-256 drift for {path.relative_to(ROOT)}: {actual} != {expected}"
+            )
+
+
 def verify_manifest_still_locked() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     expected = (
@@ -128,8 +144,10 @@ def main() -> None:
     verify_sequence_candidate()
     verify_bridge_candidate()
     verify_parity_include()
+    verify_frozen_candidate_hashes()
     verify_manifest_still_locked()
     print("Master Sniper parity candidates verified.")
+    print("Candidate SHA-256 values match the frozen promotion fingerprints.")
     print("Stable manifest remains locked at 6.3.31 / 1.50 / 3.41.")
 
 
