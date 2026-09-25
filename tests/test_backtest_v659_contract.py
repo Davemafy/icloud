@@ -228,3 +228,18 @@ def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_pat
     assert meta["no_lookahead"] is True
     assert meta["cloud_version"] == "6.5.90"
     assert meta["sequence_contract"] == "3.42"
+
+
+
+def test_backtest_journal_callbacks_and_inputs_are_defined_exactly_once():
+    text = MQL.read_text(encoding="utf-8")
+    for needle in (
+        'input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";',
+        'input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";',
+        "void TZBT_InitJournal()",
+        "void TZBT_LogDeal(ulong deal)",
+        "void TZBT_WriteSummary()",
+        "void OnTradeTransaction(",
+        "double OnTester()",
+    ):
+        assert text.count(needle) == 1, needle
