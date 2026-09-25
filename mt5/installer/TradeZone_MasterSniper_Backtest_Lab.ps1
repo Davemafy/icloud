@@ -239,6 +239,8 @@ try{
   $downloadUri=$statusUri+"/download"
   $jobDeadline=(Get-Date).AddMinutes(35)
   $lastStatus=''
+  $lastProgress=-1.0
+  $lastProgressPrint=Get-Date
   while($true){
     if((Get-Date)-gt$jobDeadline){throw 'Cloud replay job exceeded the 35-minute lab limit.'}
     Start-Sleep -Seconds 5
@@ -247,6 +249,17 @@ try{
     if($state-ne$lastStatus){
       Write-Host "Cloud replay status: $state" -ForegroundColor Cyan
       $lastStatus=$state
+    }
+    $pct=[double]($job.progress_pct)
+    $processed=[int]($job.processed_m1_closes)
+    $total=[int]($job.total_m1_closes)
+    $analyses=[int]($job.analysis_states)
+    if($state-eq'RUNNING' -and $total-gt0){
+      if($lastProgress-lt0 -or [math]::Abs($pct-$lastProgress)-ge2.0 -or ((Get-Date)-$lastProgressPrint).TotalSeconds-ge60){
+        Write-Host ("Cloud replay progress: {0}/{1} M1 closes ({2:N1}%) | analysis states {3}" -f $processed,$total,$pct,$analyses) -ForegroundColor DarkCyan
+        $lastProgress=$pct
+        $lastProgressPrint=Get-Date
+      }
     }
     if($state-eq'COMPLETED'){break}
     if($state-eq'FAILED'){throw ("Cloud replay failed: "+[string]$job.error)}
