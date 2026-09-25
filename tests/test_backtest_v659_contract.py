@@ -118,10 +118,13 @@ def test_mql_backtest_harness_uses_sidecar_authority_and_does_not_modify_stable_
     assert "TZBT_FindContract" in text
     assert 'input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";' in text
     assert 'input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";' in text
+    assert 'input string TesterGateAuditFile="MasterSniper_v659_tester_gate_audit.csv";' in text
     assert "void TZBT_InitJournal()" in text
     assert "void TZBT_LogDeal(ulong deal)" in text
+    assert "void TZBT_AuditGate()" in text
     assert "void OnTradeTransaction(" in text
     assert "double OnTester()" in text
+    assert "TZBT_AuditGate();" in text
     assert "TesterStatistics(STAT_PROFIT)" in text
     assert "g_tzExecutionAuthority=(c.execution_authority" in text
     assert "g_tzQualifiedMitigations=c.qualified_mitigations" in text
@@ -263,10 +266,26 @@ def test_backtest_journal_callbacks_and_inputs_are_defined_exactly_once():
     for needle in (
         'input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";',
         'input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";',
+        'input string TesterGateAuditFile="MasterSniper_v659_tester_gate_audit.csv";',
         "void TZBT_InitJournal()",
+        "void TZBT_AuditGate()",
         "void TZBT_LogDeal(ulong deal)",
         "void TZBT_WriteSummary()",
         "void OnTradeTransaction(",
         "double OnTester()",
     ):
         assert text.count(needle) == 1, needle
+
+
+
+def test_gate_audit_is_once_per_closed_m1_and_keeps_execution_context():
+    text = MQL.read_text(encoding="utf-8")
+    assert "datetime closedBar=iTime(_Symbol,PERIOD_M1,1);" in text
+    assert "closedBar==g_tzLastGateAuditBar" in text
+    assert '"gate_stage","gate_reason","analysis_id","zone_id","execution_authority"' in text
+    assert '"candidate_model","spread_points"' in text
+    assert "g_tzGateStage,g_tzGateReason" in text
+    assert "g_tzExecutionAuthority" in text
+    assert "g_tzCandidateModel" in text
+    assert "DoubleToString(spread,1)" in text
+    assert text.count("if(IsTester())TZBT_InitJournal();") == 1
