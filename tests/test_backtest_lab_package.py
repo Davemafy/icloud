@@ -40,6 +40,13 @@ def test_integrated_lab_compiles_exports_replays_and_prepares_real_tick_test():
         "Collect_MasterSniper_Backtest_Results.bat",
         "MasterSniper_v659_tester_journal.csv",
         "MasterSniper_v659_tester_summary.txt",
+        "MasterSniper_v659_tester_gate_audit.csv",
+        "SMC_v6_tester_plans.csv",
+        "SMC_v659_tester_plans_contract.csv",
+        "replay_stdout.txt",
+        "$testerTo=$end.AddDays(1)",
+        "ToDate=$($testerTo.ToString('yyyy.MM.dd'))",
+        "MT5 date parity:",
         "MasterSniper_Backtest_Result.zip",
         "Live DataBridge 1.51 / Sequence 3.42 were never replaced or detached.",
     ):
@@ -90,3 +97,22 @@ def test_lab_launcher_keeps_unexpected_failures_visible():
     assert "BACKTEST LAB POWERSHELL EXITED WITH CODE" in bat
     assert "pause" in bat.lower()
     assert "MasterSniper_Backtest_Lab_LastRun.log" in bat
+
+
+
+def test_mt5_tester_to_date_is_next_day_because_mt5_end_is_exclusive():
+    text = LAB.read_text(encoding="utf-8")
+    assert "$testerTo=$end.AddDays(1)" in text
+    assert "ToDate=$($testerTo.ToString('yyyy.MM.dd'))" in text
+    assert "MT5 date parity:" in text
+
+
+def test_result_collector_contains_gate_audit_and_exact_replay_contract_files():
+    text = LAB.read_text(encoding="utf-8")
+    for required in (
+        "MasterSniper_v659_tester_gate_audit.csv",
+        "SMC_v6_tester_plans.csv",
+        "SMC_v659_tester_plans_contract.csv",
+        "replay_stdout.txt",
+    ):
+        assert required in text
