@@ -168,8 +168,18 @@ try{
   $upload=Join-Path $tmp 'history.zip'
   Compress-Archive -Path (Join-Path $exportDir '*') -DestinationPath $upload -CompressionLevel Optimal -Force
 
-  $startIso=$start.ToString('yyyy-MM-dd')+'T00:00:00+00:00'
-  $endIso=$end.ToString('yyyy-MM-dd')+'T23:59:00+00:00'
+  $manifestKv=@{}
+  Get-Content $manifest | ForEach-Object {
+    if($_ -match '='){
+      $parts=$_.Split('=',2)
+      $manifestKv[$parts[0].Trim()]=$parts[1].Trim()
+    }
+  }
+  $startEpoch=[long]$manifestKv['test_start']
+  $endEpoch=[long]$manifestKv['test_end']
+  if($startEpoch-le0-or$endEpoch-le$startEpoch){throw 'History exporter manifest contains invalid replay epochs.'}
+  $startIso=[DateTimeOffset]::FromUnixTimeSeconds($startEpoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss+00:00')
+  $endIso=[DateTimeOffset]::FromUnixTimeSeconds($endEpoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss+00:00')
   $tz=[uri]::EscapeDataString('Africa/Lagos')
   $spreadText=$spread.ToString([Globalization.CultureInfo]::InvariantCulture)
   $uri=$cloud.TrimEnd('/')+"/validation/backtest/v659/replay?start="+[uri]::EscapeDataString($startIso)+"&end="+[uri]::EscapeDataString($endIso)+"&timezone_name=$tz&spread_points=$spreadText&point=0.01"
