@@ -115,6 +115,10 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
     if missing:
         result["missing_fields"] = missing
         return result
+    if not str(seq.get("contract_fingerprint") or ""):
+        result["missing_fields"] = ["contract_fingerprint"]
+        result["reason"] = "INCOMPLETE_PARITY_TELEMETRY"
+        return result
 
     mismatches: list[str] = []
     for field in _REQUIRED_SEQUENCE_FIELDS:
@@ -135,9 +139,14 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
         if not equal:
             mismatches.append(field)
 
+    computed_sequence_fp = contract_fingerprint(seq)
+    sequence_wire_fp = str(seq.get("contract_fingerprint") or "")
+    if sequence_wire_fp != computed_sequence_fp or sequence_wire_fp != cloud_fp:
+        mismatches.append("contract_fingerprint")
+
     result["mismatches"] = mismatches
     result["verified"] = not mismatches
-    result["computed_sequence_fingerprint"] = contract_fingerprint(seq)
+    result["computed_sequence_fingerprint"] = computed_sequence_fp
     if mismatches:
         result["status"] = "MISMATCH"
         result["reason"] = "SNIPER_CONTRACT_MISMATCH"
@@ -146,3 +155,46 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
     result["reason"] = "SNIPER_CONTRACT_MATCH"
     result["new_entry_safe"] = True
     return result
+
+
+def plan_contract_from_kv(kv: dict) -> dict:
+    """Build the eight-field authoritative contract from the final MT5 plan KV."""
+    data = dict(kv or {})
+    return {
+        "analysis_id": str(data.get("analysis_id") or ""),
+        "zone_id": str(data.get("zone_id") or ""),
+        "direction": str(data.get("original_direction") or data.get("direction") or ""),
+        "current_grade": str(data.get("current_grade") or data.get("grade") or ""),
+        "qualified_mitigations": data.get("qualified_mitigations", data.get("touch_count", 0)),
+        "risk_context": str(data.get("risk_context") or ""),
+        "base_risk_pct": data.get("base_risk_pct", data.get("original_risk_pct", data.get("grade_risk_pct", 0.0))),
+        "execution_authority": str(data.get("execution_authority") or "NONE"),
+    }
+
+
+def plan_contract_from_text(text: str) -> dict:
+    kv: dict[str, str] = {}
+    for raw in str(text or "").splitlines():
+        if "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        if key:
+            kv[key] = value.strip()
+    return plan_contract_from_kv(kv)
+
+
+def sequence_contract_from_details(details: dict) -> dict:
+    """Extract the contract echo without confusing runtime gate authority with plan authority."""
+    data = dict(details or {})
+    return {
+        "analysis_id": data.get("analysis_id", ""),
+        "zone_id": data.get("zone_id", ""),
+        "direction": data.get("direction", ""),
+        "current_grade": data.get("current_grade", ""),
+        "qualified_mitigations": data.get("qualified_mitigations", 0),
+        "risk_context": data.get("risk_context", ""),
+        "base_risk_pct": data.get("base_risk_pct", 0.0),
+        "execution_authority": data.get("contract_execution_authority", data.get("execution_authority", "NONE")),
+        "contract_fingerprint": data.get("contract_fingerprint", ""),
+    }
