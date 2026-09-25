@@ -202,13 +202,37 @@ try{
   $endIso=[DateTimeOffset]::FromUnixTimeSeconds($endEpoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss+00:00')
   $tz=[uri]::EscapeDataString('Africa/Lagos')
   $spreadText=$spread.ToString([Globalization.CultureInfo]::InvariantCulture)
-  $uri=$cloud.TrimEnd('/')+"/validation/backtest/v659/replay?start="+[uri]::EscapeDataString($startIso)+"&end="+[uri]::EscapeDataString($endIso)+"&timezone_name=$tz&spread_points=$spreadText&point=0.01"
+  $baseJobUri=$cloud.TrimEnd('/')+"/validation/backtest/v659/jobs"
+  $startUri=$baseJobUri+"?start="+[uri]::EscapeDataString($startIso)+"&end="+[uri]::EscapeDataString($endIso)+"&timezone_name=$tz&spread_points=$spreadText&point=0.01"
   $resultZip=Join-Path $tmp 'master_sniper_backtest_package.zip'
 
   Write-Host ''
-  Write-Host 'Replaying Master Sniper 6.5.90 in the isolated Cloud worker...' -ForegroundColor Cyan
-  Invoke-WebRequest -UseBasicParsing -Method POST -Uri $uri -Headers @{'X-API-Key'=$apiKey} -ContentType 'application/zip' -InFile $upload -OutFile $resultZip -TimeoutSec 1200
-  if(!(Test-Path $resultZip)-or(Get-Item $resultZip).Length-lt100){throw 'Cloud replay returned no usable package.'}
+  Write-Host 'Starting Master Sniper 6.5.90 isolated Cloud replay job...' -ForegroundColor Cyan
+  $startResponse=Invoke-RestMethod -Method POST -Uri $startUri -Headers @{'X-API-Key'=$apiKey} -ContentType 'application/zip' -InFile $upload -TimeoutSec 120
+  $jobId=[string]$startResponse.job_id
+  if([string]::IsNullOrWhiteSpace($jobId)){throw 'Cloud did not return a backtest job ID.'}
+  Write-Host "Cloud replay job: $jobId" -ForegroundColor Cyan
+
+  $statusUri=$baseJobUri+"/"+$jobId
+  $downloadUri=$statusUri+"/download"
+  $jobDeadline=(Get-Date).AddMinutes(35)
+  $lastStatus=''
+  while($true){
+    if((Get-Date)-gt$jobDeadline){throw 'Cloud replay job exceeded the 35-minute lab limit.'}
+    Start-Sleep -Seconds 5
+    $job=Invoke-RestMethod -Method GET -Uri $statusUri -Headers @{'X-API-Key'=$apiKey} -TimeoutSec 60
+    $state=[string]$job.status
+    if($state-ne$lastStatus){
+      Write-Host "Cloud replay status: $state" -ForegroundColor Cyan
+      $lastStatus=$state
+    }
+    if($state-eq'COMPLETED'){break}
+    if($state-eq'FAILED'){throw ("Cloud replay failed: "+[string]$job.error)}
+    if($state-notin @('QUEUED','RUNNING')){throw "Unexpected Cloud replay status: $state"}
+  }
+
+  Invoke-WebRequest -UseBasicParsing -Method GET -Uri $downloadUri -Headers @{'X-API-Key'=$apiKey} -OutFile $resultZip -TimeoutSec 120
+  if(!(Test-Path $resultZip)-or(Get-Item $resultZip).Length-lt100){throw 'Cloud replay completed but returned no usable package.'}
 
   $resultDir=Join-Path $exportDir 'ReplayResult'
   if(Test-Path $resultDir){Remove-Item $resultDir -Recurse -Force}
