@@ -13,7 +13,6 @@ from .risk_matrix import (
     zone_risk_context,
 )
 from .target_revalidation import TARGET_REVALIDATION_CONTRACT, activation_target_truth, target_ladder_truth
-from .sniper_contract_parity import SNIPER_PARITY_VERSION, contract_fingerprint, plan_contract_from_kv
 
 # DEMO/PAPER execution safety contract. Primary M1 SEARCH authority may begin at
 # the tactical core OR after a qualified outer-envelope interaction proves the
@@ -512,8 +511,6 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     else:
         kv["ea_mode"] = "WATCH_ONLY"
     kv["execution_guard_reason"] = ",".join(guard_reasons)
-    kv["sniper_parity_version"] = SNIPER_PARITY_VERSION
-    kv["contract_fingerprint"] = contract_fingerprint(plan_contract_from_kv(kv))
     return _serialize_plan(order, kv)
 
 
