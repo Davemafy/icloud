@@ -368,6 +368,7 @@ try{
   Write-Host "Sequence contract: $($metaObj.sequence_contract)" -ForegroundColor Green
   Write-Host "Plan states: $($metaObj.plan_rows)" -ForegroundColor Green
   Write-Host 'No-lookahead: CERTIFIED' -ForegroundColor Green
+  if($terminal){Write-Host "MT5 date parity: $($start.ToString('yyyy.MM.dd')) through $($end.ToString('yyyy.MM.dd')) inclusive (tester ToDate $($testerTo.ToString('yyyy.MM.dd')) is exclusive)" -ForegroundColor Green}
   Write-Host ''
   Write-Host 'Tester files are already in MT5 Common Files.' -ForegroundColor Cyan
   Write-Host 'Backtest EA is already compiled under Experts > TradeZoneValidation.' -ForegroundColor Cyan
