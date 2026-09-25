@@ -23,6 +23,10 @@ def test_integrated_lab_compiles_exports_replays_and_prepares_real_tick_test():
         "Optimization=0",
         "UseRemote=0",
         "UseCloud=0",
+        "Collect_MasterSniper_Backtest_Results.bat",
+        "MasterSniper_v659_tester_journal.csv",
+        "MasterSniper_v659_tester_summary.txt",
+        "MasterSniper_Backtest_Result.zip",
         "Live DataBridge 1.51 / Sequence 3.42 were never replaced or detached.",
     ):
         assert required in text
