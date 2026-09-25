@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 
 MQL = Path("mt5/include/SniperContractParityV1.mqh")
@@ -90,3 +92,15 @@ def test_release_candidate_verifier_is_fail_closed_and_manifest_remains_locked()
     assert "verify_parity_include()" in text
     assert "verify_manifest_still_locked()" in text
     assert "6.3.31" in text and "1.50" in text and "3.41" in text
+
+
+def test_release_candidate_verifier_executes_cleanly():
+    proc = subprocess.run(
+        [sys.executable, "scripts/sniper_contract_parity_release.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
+    assert "Master Sniper parity candidates verified." in proc.stdout
+    assert "Stable manifest remains locked at 6.3.31 / 1.50 / 3.41." in proc.stdout
