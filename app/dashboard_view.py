@@ -34,6 +34,7 @@ _VALIDATION_LEDGER_CARD = (
     '</tr></thead><tbody id="sniperValidationLedger">'
     '<tr><td colspan="11" class="muted">Waiting for validation evidence...</td></tr>'
     '</tbody></table>'
+    '<div style="margin-top:10px"><a class="btn" href="/validation/sniper-ledger.csv?limit=250">Export validation CSV</a></div>'
     '<p class="note"><b>Research boundary:</b> this ledger is read-only. It is built from already-persisted '
     'publication, mitigation, lifecycle and MT5 journal truth. It cannot create a zone, alter a grade, '
     'acquire execution authority, change risk, or send an order.</p></div>'
