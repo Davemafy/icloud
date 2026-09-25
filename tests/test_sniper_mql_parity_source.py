@@ -7,6 +7,7 @@ MQL = Path("mt5/include/SniperContractParityV1.mqh")
 SEQ342 = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5")
 BRIDGE151 = Path("mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5")
 STABLE_INCLUDE = Path("mt5/stable/SniperContractParityV1.mqh")
+RUNTIME_PROBE = Path("mt5/tests/SniperContractParityRuntimeProbe.mq5")
 
 
 def test_mql_parity_module_has_canonical_contract_and_sha256():
@@ -104,3 +105,19 @@ def test_release_candidate_verifier_executes_cleanly():
     assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
     assert "Master Sniper parity candidates verified." in proc.stdout
     assert "Stable manifest remains locked at 6.3.31 / 1.50 / 3.41." in proc.stdout
+
+
+def test_runtime_probe_is_no_trading_and_covers_all_three_states():
+    text = RUNTIME_PROBE.read_text(encoding="utf-8")
+    for forbidden in ("OrderSend(", "trade.Buy(", "trade.Sell(", "CTrade "):
+        assert forbidden not in text
+    for required in (
+        'HttpGet("/mt5/plan",plan)',
+        'Result("MATCH",liveMatch',
+        'Result("UNVERIFIED_BLOCKS_NEW_ENTRY",!unverifiedEntrySafe)',
+        'Result("MISMATCH_BLOCKS_NEW_ENTRY",!mismatchEntrySafe',
+        'Result("OVERALL",overall',
+        "TZ_SniperContractFingerprint(",
+        "NO ORDERS WERE SENT",
+    ):
+        assert required in text
