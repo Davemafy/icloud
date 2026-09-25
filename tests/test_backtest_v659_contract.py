@@ -1,5 +1,6 @@
 from pathlib import Path
 import ast
+import csv
 
 from app import backtest
 
@@ -119,3 +120,16 @@ def test_mql_backtest_harness_uses_sidecar_authority_and_does_not_modify_stable_
     assert 'if(IsTester())return;\n   string p=TZ_StatePrefix();' in text
     stable = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5").read_text(encoding="utf-8")
     assert "TesterContractFile" not in stable
+
+
+def test_mt5_style_date_time_headers_are_accepted(tmp_path):
+    path = tmp_path / "XAU_M1.csv"
+    path.write_text(
+        "<DATE>\t<TIME>\t<OPEN>\t<HIGH>\t<LOW>\t<CLOSE>\t<TICKVOL>\n"
+        "2026.09.25\t10:40:00\t4293.0\t4294.0\t4292.5\t4293.5\t123\n",
+        encoding="utf-8",
+    )
+    series = backtest.read_bars(path)
+    assert len(series.rows) == 1
+    assert series.rows[0].close == 4293.5
+    assert series.rows[0].tick_volume == 123.0
