@@ -342,11 +342,17 @@ def _activate_paper_ai_fallback(a: Analysis, authority: str, reason: str) -> boo
     return True
 
 
-async def run_analysis(reason: str = "MANUAL") -> Analysis:
-    s = latest_snapshot()
+async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int | None = None, ai_validator=None) -> Analysis:
+    """Run the production analysis pipeline.
+
+    The optional keyword arguments are for deterministic historical replay only.
+    Live callers use the defaults and therefore preserve existing behaviour.
+    """
+    s = snapshot if snapshot is not None else latest_snapshot()
     if s is None:
         raise RuntimeError("No market snapshot available")
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = int(as_of_ts) if as_of_ts is not None else int(datetime.now(timezone.utc).timestamp())
+    validator = ai_validator or validate_with_ai
 
     # Single authoritative base zoning path: the prompt-driven institutional engine.
     a = build_prompt_analysis(s, now)
@@ -412,7 +418,7 @@ async def run_analysis(reason: str = "MANUAL") -> Analysis:
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
     a.trader_brief += " " + regime_brief(overlay)
     try:
-        ok, summary, risks, provider = await validate_with_ai(a, s)
+        ok, summary, risks, provider = await validator(a, s)
         a.ai_provider = provider
         selected = bool(a.selected_zone_id)
         execution_selected = bool(authority != "NONE" and selected)
