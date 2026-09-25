@@ -18,6 +18,8 @@ def test_integrated_lab_compiles_exports_replays_and_prepares_real_tick_test():
         "SMC_v659_tester_plans_contract.csv",
         "MASTER_SNIPER_V659_NO_LOOKAHEAD_REPLAY_V1",
         "Model=4",
+        "FromUnixTimeSeconds($startEpoch)",
+        "FromUnixTimeSeconds($endEpoch)",
         "Optimization=0",
         "UseRemote=0",
         "UseCloud=0",
