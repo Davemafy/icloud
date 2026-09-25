@@ -19,4 +19,14 @@ if errorlevel 1 (
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
 set "RC=%ERRORLEVEL%"
 del /q "%PS1%" >nul 2>&1
+if not "%RC%"=="0" (
+ echo.
+ echo ============================================================
+ echo  BACKTEST LAB POWERSHELL EXITED WITH CODE %RC%
+ echo  The window is being kept open so the failure cannot disappear.
+ echo  Check Desktop\MasterSniper_Backtest_Lab_LastRun.log
+ echo ============================================================
+ echo.
+ pause
+)
 exit /b %RC%
