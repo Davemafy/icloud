@@ -698,6 +698,7 @@ def _outer_main(args) -> int:
         env["TRADEZONE_BACKTEST_INTERNAL"] = "1"
         env["DB_PATH"] = str(Path(temp) / "replay.db")
         env["PAPER_ONLY"] = "true"
+        env["TRADEZONE_REPLAY_FAST_DB"] = "1"
         env["ML_DATA_ENABLED"] = "false"
         env["AI_ENABLED"] = "true"
         env["REQUIRE_AI_FOR_EXECUTION"] = "true"
