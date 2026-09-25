@@ -1,4 +1,9 @@
-from app.sniper_contract_parity import contract_fingerprint, evaluate_sequence_parity
+from app.sniper_contract_parity import (
+    contract_fingerprint,
+    evaluate_sequence_parity,
+    plan_contract_from_kv,
+    sequence_contract_from_details,
+)
 
 
 def _cloud():
@@ -14,6 +19,13 @@ def _cloud():
     }
 
 
+def _sequence(**overrides):
+    out = dict(_cloud())
+    out.update(overrides)
+    out["contract_fingerprint"] = contract_fingerprint(out)
+    return out
+
+
 def test_legacy_sequence_is_unverified_not_matched():
     out = evaluate_sequence_parity(_cloud(), {"analysis_id": "A1", "zone_id": "Z1"}, online=True)
     assert out["status"] == "UNVERIFIED"
@@ -21,12 +33,22 @@ def test_legacy_sequence_is_unverified_not_matched():
     assert out["new_entry_safe"] is False
 
 
-def test_complete_matching_contract_is_verified():
+def test_complete_fields_without_fingerprint_are_unverified():
     out = evaluate_sequence_parity(_cloud(), _cloud(), online=True)
+    assert out["status"] == "UNVERIFIED"
+    assert out["reason"] == "INCOMPLETE_PARITY_TELEMETRY"
+    assert out["missing_fields"] == ["contract_fingerprint"]
+    assert out["new_entry_safe"] is False
+
+
+def test_complete_matching_contract_is_verified():
+    seq = _sequence()
+    out = evaluate_sequence_parity(_cloud(), seq, online=True)
     assert out["status"] == "MATCH"
     assert out["verified"] is True
     assert out["new_entry_safe"] is True
     assert out["cloud_fingerprint"] == out["computed_sequence_fingerprint"]
+    assert out["sequence_fingerprint"] == out["cloud_fingerprint"]
 
 
 def test_fingerprint_is_stable_across_numeric_wire_representations():
@@ -65,8 +87,7 @@ def test_any_contract_difference_fails_closed_for_new_entries():
         "base_risk_pct": 0.5,
         "execution_authority": "NONE",
     }.items():
-        seq = _cloud()
-        seq[field] = value
+        seq = _sequence(**{field: value})
         out = evaluate_sequence_parity(_cloud(), seq, online=True)
         assert out["status"] == "MISMATCH"
         assert out["reason"] == "SNIPER_CONTRACT_MISMATCH"
@@ -74,9 +95,17 @@ def test_any_contract_difference_fails_closed_for_new_entries():
         assert out["new_entry_safe"] is False
 
 
+def test_wrong_wire_fingerprint_is_a_mismatch_even_when_fields_match():
+    seq = _sequence()
+    seq["contract_fingerprint"] = "0" * 64
+    out = evaluate_sequence_parity(_cloud(), seq, online=True)
+    assert out["status"] == "MISMATCH"
+    assert "contract_fingerprint" in out["mismatches"]
+    assert out["new_entry_safe"] is False
+
+
 def test_mismatch_does_not_revoke_open_position_management():
-    seq = _cloud()
-    seq["zone_id"] = "STALE"
+    seq = _sequence(zone_id="STALE")
     out = evaluate_sequence_parity(_cloud(), seq, online=True, open_positions=1)
     assert out["new_entry_safe"] is False
     assert out["position_management_safe"] is True
@@ -86,3 +115,36 @@ def test_offline_sequence_is_not_entry_safe():
     out = evaluate_sequence_parity(_cloud(), {}, online=False)
     assert out["status"] == "OFFLINE"
     assert out["new_entry_safe"] is False
+
+
+def test_final_plan_kv_uses_explicit_current_grade_mitigations_and_authority():
+    kv = {
+        "analysis_id": "A1",
+        "zone_id": "Z1",
+        "original_direction": "SELL",
+        "grade": "A+",
+        "current_grade": "A",
+        "touch_count": "9",
+        "qualified_mitigations": "1",
+        "risk_context": "TREND",
+        "original_risk_pct": "0.75",
+        "execution_authority": "HTF_CORE_HANDOFF",
+    }
+    out = plan_contract_from_kv(kv)
+    assert out["direction"] == "SELL"
+    assert out["current_grade"] == "A"
+    assert out["qualified_mitigations"] == "1"
+    assert out["base_risk_pct"] == "0.75"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
+
+
+def test_sequence_contract_prefers_loaded_contract_authority_over_runtime_gate_authority():
+    details = {
+        **_cloud(),
+        "execution_authority": "ACCEPTED_ZONE_FLIP_HANDOFF",
+        "contract_execution_authority": "PRIMARY",
+    }
+    details["contract_fingerprint"] = contract_fingerprint(_cloud())
+    out = sequence_contract_from_details(details)
+    assert out["execution_authority"] == "PRIMARY"
+    assert out["contract_fingerprint"] == contract_fingerprint(_cloud())
