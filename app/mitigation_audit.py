@@ -58,12 +58,11 @@ def _accepted_invalidation(direction: Direction, zone_low: float, zone_high: flo
 def audit_directional_mitigations(direction: Direction, core_low: float, core_high: float, zone_low: float, zone_high: float, source_ts: int, bars: list[Bar]) -> dict:
     """Direction-aware Master Sniper mitigation ledger.
 
-    One institutional excursion can consume freshness at most once. After a
-    qualified reaction, another campaign cannot arm until price has produced a
-    clean M15 disengagement on the expected side: the bar closes outside the
-    envelope and its range no longer overlaps the core. Oscillation/re-contact
-    around the core therefore remains the same excursion instead of manufacturing
-    multiple freshness downgrades.
+    A raw core touch never consumes freshness by itself. A qualified mitigation
+    requires the correct approach, a core touch, and then a later M15 bar that
+    closes back through the expected envelope side while its full range is clear
+    of the core. Same-bar wick rejection is REACTION_PENDING, not mitigation.
+    Recontacts before confirmed departure remain one institutional campaign.
     """
     expected_side = "BELOW" if direction == Direction.SELL else "ABOVE"
     distal_side = "ABOVE" if direction == Direction.SELL else "BELOW"
@@ -88,6 +87,7 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
             "expected_reaction_exit_side": expected_side,
             "distal_invalidation_side": distal_side,
             "counting_stopped": bool(invalidated_at),
+            "confirmation_rule": "SUBSEQUENT_M15_EXPECTED_SIDE_CLOSE_CLEAR_OF_CORE",
         }
 
     if not ordered:
@@ -102,9 +102,6 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
     last_outside_side = ""
     last_outside_ts = 0
     campaign: dict | None = None
-    # Critical authority latch. A completed campaign cannot be re-armed merely
-    # because the same reaction closes outside the envelope and immediately
-    # re-enters. It needs a clean, non-core-overlapping disengagement bar first.
     reset_required = False
 
     for index, bar in enumerate(ordered):
@@ -117,11 +114,10 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
 
         if invalidated:
             if campaign is not None:
-                events.append({**campaign, "event_type": "INTERACTION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "qualified_at": 0, "reason": "INVALIDATED_BEFORE_EXPECTED_REACTION_EXIT", "close_side": close_side})
+                events.append({**campaign, "event_type": "INTERACTION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "qualified_at": 0, "reason": "INVALIDATED_BEFORE_CONFIRMED_DEPARTURE", "close_side": close_side})
             events.append({"event_type": "INVALIDATION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "armed_at": last_outside_ts, "approach_side": last_outside_side or "UNARMED", "core_touched_at": 0, "qualified_at": 0, "bar_ts": ts, "bar_open": float(bar.open), "bar_high": float(bar.high), "bar_low": float(bar.low), "bar_close": float(bar.close), "close_side": close_side, "reason": reason})
             return result(qualified, raw_core_contacts, events, raw_contacts, ts, reason)
 
-        # Raw contacts are diagnostic only. They never consume freshness alone.
         if hit_core and not raw_core_engaged:
             raw_core_contacts += 1
             raw_core_engaged = True
@@ -138,8 +134,8 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
             raw_contacts.append({
                 "raw_contact_index": raw_core_contacts,
                 "armed_at": int(last_outside_ts or 0),
-                "campaign_approach_side": last_outside_side or "UNARMED",
-                "approach_side": last_outside_side or "UNARMED",
+                "campaign_approach_side": (campaign or {}).get("approach_side") or last_outside_side or "UNARMED",
+                "approach_side": (campaign or {}).get("approach_side") or last_outside_side or "UNARMED",
                 "immediate_approach_side": immediate_side,
                 "immediate_approach_ts": immediate_ts,
                 "core_touched_at": ts,
@@ -151,11 +147,13 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
         elif not hit_core:
             raw_core_engaged = False
 
-        # Complete an already armed campaign.
+        # A campaign qualifies only on a later clean departure bar. The touch
+        # candle itself can show rejection, but it cannot consume freshness.
         if campaign is not None:
-            if close_side == expected_side:
+            touched_at = int(campaign.get("core_touched_at") or 0)
+            if ts > touched_at and close_side == expected_side and not hit_core:
                 qualified += 1
-                events.append({**campaign, "event_type": "MITIGATION", "qualified": True, "qualified_index": qualified, "qualified_count_before": qualified - 1, "qualified_at": ts, "exit_side": expected_side, "exit_close": float(bar.close), "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE"})
+                events.append({**campaign, "event_type": "MITIGATION", "qualified": True, "qualified_index": qualified, "qualified_count_before": qualified - 1, "qualified_at": ts, "exit_side": expected_side, "exit_close": float(bar.close), "reason": "CONFIRMED_DIRECTIONAL_CORE_REACTION_COMPLETE"})
                 campaign = None
                 reset_required = True
             elif close_side == distal_side:
@@ -163,16 +161,14 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
                 campaign = None
                 reset_required = True
 
-        # A genuine reset is separate from the reaction-completion bar. It must
-        # be outside the expected envelope AND clear of the core. This prevents
-        # 19:15->19:30->19:45 style chop from becoming two mitigations.
+        # The confirmed departure bar also provides the clean disengagement.
+        # It may reset campaign state, but cannot arm another campaign itself.
         if reset_required and campaign is None and close_side == expected_side and not hit_core:
             reset_required = False
             last_outside_side = expected_side
             last_outside_ts = ts
             continue
 
-        # Arm only when there is no unresolved reset requirement.
         if campaign is None and hit_core and not reset_required:
             approach_side = last_outside_side or "UNARMED"
             touch_reference = float(core_low) if direction == Direction.SELL else float(core_high)
@@ -180,10 +176,7 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
             if approach_side == expected_side:
                 campaign = base
                 if close_side == expected_side:
-                    qualified += 1
-                    events.append({**base, "event_type": "MITIGATION", "qualified": True, "qualified_index": qualified, "qualified_count_before": qualified - 1, "qualified_at": ts, "exit_side": expected_side, "exit_close": float(bar.close), "reason": "DIRECTIONAL_CORE_REACTION_COMPLETE"})
-                    campaign = None
-                    reset_required = True
+                    campaign["touch_rejection_state"] = "REACTION_PENDING_CONFIRMATION"
                 elif close_side == distal_side:
                     events.append({**base, "event_type": "INTERACTION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "qualified_at": 0, "exit_side": distal_side, "exit_close": float(bar.close), "reason": "WRONG_SIDE_CLOSE_AFTER_CORE_TOUCH"})
                     campaign = None
@@ -192,9 +185,11 @@ def audit_directional_mitigations(direction: Direction, core_low: float, core_hi
                 events.append({**base, "event_type": "INTERACTION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "qualified_at": 0, "reason": "WRONG_APPROACH_SIDE" if approach_side in {"ABOVE", "BELOW"} else "NO_EXPECTED_SIDE_ARM"})
                 reset_required = True
 
-        # Only clean outside observations are allowed to arm a future campaign.
         if campaign is None and not reset_required and close_side in {"ABOVE", "BELOW"} and not hit_core:
             last_outside_side = close_side
             last_outside_ts = ts
+
+    if campaign is not None:
+        events.append({**campaign, "event_type": "INTERACTION", "qualified": False, "qualified_index": 0, "qualified_count_before": qualified, "qualified_at": 0, "reason": "REACTION_PENDING_CONFIRMATION"})
 
     return result(qualified, raw_core_contacts, events, raw_contacts)
