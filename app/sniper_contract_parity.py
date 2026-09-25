@@ -198,3 +198,41 @@ def sequence_contract_from_details(details: dict) -> dict:
         "execution_authority": data.get("contract_execution_authority", data.get("execution_authority", "NONE")),
         "contract_fingerprint": data.get("contract_fingerprint", ""),
     }
+
+
+def finalize_plan_contract_text(text: str) -> str:
+    """Stamp the fingerprint only after every plan safety/separation layer has run."""
+    rows = [line for line in str(text or "").splitlines() if line]
+    kv: dict[str, str] = {}
+    order: list[str] = []
+    for row in rows:
+        if "=" not in row:
+            continue
+        key, value = row.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        if key not in kv:
+            order.append(key)
+        kv[key] = value.strip()
+
+    kv["current_grade"] = str(kv.get("current_grade") or kv.get("grade") or "")
+    kv["qualified_mitigations"] = str(kv.get("qualified_mitigations", kv.get("touch_count", "0")))
+    try:
+        base_risk = float(kv.get("base_risk_pct", kv.get("original_risk_pct", kv.get("grade_risk_pct", 0.0))) or 0.0)
+    except (TypeError, ValueError):
+        base_risk = 0.0
+    kv["base_risk_pct"] = f"{base_risk:.8f}"
+    kv["sniper_parity_version"] = SNIPER_PARITY_VERSION
+    kv["contract_fingerprint"] = contract_fingerprint(plan_contract_from_kv(kv))
+
+    for key in (
+        "current_grade",
+        "qualified_mitigations",
+        "base_risk_pct",
+        "sniper_parity_version",
+        "contract_fingerprint",
+    ):
+        if key not in order:
+            order.append(key)
+    return "".join(f"{key}={kv[key]}\n" for key in order)
