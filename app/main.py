@@ -26,7 +26,7 @@ from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
 from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
 from .sniper_validation_ledger import build_validation_ledger, export_validation_csv
-from .backtest_jobs import BacktestJobError, run_replay_job
+from .backtest_jobs import BacktestJobError, run_replay_job, start_replay_job, replay_job_status, replay_job_result
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -321,6 +321,54 @@ async def master_sniper_backtest_replay(
     except BacktestJobError as exc:
         message = str(exc)
         status = 409 if "already running" in message else 400
+        raise HTTPException(status_code=status, detail=message)
+    return Response(
+        content=result,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=master_sniper_v659_backtest_package.zip"},
+    )
+
+
+@app.post("/validation/backtest/v659/jobs", dependencies=[Depends(require_api_key)])
+async def master_sniper_backtest_job_start(
+    request: Request,
+    start: str,
+    end: str,
+    timezone_name: str = "Africa/Lagos",
+    spread_points: float = 16.0,
+    point: float = 0.01,
+):
+    payload = await request.body()
+    try:
+        return start_replay_job(
+            payload,
+            start=start,
+            end=end,
+            timezone_name=timezone_name,
+            spread_points=spread_points,
+            point=point,
+        )
+    except BacktestJobError as exc:
+        message = str(exc)
+        status = 409 if "already running" in message else 400
+        raise HTTPException(status_code=status, detail=message)
+
+
+@app.get("/validation/backtest/v659/jobs/{job_id}", dependencies=[Depends(require_api_key)])
+def master_sniper_backtest_job_status(job_id: str):
+    try:
+        return replay_job_status(job_id)
+    except BacktestJobError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/validation/backtest/v659/jobs/{job_id}/download", dependencies=[Depends(require_api_key)])
+def master_sniper_backtest_job_download(job_id: str):
+    try:
+        result = replay_job_result(job_id)
+    except BacktestJobError as exc:
+        message = str(exc)
+        status = 409 if "not complete" in message else 400
         raise HTTPException(status_code=status, detail=message)
     return Response(
         content=result,
