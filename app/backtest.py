@@ -65,6 +65,13 @@ class ReplayBar:
     tick_volume: float = 0.0
 
 
+def closed_before(bars, epoch: int, tf: str, maxn: int):
+    """Compatibility helper retained for existing no-lookahead tests/callers."""
+    sec = TF_SECONDS[tf]
+    values = [b for b in bars if int(b.ts) + sec <= int(epoch)]
+    return values[-maxn:]
+
+
 class BarSeries:
     def __init__(self, rows: Iterable[ReplayBar]):
         self.rows = sorted(list(rows), key=lambda b: b.ts)
