@@ -99,7 +99,12 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     runway, runway_need, runway_ok = conservative_runway(zone)
     spread = float(getattr(snapshot, "spread_points", 0.0) or 0.0) if snapshot is not None else 0.0
     spread_ok = snapshot is not None and spread <= float(SETTINGS.max_spread_points)
-    snapshot_age = max(0, int(datetime.now(tz=timezone.utc).timestamp()) - int(snapshot.sent_at)) if snapshot is not None else 10**9
+    if snapshot is None:
+        snapshot_age = 10**9
+    elif str(getattr(snapshot, "kind", "") or "").upper() == "HISTORICAL_REPLAY":
+        snapshot_age = max(0, int(getattr(analysis, "generated_at", snapshot.sent_at) or snapshot.sent_at) - int(snapshot.sent_at))
+    else:
+        snapshot_age = max(0, int(datetime.now(tz=timezone.utc).timestamp()) - int(snapshot.sent_at))
     snapshot_ok = snapshot is not None and snapshot_age <= int(SETTINGS.max_snapshot_age_seconds)
     layer = zone_layer(zone, history_ok, runway_ok)
 
