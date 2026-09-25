@@ -120,6 +120,7 @@ def run_replay_job(
     timezone_name: str = "Africa/Lagos",
     spread_points: float = 16.0,
     point: float = 0.01,
+    progress_hook=None,
 ) -> bytes:
     start_dt, end_dt = _validate_window(start, end)
     if spread_points <= 0 or spread_points > 1000:
@@ -140,6 +141,7 @@ def run_replay_job(
             out_plan = root / "SMC_v6_tester_plans.csv"
             out_contract = root / "SMC_v659_tester_plans_contract.csv"
             out_meta = root / "SMC_v659_tester_plans_metadata.json"
+            out_progress = root / "replay_progress.json"
 
             command = [
                 sys.executable,
@@ -163,19 +165,47 @@ def run_replay_job(
                 str(float(spread_points)),
                 "--point",
                 str(float(point)),
+                "--progress-out",
+                str(out_progress),
             ]
             env = dict(os.environ)
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 command,
                 cwd=str(ROOT),
                 env=env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                check=False,
-                timeout=1200,
             )
+            started = time.monotonic()
+            last_progress_mtime = 0.0
+            while proc.poll() is None:
+                if time.monotonic() - started > 1800:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+                    tail = ((stdout or "") + "\n" + (stderr or ""))[-12000:]
+                    raise BacktestJobError("historical replay exceeded the 30-minute job limit\n" + tail)
+                if out_progress.exists():
+                    try:
+                        mtime = out_progress.stat().st_mtime
+                        if mtime != last_progress_mtime:
+                            last_progress_mtime = mtime
+                            progress = json.loads(out_progress.read_text(encoding="utf-8"))
+                            if callable(progress_hook):
+                                progress_hook(progress)
+                    except Exception:
+                        pass
+                time.sleep(0.5)
+            stdout, stderr = proc.communicate()
+            if out_progress.exists():
+                try:
+                    progress = json.loads(out_progress.read_text(encoding="utf-8"))
+                    if callable(progress_hook):
+                        progress_hook(progress)
+                except Exception:
+                    pass
             if proc.returncode != 0:
-                tail = (proc.stdout + "\n" + proc.stderr)[-12000:]
+                tail = ((stdout or "") + "\n" + (stderr or ""))[-12000:]
                 raise BacktestJobError("historical replay failed:\n" + tail)
 
             for required in (out_plan, out_contract, out_meta):
@@ -216,11 +246,9 @@ def run_replay_job(
                 zf.writestr("README_NEXT.txt", _next_readme(start_dt, end_dt))
                 zf.writestr(
                     "replay_stdout.txt",
-                    (proc.stdout or "") + ("\nSTDERR:\n" + proc.stderr if proc.stderr else ""),
+                    (stdout or "") + ("\nSTDERR:\n" + stderr if stderr else ""),
                 )
             return output.getvalue()
-    except subprocess.TimeoutExpired as exc:
-        raise BacktestJobError("historical replay exceeded the 20-minute job limit") from exc
     finally:
         _JOB_LOCK.release()
 
@@ -245,8 +273,23 @@ def _run_async_job(job_id: str, payload: bytes, kwargs: dict) -> None:
             return
         _ASYNC_JOBS[job_id]["status"] = "RUNNING"
         _ASYNC_JOBS[job_id]["started_at"] = time.time()
+
+    def progress_hook(progress: dict) -> None:
+        with _ASYNC_JOBS_LOCK:
+            if job_id not in _ASYNC_JOBS:
+                return
+            _ASYNC_JOBS[job_id].update(
+                phase=str(progress.get("phase") or "REPLAYING"),
+                processed_m1_closes=int(progress.get("processed_m1_closes") or 0),
+                total_m1_closes=int(progress.get("total_m1_closes") or 0),
+                progress_pct=float(progress.get("progress_pct") or 0.0),
+                analysis_states=int(progress.get("analysis_states") or 0),
+                last_epoch=int(progress.get("last_epoch") or 0),
+                heartbeat_at=time.time(),
+            )
+
     try:
-        result = run_replay_job(payload, **kwargs)
+        result = run_replay_job(payload, progress_hook=progress_hook, **kwargs)
         _ASYNC_JOB_DIR.mkdir(parents=True, exist_ok=True)
         path = _ASYNC_JOB_DIR / f"{job_id}.zip"
         path.write_bytes(result)
@@ -293,6 +336,13 @@ def start_replay_job(
             "result_path": "",
             "result_bytes": 0,
             "error": "",
+            "phase": "QUEUED",
+            "processed_m1_closes": 0,
+            "total_m1_closes": 0,
+            "progress_pct": 0.0,
+            "analysis_states": 0,
+            "last_epoch": 0,
+            "heartbeat_at": 0,
         }
     kwargs = {
         "start": start,
