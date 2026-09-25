@@ -53,6 +53,7 @@ input int ResearchFlipCandidateMaxMinutes=120;
 input string TesterContractFile="SMC_v659_tester_plans_contract.csv";
 input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";
 input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";
+input string TesterGateAuditFile="MasterSniper_v659_tester_gate_audit.csv";
 
 // v3.35 re-entry hardening: value is necessary but no longer sufficient.
 // A re-entry must be based on a recent directional break, an un-invalidated PD array,
@@ -138,12 +139,14 @@ struct TZBTContract
 };
 TZBTContract g_tzTesterContracts[];
 string g_tzTesterThesisKey="";
+datetime g_tzLastGateAuditBar=0;
 
 void TZBT_InitJournal()
 {
    if(!IsTester())return;
    FileDelete(TesterJournalFile,FILE_COMMON);
    FileDelete(TesterSummaryFile,FILE_COMMON);
+   FileDelete(TesterGateAuditFile,FILE_COMMON);
    int h=FileOpen(TesterJournalFile,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
    if(h==INVALID_HANDLE){Print("Backtest journal create failed err=",GetLastError());return;}
    FileWrite(h,
@@ -151,6 +154,16 @@ void TZBT_InitJournal()
       "analysis_id","zone_id","grade","execution_authority","risk_context","qualified_mitigations",
       "contract_fingerprint","sequence_version","replay_contract");
    FileClose(h);
+
+   int g=FileOpen(TesterGateAuditFile,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
+   if(g==INVALID_HANDLE){Print("Backtest gate audit create failed err=",GetLastError());return;}
+   FileWrite(g,
+      "closed_m1_time","gate_stage","gate_reason","analysis_id","zone_id","execution_authority",
+      "grade","ea_mode","setup_type","zone_state","risk_context","qualified_mitigations",
+      "candidate_model","spread_points","core_low","core_high","zone_low","zone_high",
+      "execution_handoff_ts","parity_status");
+   FileClose(g);
+   g_tzLastGateAuditBar=0;
 }
 
 void TZBT_LogDeal(ulong deal)
@@ -183,6 +196,29 @@ void TZBT_LogDeal(ulong deal)
    FileClose(h);
 }
 
+void TZBT_AuditGate()
+{
+   if(!IsTester())return;
+   datetime closedBar=iTime(_Symbol,PERIOD_M1,1);
+   if(closedBar<=0||closedBar==g_tzLastGateAuditBar)return;
+   g_tzLastGateAuditBar=closedBar;
+
+   MqlTick tick;double spread=0.0;
+   if(SymbolInfoTick(_Symbol,tick)&&_Point>0)spread=(tick.ask-tick.bid)/_Point;
+
+   int h=FileOpen(TesterGateAuditFile,FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
+   if(h==INVALID_HANDLE)return;
+   FileSeek(h,0,SEEK_END);
+   FileWrite(h,
+      (long)closedBar,g_tzGateStage,g_tzGateReason,g_plan.analysis_id,g_plan.zone_id,g_tzExecutionAuthority,
+      g_plan.grade,g_plan.ea_mode,g_plan.setup_type,g_plan.zone_state,g_tzRiskContext,g_tzQualifiedMitigations,
+      g_tzCandidateModel,DoubleToString(spread,1),
+      DoubleToString(g_plan.core_low,_Digits),DoubleToString(g_plan.core_high,_Digits),
+      DoubleToString(g_plan.zone_low,_Digits),DoubleToString(g_plan.zone_high,_Digits),
+      (long)g_tzExecutionHandoffTs,g_tzSniperParityStatus);
+   FileClose(h);
+}
+
 void TZBT_WriteSummary()
 {
    if(!IsTester())return;
@@ -190,6 +226,7 @@ void TZBT_WriteSummary()
    if(h==INVALID_HANDLE)return;
    FileWriteString(h,"contract="+TZ_BACKTEST_CONTRACT+"\r\n");
    FileWriteString(h,"sequence_version="+TZ_SEQUENCE_VERSION+"\r\n");
+   FileWriteString(h,"gate_audit_file="+TesterGateAuditFile+"\r\n");
    FileWriteString(h,"net_profit="+DoubleToString(TesterStatistics(STAT_PROFIT),2)+"\r\n");
    FileWriteString(h,"trades="+IntegerToString((int)TesterStatistics(STAT_TRADES))+"\r\n");
    FileWriteString(h,"profit_trades="+IntegerToString((int)TesterStatistics(STAT_PROFIT_TRADES))+"\r\n");
@@ -1914,7 +1951,6 @@ int OnInit()
    int rc=TZ27_SeqCore_OnInit();if(rc!=INIT_SUCCEEDED)return rc;
    if((IsTester()||OperatingMode==TESTER_FILE)&&!TZBT_LoadTesterContracts())return INIT_FAILED;
    if(IsTester())TZBT_InitJournal();
-   if(IsTester())TZBT_InitJournal();
    if(ResearchMaxSpreadPoints<=0||ResearchRecentZoneBars<30)return INIT_PARAMETERS_INCORRECT;
    if(ResearchLiquidityReversalRiskMultiplier<=0||ResearchLiquidityReversalRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchZoneSweepRiskMultiplier<=0||ResearchZoneSweepRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
@@ -1957,6 +1993,7 @@ void OnTick()
 {
    TZ28_ArmAcceptedFlip();
    TZ_PreCoreSync();ManagePositions();Evaluate();
+   TZBT_AuditGate();
    if(g_tzFlipPlanStored){g_flipPrimaryEntries=g_tzAcceptedFlipEntries;g_flipReentries=g_tzAcceptedFlipReentries;}
    TZ28_SaveAcceptedFlip();TZ_SavePersistentState();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
 }
@@ -1969,6 +2006,6 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &
 double OnTester()
 {
    TZBT_WriteSummary();
-   Print("Master Sniper backtest results written to FILE_COMMON: ",TesterJournalFile," and ",TesterSummaryFile);
+   Print("Master Sniper backtest results written to FILE_COMMON: ",TesterJournalFile,", ",TesterSummaryFile,", and ",TesterGateAuditFile);
    return TesterStatistics(STAT_PROFIT);
 }
