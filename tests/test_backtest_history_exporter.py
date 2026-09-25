@@ -37,3 +37,11 @@ def test_history_exporter_has_timeframe_specific_warmup():
         "else if(tf==PERIOD_M1)days=2;",
     ):
         assert required in text
+
+
+def test_history_exporter_has_no_literal_source_escape_tokens():
+    text = EXPORTER.read_text(encoding="utf-8")
+    assert ";\\n" not in text
+    assert ")\\n" not in text
+    assert "ResetLastError();\\n" not in text
+    assert "Master Sniper 6.5.90" in text
