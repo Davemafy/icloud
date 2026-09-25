@@ -58,9 +58,7 @@ int ExportBars(string fileName,string symbol,ENUM_TIMEFRAMES tf)
    datetime to=TestEnd+PeriodSeconds(tf);
    if(!EnsureHistory(symbol,tf,from,to))return -1;
 
-   MqlRates rates[];
-   ArraySetAsSeries(rates,false);
-   ResetLastError();
+   int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);\n   MqlRates rates[];\n   ArraySetAsSeries(rates,false);\n   ResetLastError();
    int copied=CopyRates(symbol,tf,from,to,rates);
    if(copied<=0)
    {
@@ -84,10 +82,10 @@ int ExportBars(string fileName,string symbol,ENUM_TIMEFRAMES tf)
       FileWrite(
          h,
          (long)rates[i].time,
-         DoubleToString(rates[i].open,_Digits),
-         DoubleToString(rates[i].high,_Digits),
-         DoubleToString(rates[i].low,_Digits),
-         DoubleToString(rates[i].close,_Digits),
+         DoubleToString(rates[i].open,digits),
+         DoubleToString(rates[i].high,digits),
+         DoubleToString(rates[i].low,digits),
+         DoubleToString(rates[i].close,digits),
          (long)rates[i].tick_volume
       );
       rows++;
@@ -167,7 +165,7 @@ void OnStart()
    Print("HISTORY_EXPORT START | NO TRADING | Master Sniper 6.5.89 replay input");
    if(!ValidRange())return;
 
-   ExportStat stats[];
+   if(!FolderCreate(OutputFolder,FILE_COMMON) && GetLastError()!=5010)\n      Print("HISTORY_EXPORT INFO output folder already exists or could not be created err=",GetLastError());\n\n   ExportStat stats[];
    ArrayResize(stats,8);
    stats[0].name="XAU_D1.csv";stats[0].rows=ExportBars(stats[0].name,XauSymbol,PERIOD_D1);
    stats[1].name="XAU_H4.csv";stats[1].rows=ExportBars(stats[1].name,XauSymbol,PERIOD_H4);
