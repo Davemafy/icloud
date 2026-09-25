@@ -2,6 +2,8 @@ $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $Host.UI.RawUI.WindowTitle='Trade Zone - Master Sniper Backtest Lab'
+$LogPath=Join-Path ([Environment]::GetFolderPath('Desktop')) 'MasterSniper_Backtest_Lab_LastRun.log'
+try{Start-Transcript -Path $LogPath -Force | Out-Null}catch{}
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -9,7 +11,13 @@ $Raw="https://raw.githubusercontent.com/$Repo/$Branch"
 $ExporterRel='mt5/backtest/TradeZone_MasterSniper_HistoryExporter.mq5'
 $BacktestRel='mt5/backtest/InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo.mq5'
 
-function PauseExit([int]$Code=0){Write-Host '';Read-Host 'Press ENTER to close';exit $Code}
+function PauseExit([int]$Code=0){
+  Write-Host ''
+  Write-Host "Diagnostic log: $LogPath" -ForegroundColor DarkGray
+  try{Stop-Transcript | Out-Null}catch{}
+  Read-Host 'Press ENTER to close'
+  exit $Code
+}
 function Download([string]$Url,[string]$Out){
   Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Out -TimeoutSec 90
   if(!(Test-Path $Out)){throw "Download failed: $Url"}
