@@ -350,7 +350,10 @@ def test_buy_mitigation_requires_above_core_above_complete_cycle():
     bars = [
         policy.Bar(ts=200, open=104.0, high=104.2, low=103.5, close=104.0),
         policy.Bar(ts=300, open=102.5, high=103.1, low=100.5, close=100.8),
-        policy.Bar(ts=400, open=101.0, high=103.5, low=100.2, close=103.4),
+        # Confirmation must be a later M15 bar whose entire range has cleared
+        # the BUY core (100-101). A wick back into the core is still the same
+        # institutional interaction and cannot consume freshness.
+        policy.Bar(ts=400, open=101.2, high=103.5, low=101.1, close=103.4),
     ]
 
     audit = policy.audit_directional_mitigations(
