@@ -82,10 +82,11 @@ def test_native_proof_unlocked_immutable_342_151_candidates():
     assert '#define TZ_SEQUENCE_EXPECTED "3.42"' in bridge
 
 
-def test_release_transformer_is_atomic_and_manifest_remains_locked():
+def test_release_candidate_verifier_is_fail_closed_and_manifest_remains_locked():
     text = Path("scripts/sniper_contract_parity_release.py").read_text(encoding="utf-8")
-    assert "refuse_existing_targets()" in text
-    assert "build_sequence()" in text
-    assert "build_bridge()" in text
-    assert "build_parity_include()" in text
-    assert "manifest intentionally unchanged" in text
+    assert "verify_immutable_sources()" in text
+    assert "verify_sequence_candidate()" in text
+    assert "verify_bridge_candidate()" in text
+    assert "verify_parity_include()" in text
+    assert "verify_manifest_still_locked()" in text
+    assert "6.3.31" in text and "1.50" in text and "3.41" in text
