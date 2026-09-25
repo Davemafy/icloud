@@ -119,12 +119,26 @@ class BarSeries:
     def __init__(self, rows: Iterable[ReplayBar]):
         self.rows = sorted(list(rows), key=lambda b: b.ts)
         self.times = [b.ts for b in self.rows]
+        self._model_rows = None
 
-    def closed_before(self, epoch: int, tf: str, maxn: int):
+    def _models(self):
+        if self._model_rows is None:
+            self._model_rows = _to_model_bars(self.rows)
+        return self._model_rows
+
+    def _closed_bounds(self, epoch: int, tf: str, maxn: int) -> tuple[int, int]:
         sec = TF_SECONDS[tf]
         idx = bisect.bisect_right(self.times, int(epoch) - sec)
         start = max(0, idx - maxn)
+        return start, idx
+
+    def closed_before(self, epoch: int, tf: str, maxn: int):
+        start, idx = self._closed_bounds(epoch, tf, maxn)
         return self.rows[start:idx]
+
+    def closed_model_before(self, epoch: int, tf: str, maxn: int):
+        start, idx = self._closed_bounds(epoch, tf, maxn)
+        return self._models()[start:idx]
 
     def minute_closes(self, start_epoch: int, end_epoch: int):
         for bar in self.rows:
@@ -135,6 +149,11 @@ class BarSeries:
                 break
             yield close_ts, bar
 
+    def count_minute_closes(self, start_epoch: int, end_epoch: int) -> int:
+        lo = bisect.bisect_left(self.times, int(start_epoch) - 60)
+        hi = bisect.bisect_right(self.times, int(end_epoch) - 60)
+        return max(0, hi - lo)
+
 
 @dataclass(frozen=True)
 class ReplayNews:
@@ -142,6 +161,17 @@ class ReplayNews:
     currency: str
     title: str
     impact: str
+
+
+class NewsSeries:
+    def __init__(self, rows: Iterable[ReplayNews]):
+        self.rows = sorted(list(rows), key=lambda item: item.ts)
+        self.times = [item.ts for item in self.rows]
+
+    def around(self, epoch: int, seconds: int = 3600):
+        lo = bisect.bisect_left(self.times, int(epoch) - int(seconds))
+        hi = bisect.bisect_right(self.times, int(epoch) + int(seconds))
+        return self.rows[lo:hi]
 
 
 def read_bars(path: Path) -> BarSeries:
@@ -176,9 +206,9 @@ def read_bars(path: Path) -> BarSeries:
     return BarSeries(out)
 
 
-def read_news(path: Path) -> list[ReplayNews]:
+def read_news(path: Path) -> NewsSeries:
     if not path.exists():
-        return []
+        return NewsSeries([])
     out: list[ReplayNews] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = _reader(handle)
@@ -192,18 +222,21 @@ def read_news(path: Path) -> list[ReplayNews]:
                     impact=str(normalized.get("impact") or "HIGH"),
                 )
             )
-    return sorted(out, key=lambda x: x.ts)
+    return NewsSeries(out)
 
 
 def _simple_atr(bars, n: int = 14) -> float:
     if not bars:
         return 0.0
-    tr: list[float] = []
-    for idx, bar in enumerate(bars):
-        pc = bars[idx - 1].close if idx else bar.close
-        tr.append(max(bar.high - bar.low, abs(bar.high - pc), abs(bar.low - pc)))
-    tail = tr[-n:]
-    return sum(tail) / len(tail)
+    start = max(0, len(bars) - int(n))
+    total = 0.0
+    count = 0
+    for idx in range(start, len(bars)):
+        bar = bars[idx]
+        pc = bars[idx - 1].close if idx > 0 else bar.close
+        total += max(bar.high - bar.low, abs(bar.high - pc), abs(bar.low - pc))
+        count += 1
+    return total / count if count else 0.0
 
 
 def _to_model_bars(rows):
@@ -225,7 +258,7 @@ def make_snapshot(
     epoch: int,
     minute_bar: ReplayBar,
     data: dict[str, BarSeries],
-    news: list[ReplayNews],
+    news: NewsSeries,
     *,
     spread_points: float,
     point: float,
@@ -233,6 +266,7 @@ def make_snapshot(
     from .models import MarketSnapshot, NewsEvent
 
     slices = {}
+    model_slices = {}
     for key, tf in (
         ("XAU_D1", "D1"), ("XAU_H4", "H4"), ("XAU_H1", "H1"), ("XAU_M15", "M15"),
         ("DXY_D1", "D1"), ("DXY_H4", "H4"), ("DXY_H1", "H1"),
@@ -240,13 +274,13 @@ def make_snapshot(
         slices[key] = data[key].closed_before(epoch, tf, HISTORY_LIMITS[key])
         if not slices[key]:
             return None
+        model_slices[key] = data[key].closed_model_before(epoch, tf, HISTORY_LIMITS[key])
 
     half_spread = float(spread_points) * float(point) * 0.5
     mid = float(minute_bar.close)
     relevant_news = [
         NewsEvent(ts=n.ts, currency=n.currency, title=n.title, impact=n.impact)
-        for n in news
-        if epoch - 3600 <= n.ts <= epoch + 3600
+        for n in news.around(epoch, 3600)
     ]
     snapshot = MarketSnapshot(
         kind="HISTORICAL_REPLAY",
@@ -258,13 +292,13 @@ def make_snapshot(
         point=float(point),
         atr_h1=_simple_atr(slices["XAU_H1"]),
         atr_m15=_simple_atr(slices["XAU_M15"]),
-        xau_d1=_to_model_bars(slices["XAU_D1"]),
-        xau_h4=_to_model_bars(slices["XAU_H4"]),
-        xau_h1=_to_model_bars(slices["XAU_H1"]),
-        xau_m15=_to_model_bars(slices["XAU_M15"]),
-        dxy_d1=_to_model_bars(slices["DXY_D1"]),
-        dxy_h4=_to_model_bars(slices["DXY_H4"]),
-        dxy_h1=_to_model_bars(slices["DXY_H1"]),
+        xau_d1=model_slices["XAU_D1"],
+        xau_h4=model_slices["XAU_H4"],
+        xau_h1=model_slices["XAU_H1"],
+        xau_m15=model_slices["XAU_M15"],
+        dxy_d1=model_slices["DXY_D1"],
+        dxy_h4=model_slices["DXY_H4"],
+        dxy_h1=model_slices["DXY_H1"],
         news=relevant_news,
     )
 
@@ -276,7 +310,8 @@ def make_snapshot(
         ("DXY_D1", "D1"), ("DXY_H4", "H4"), ("DXY_H1", "H1"),
     ):
         sec = TF_SECONDS[tf]
-        if any(int(b.ts) + sec > int(epoch) for b in slices[key]):
+        last = slices[key][-1]
+        if int(last.ts) + sec > int(epoch):
             raise RuntimeError(f"NO_LOOKAHEAD_BREACH:{key}:{epoch}")
     if int(minute_bar.ts) + 60 > int(epoch):
         raise RuntimeError(f"NO_LOOKAHEAD_BREACH:XAU_M1:{epoch}")
@@ -383,6 +418,15 @@ async def _deterministic_replay_ai(_analysis, _snapshot):
     return False, "", ["AI_PROVIDER_UNAVAILABLE"], "NONE"
 
 
+def _write_progress(path: Path | None, **payload) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
 async def generate_v659(
     *,
     input_dir: Path,
@@ -394,6 +438,7 @@ async def generate_v659(
     timezone_name: str,
     spread_points: float,
     point: float,
+    progress_json: Path | None = None,
 ) -> dict:
     from .config import SETTINGS
     from .db import init_db, latest_analysis, save_snapshot
@@ -429,8 +474,23 @@ async def generate_v659(
     wrong_latch: set[str] = set()
     thesis_latch = ""
     liquidity_latch = ""
+    saved_snapshot_epoch = 0
+    total_minutes = data["XAU_M1"].count_minute_closes(start_epoch, end_epoch)
+    _write_progress(
+        progress_json,
+        phase="REPLAYING",
+        processed_m1_closes=0,
+        total_m1_closes=total_minutes,
+        progress_pct=0.0,
+        analysis_states=0,
+        last_epoch=0,
+    )
 
     async def run_and_capture(reason: str, snapshot, epoch: int):
+        nonlocal saved_snapshot_epoch
+        if saved_snapshot_epoch != int(epoch):
+            save_snapshot(snapshot)
+            saved_snapshot_epoch = int(epoch)
         analysis = await run_analysis(
             reason,
             snapshot=snapshot,
@@ -457,8 +517,17 @@ async def generate_v659(
             skipped_incomplete += 1
             continue
         processed_minutes += 1
-        save_snapshot(snapshot)
-
+        if processed_minutes == 1 or processed_minutes % 250 == 0 or processed_minutes == total_minutes:
+            pct = round(100.0 * processed_minutes / total_minutes, 1) if total_minutes else 100.0
+            _write_progress(
+                progress_json,
+                phase="REPLAYING",
+                processed_m1_closes=processed_minutes,
+                total_m1_closes=total_minutes,
+                progress_pct=pct,
+                analysis_states=len(plans),
+                last_epoch=int(epoch),
+            )
         now_local = datetime.fromtimestamp(epoch, tz=timezone.utc).astimezone(tz)
         ran_analysis = False
         for reason in scheduler._due_reasons(now_local):
@@ -571,6 +640,15 @@ async def generate_v659(
         "required_backtest_ea": "InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo.mq5",
     }
     metadata_json.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_progress(
+        progress_json,
+        phase="COMPLETED",
+        processed_m1_closes=processed_minutes,
+        total_m1_closes=total_minutes,
+        progress_pct=100.0,
+        analysis_states=len(plans),
+        last_epoch=end_epoch,
+    )
     return metadata
 
 
@@ -596,6 +674,7 @@ def _child_main(args) -> int:
             timezone_name=args.timezone,
             spread_points=float(args.spread_points),
             point=float(args.point),
+            progress_json=Path(args.progress_out) if args.progress_out else None,
         )
     )
     print(
@@ -635,6 +714,7 @@ def main() -> int:
     parser.add_argument("--timezone", default="Africa/Lagos")
     parser.add_argument("--spread-points", type=float, default=16.0)
     parser.add_argument("--point", type=float, default=0.01)
+    parser.add_argument("--progress-out", default="")
     args = parser.parse_args()
 
     if os.getenv("TRADEZONE_BACKTEST_INTERNAL") == "1":
