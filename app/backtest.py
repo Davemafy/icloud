@@ -447,7 +447,7 @@ async def generate_v659(
     from . import scheduler
     from .thesis_hard_release import hard_release_stale_thesis
     from .timezones import safe_zoneinfo
-    from .zone_reaction_lifecycle import update_zone_publication_contacts, update_zone_reactions
+    from .zone_reaction_lifecycle import update_zone_reactions
 
     if SETTINGS.app_version != "6.5.90":
         raise RuntimeError(f"BACKTEST_VERSION_DRIFT: expected Cloud 6.5.90, found {SETTINGS.app_version}")
@@ -518,9 +518,9 @@ async def generate_v659(
             skipped_incomplete += 1
             continue
         processed_minutes += 1
-        # Mirror live snapshot lifecycle exactly once for each historical M1 close,
-        # without serializing the full multi-timeframe snapshot into SQLite each minute.
-        update_zone_publication_contacts(snapshot)
+        # Mirror live snapshot lifecycle exactly once for each historical M1 close.
+        # update_zone_reactions() already applies publication-contact truth internally,
+        # so do not call the publication updater twice.
         update_zone_reactions(snapshot)
         if processed_minutes == 1 or processed_minutes % 250 == 0 or processed_minutes == total_minutes:
             pct = round(100.0 * processed_minutes / total_minutes, 1) if total_minutes else 100.0
