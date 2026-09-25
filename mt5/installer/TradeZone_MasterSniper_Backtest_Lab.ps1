@@ -322,6 +322,7 @@ try{
   if($terminal){
     $ini=Join-Path $desktop 'MasterSniper_Backtest_RealTicks.ini'
     $expert='TradeZoneValidation\InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo'
+    $testerTo=$end.AddDays(1)
     $iniLines=@(
       '[Tester]',
       "Expert=$expert",
@@ -331,7 +332,7 @@ try{
       'ExecutionMode=0',
       'Optimization=0',
       "FromDate=$($start.ToString('yyyy.MM.dd'))",
-      "ToDate=$($end.ToString('yyyy.MM.dd'))",
+      "ToDate=$($testerTo.ToString('yyyy.MM.dd'))",
       'ForwardMode=0',
       'Deposit=10000',
       'Currency=USD',
