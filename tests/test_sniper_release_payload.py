@@ -36,8 +36,15 @@ def test_release_payload_versions_and_parity_wiring():
     assert 'TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"' in inc
 
 
-def test_payload_staging_does_not_promote_manifest():
+def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.3.31"
-    assert manifest["data_bridge_version"] == "1.50"
-    assert manifest["sequence_ea_version"] == "3.41"
+    assert manifest["release"] == "6.3.32"
+    assert manifest["ref"] == "bced82261e5067141fe01c7beebfd1ba61108f6d"
+    assert manifest["data_bridge_version"] == "1.51"
+    assert manifest["sequence_ea_version"] == "3.42"
+    files = {item["role"]: item for item in manifest["files"]}
+    assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
+    assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
+    supports = {item["role"]: item for item in manifest["support_files"]}
+    assert supports["sniper_contract_parity"]["sha256"] == EXPECTED[INCLUDE]
+    assert supports["sniper_contract_parity"]["target"] == "Include\\TradeZoneCore"
