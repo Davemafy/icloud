@@ -2,6 +2,9 @@ from pathlib import Path
 
 
 MQL = Path("mt5/include/SniperContractParityV1.mqh")
+SEQ342 = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5")
+BRIDGE151 = Path("mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5")
+STABLE_INCLUDE = Path("mt5/stable/SniperContractParityV1.mqh")
 
 
 def test_mql_parity_module_has_canonical_contract_and_sha256():
@@ -29,7 +32,6 @@ def test_mql_parity_module_has_canonical_contract_and_sha256():
 
 def test_mql_sha256_constants_are_complete_and_unique_enough():
     text = MQL.read_text(encoding="utf-8")
-    # Pin the standard SHA-256 IV and boundary constants so an accidental edit is caught.
     for needle in (
         "0x6a09e667",
         "0xbb67ae85",
@@ -47,7 +49,32 @@ def test_mql_sha256_constants_are_complete_and_unique_enough():
     assert 'StringFormat("%08x%08x%08x%08x%08x%08x%08x%08x"' in text
 
 
-def test_release_transformer_still_fails_closed_before_342_emit():
+def test_native_proof_unlocked_immutable_342_151_candidates():
+    seq = SEQ342.read_text(encoding="utf-8")
+    bridge = BRIDGE151.read_text(encoding="utf-8")
+    assert STABLE_INCLUDE.read_text(encoding="utf-8") == MQL.read_text(encoding="utf-8")
+    assert '#property version   "3.42"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.42"' in seq
+    assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
+    assert "TZ42_RefreshSniperParityFromPlan" in seq
+    for needle in (
+        '\"direction\":\"%s\"',
+        '\"current_grade\":\"%s\"',
+        '\"qualified_mitigations\":%d',
+        '\"risk_context\":\"%s\"',
+        '\"base_risk_pct\":%s',
+        '\"contract_fingerprint\":\"%s\"',
+    ):
+        assert needle in seq
+    assert '#property version "1.51"' in bridge
+    assert '#define TZ_BRIDGE_VERSION "1.51"' in bridge
+    assert '#define TZ_SEQUENCE_EXPECTED "3.42"' in bridge
+
+
+def test_release_transformer_is_atomic_and_manifest_remains_locked():
     text = Path("scripts/sniper_contract_parity_release.py").read_text(encoding="utf-8")
-    assert "canonical MQL fingerprint parity not yet proven" in text
-    assert "refusing partial 3.42 transformation" in text
+    assert "refuse_existing_targets()" in text
+    assert "build_sequence()" in text
+    assert "build_bridge()" in text
+    assert "build_parity_include()" in text
+    assert "manifest intentionally unchanged" in text
