@@ -10,6 +10,7 @@ def test_dashboard_injects_read_only_sniper_validation_ledger():
     assert 'Master Sniper validation ledger' in out
     assert 'OBSERVATION ONLY' in out
     assert "fetch('/validation/sniper-ledger?limit=30'" in out
+    assert '/validation/sniper-ledger.csv?limit=250' in out
     assert 'descriptive only' in out
     assert 'cannot create a zone' in out
     assert 'id="sniper-validation-ledger-script"' in out
@@ -34,3 +35,5 @@ def test_validation_endpoint_is_read_only_get():
     text = Path("app/main.py").read_text(encoding="utf-8")
     assert '@app.get("/validation/sniper-ledger")' in text
     assert "return build_validation_ledger(limit)" in text
+    assert '@app.get("/validation/sniper-ledger.csv")' in text
+    assert "export_validation_csv(limit)" in text
