@@ -106,3 +106,16 @@ def test_async_job_status_carries_live_replay_progress_fields():
         '"--progress-out"',
     ):
         assert required in text
+
+
+
+def test_next_readme_uses_exclusive_mt5_end_date():
+    from datetime import datetime, timezone
+    from app.backtest_jobs import _next_readme
+
+    start = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    end = datetime(2026, 8, 31, 23, 59, tzinfo=timezone.utc)
+    text = _next_readme(start, end)
+    assert "Requested through: 2026.08.31 inclusive" in text
+    assert "MT5 ToDate: 2026.09.01 (exclusive)" in text
+    assert "MasterSniper_v659_tester_gate_audit.csv" in text
