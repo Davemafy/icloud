@@ -9,7 +9,7 @@ echo  Live EAs are NOT replaced
 echo ============================================================
 echo.
 set "PS1=%TEMP%\TradeZone_MasterSniper_Backtest_Lab.ps1"
-set "URL=https://raw.githubusercontent.com/Davemafy/icloud/master-sniper-backtest-v659/mt5/installer/TradeZone_MasterSniper_Backtest_Lab.ps1"
+set "URL=https://raw.githubusercontent.com/Davemafy/icloud/main/mt5/installer/TradeZone_MasterSniper_Backtest_Lab.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%URL%' -OutFile '%PS1%'"
 if errorlevel 1 (
  echo FAILED: Could not download the integrated backtest lab.
