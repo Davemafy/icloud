@@ -551,7 +551,7 @@ void ManagePositions()
 
       if((buy&&sl>0&&desired<=sl+_Point)||(!buy&&sl>0&&desired>=sl-_Point))continue;
       if(!trade.PositionModify(ticket,desired,tp))
-         Print("SMC Research v3.41 management modify failed ticket=",ticket,
+         Print("SMC Research v3.42 management modify failed ticket=",ticket,
                " desiredSL=",desired," retcode=",trade.ResultRetcode());
    }
 }
@@ -813,7 +813,7 @@ void TZ28_EvaluateAcceptedFlip()
          g_lastSequence=seq;g_lastTradeBar=cb;g_tzLastModel="ACCEPTED_ZONE_FLIP_"+sig.pd_type;
          TZ_SetGate("ORDER_SENT","DEMO_ACCEPTED_ZONE_FLIP_OPENED");
          TZ28_SaveAcceptedFlip();
-         Print("SMC Research v3.41 ",tag," opened from accepted-zone flip. authority=",g_tzExecutionAuthority,
+         Print("SMC Research v3.42 ",tag," opened from accepted-zone flip. authority=",g_tzExecutionAuthority,
                " sourceZone=",g_tzFlipSourceZone," entry=",entry," sl=",sl," riskMoney=",risk);
       }
       else TZ_SetGate("ORDER","MT5_FLIP_ORDER_SEND_FAILED");
@@ -1698,7 +1698,7 @@ void Evaluate()
       g_lastSequence=seq;g_lastTradeBar=cb;
       g_tzLastModel=(tag=="L0"?"LIQ_REVERSAL_":tag=="E0"?"ESCAPE_":"")+sig.pd_type;
       TZ_SetGate("ORDER_SENT",g_tzLastSplitPartial?"DEMO_ENTRY_OPENED_PARTIAL_SPLIT":"DEMO_ENTRY_OPENED");
-      Print("SMC Research v3.41 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
+      Print("SMC Research v3.42 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
             " gate=",g_tzGateStage," lr=",g_tzLRLabel,"@",g_tzLRPrice," entry=",entry," sl=",sl,
             " target=",openTarget," rr=",DoubleToString(rr,2)," riskMoney=",risk);
    }
