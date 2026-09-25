@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 from collections import Counter, defaultdict
 from typing import Any
@@ -444,3 +446,21 @@ def build_validation_ledger(limit: int = 50) -> dict:
         "summary": summary,
         "rows": output,
     }
+
+
+def export_validation_csv(limit: int = 250) -> str:
+    data = build_validation_ledger(limit)
+    out = io.StringIO()
+    fields = [
+        "published_at","zone_id","direction","source_tf","setup_type",
+        "structural_grade","current_grade","core_low","core_high","zone_low","zone_high",
+        "publication_qualified_mitigations","qualified_mitigations","raw_core_contacts",
+        "risk_context","base_risk_pct","live_core_touched_at","reaction_confirmed_at",
+        "handoff_at","handoff_authority","invalidation_at","objective_complete_at",
+        "execution_state","entry_count","closed_count","outcome",
+    ]
+    writer = csv.DictWriter(out, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for row in data.get("rows", []):
+        writer.writerow(row)
+    return out.getvalue()
