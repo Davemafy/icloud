@@ -49,10 +49,53 @@ def _parse_ts(value: str) -> int:
     value = str(value or "").strip()
     if value.isdigit():
         return int(value)
-    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    normalized = value.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        dt = None
+        for fmt in ("%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M", "%Y.%m.%d"):
+            try:
+                dt = datetime.strptime(value, fmt)
+                break
+            except ValueError:
+                continue
+        if dt is None:
+            raise
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return int(dt.timestamp())
+
+
+def _norm_header(value: str) -> str:
+    return str(value or "").strip().lower().strip("<>").replace(" ", "_")
+
+
+def _reader(handle):
+    sample = handle.read(4096)
+    handle.seek(0)
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    return csv.DictReader(handle, dialect=dialect)
+
+
+def _normalized_row(row: dict) -> dict[str, str]:
+    return {_norm_header(k): v for k, v in row.items()}
+
+
+def _row_ts(row: dict[str, str]) -> int:
+    direct = row.get("ts") or row.get("time_epoch") or row.get("datetime")
+    if direct:
+        return _parse_ts(direct)
+    date = str(row.get("date") or "").strip()
+    clock = str(row.get("time") or "").strip()
+    if date and clock:
+        return _parse_ts(f"{date} {clock}")
+    if clock and ("." in clock or "-" in clock):
+        return _parse_ts(clock)
+    raise ValueError("missing ts/datetime or DATE+TIME columns")
 
 
 @dataclass(frozen=True)
@@ -106,13 +149,14 @@ def read_bars(path: Path) -> BarSeries:
         raise FileNotFoundError(path)
     out: list[ReplayBar] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
+        reader = _reader(handle)
+        headers = {_norm_header(x) for x in (reader.fieldnames or [])}
         required = {"open", "high", "low", "close"}
-        if not required.issubset({str(x or "").lower() for x in (reader.fieldnames or [])}):
-            raise ValueError(f"{path.name}: expected columns ts/time/datetime + open/high/low/close")
+        if not required.issubset(headers):
+            raise ValueError(f"{path.name}: expected OHLC columns plus ts/datetime or DATE+TIME")
         for row in reader:
-            normalized = {str(k).lower(): v for k, v in row.items()}
-            ts = _parse_ts(normalized.get("ts") or normalized.get("time") or normalized.get("datetime") or "")
+            normalized = _normalized_row(row)
+            ts = _row_ts(normalized)
             out.append(
                 ReplayBar(
                     ts=ts,
@@ -120,7 +164,13 @@ def read_bars(path: Path) -> BarSeries:
                     high=float(normalized["high"]),
                     low=float(normalized["low"]),
                     close=float(normalized["close"]),
-                    tick_volume=float(normalized.get("tick_volume") or normalized.get("volume") or 0.0),
+                    tick_volume=float(
+                        normalized.get("tick_volume")
+                        or normalized.get("tickvol")
+                        or normalized.get("tick_volume_")
+                        or normalized.get("volume")
+                        or 0.0
+                    ),
                 )
             )
     return BarSeries(out)
@@ -131,12 +181,12 @@ def read_news(path: Path) -> list[ReplayNews]:
         return []
     out: list[ReplayNews] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
+        reader = _reader(handle)
         for row in reader:
-            normalized = {str(k).lower(): v for k, v in row.items()}
+            normalized = _normalized_row(row)
             out.append(
                 ReplayNews(
-                    ts=_parse_ts(normalized.get("ts") or normalized.get("time") or normalized.get("datetime") or ""),
+                    ts=_row_ts(normalized),
                     currency=str(normalized.get("currency") or "USD"),
                     title=str(normalized.get("title") or ""),
                     impact=str(normalized.get("impact") or "HIGH"),
