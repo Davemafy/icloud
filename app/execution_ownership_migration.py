@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+import os
 import threading
 
 from .db import connect, _path
 
 _SCHEMA_LOCK = threading.Lock()
-_READY_PATHS: set[str] = set()
+_READY_DATABASES: set[tuple[str, int, int]] = set()
+
+
+def _database_identity() -> tuple[str, int, int]:
+    path = str(_path())
+    try:
+        stat = os.stat(path)
+        return (path, int(stat.st_ino), int(stat.st_ctime_ns))
+    except OSError:
+        return (path, 0, 0)
+
 
 _OWNERSHIP_COLUMNS = {
     "ownership_acquired_at": "INTEGER DEFAULT 0",
@@ -20,15 +31,16 @@ _OWNERSHIP_COLUMNS = {
 def ensure_execution_ownership_schema() -> None:
     """Add explicit execution-ownership fields to the persisted zone lifecycle.
 
-    The migration is cached per physical database path after its first successful
-    verification. This keeps live semantics unchanged while avoiding thousands of
-    redundant sqlite_master/PRAGMA checks during historical replay.
+    Successful verification is cached by the physical SQLite file identity. If a
+    test or replay replaces the DB at the same pathname, inode/ctime changes and
+    the migration is verified again.
     """
-    key = str(_path())
-    if key in _READY_PATHS:
+    identity = _database_identity()
+    if identity in _READY_DATABASES:
         return
     with _SCHEMA_LOCK:
-        if key in _READY_PATHS:
+        identity = _database_identity()
+        if identity in _READY_DATABASES:
             return
         with connect() as db:
             table = db.execute(
@@ -40,4 +52,4 @@ def ensure_execution_ownership_schema() -> None:
             for name, declaration in _OWNERSHIP_COLUMNS.items():
                 if name not in existing:
                     db.execute(f"ALTER TABLE zone_reactions ADD COLUMN {name} {declaration}")
-        _READY_PATHS.add(key)
+        _READY_DATABASES.add(_database_identity())
