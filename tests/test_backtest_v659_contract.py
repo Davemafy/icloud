@@ -197,6 +197,8 @@ def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_pat
             "2026-08-03T12:02:00+00:00",
             "--out",
             str(out),
+            "--progress-out",
+            str(tmp_path / "progress.json"),
         ],
         capture_output=True,
         text=True,
@@ -228,6 +230,31 @@ def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_pat
     assert meta["no_lookahead"] is True
     assert meta["cloud_version"] == "6.5.90"
     assert meta["sequence_contract"] == "3.42"
+    progress = json.loads((tmp_path / "progress.json").read_text(encoding="utf-8"))
+    assert progress["phase"] == "COMPLETED"
+    assert progress["progress_pct"] == 100.0
+    assert progress["processed_m1_closes"] == progress["total_m1_closes"]
+
+
+
+def test_bar_series_reuses_cached_model_objects():
+    rows = [
+        backtest.ReplayBar(ts=0, open=1, high=2, low=0.5, close=1.5),
+        backtest.ReplayBar(ts=900, open=2, high=3, low=1.5, close=2.5),
+    ]
+    series = backtest.BarSeries(rows)
+    first = series.closed_model_before(1800, "M15", 10)
+    second = series.closed_model_before(1800, "M15", 10)
+    assert first[0] is second[0]
+    assert first[1] is second[1]
+
+
+def test_replay_uses_lifecycle_only_each_minute_and_persists_snapshot_only_for_analysis():
+    text = Path("app/backtest.py").read_text(encoding="utf-8")
+    assert "update_zone_publication_contacts(snapshot)" in text
+    assert "update_zone_reactions(snapshot)" in text
+    assert "save_snapshot_record(snapshot)" in text
+    assert "save_snapshot(snapshot)" not in text
 
 
 
