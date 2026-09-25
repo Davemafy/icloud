@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from math import isclose
 
 
@@ -16,10 +17,34 @@ _REQUIRED_SEQUENCE_FIELDS = (
 )
 
 
+def _canonical_value(field: str, value) -> str:
+    if field == "base_risk_pct":
+        try:
+            return f"{float(value or 0.0):.8f}"
+        except (TypeError, ValueError):
+            return "INVALID"
+    if field == "qualified_mitigations":
+        try:
+            return str(int(value or 0))
+        except (TypeError, ValueError):
+            return "INVALID"
+    return str(value or "").strip()
+
+
+def contract_fingerprint(contract: dict) -> str:
+    """Stable, language-neutral fingerprint for the eight-field Sniper contract.
+
+    The wire representation is intentionally simple so MQL5 can reproduce it:
+    field=value pairs in _REQUIRED_SEQUENCE_FIELDS order, joined by ``|``.
+    """
+    raw = "|".join(f"{field}={_canonical_value(field, contract.get(field))}" for field in _REQUIRED_SEQUENCE_FIELDS)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def cloud_contract(analysis, zone, *, risk_context: str, base_risk_pct: float, execution_eligible: bool) -> dict:
     """Build the authoritative Cloud-side contract for the selected Sniper zone."""
     if analysis is None or zone is None:
-        return {
+        out = {
             "parity_version": SNIPER_PARITY_VERSION,
             "analysis_id": "",
             "zone_id": "",
@@ -30,6 +55,8 @@ def cloud_contract(analysis, zone, *, risk_context: str, base_risk_pct: float, e
             "base_risk_pct": 0.0,
             "execution_authority": "NONE",
         }
+        out["contract_fingerprint"] = contract_fingerprint(out)
+        return out
     policy = dict(getattr(analysis, "execution_policy", {}) or {})
     authority = str(dict(policy.get("execution_authority") or {}).get("authority") or "NONE")
     notes = list(getattr(zone, "notes", []) or [])
@@ -46,7 +73,7 @@ def cloud_contract(analysis, zone, *, risk_context: str, base_risk_pct: float, e
             current_grade = text.split(":", 1)[1]
     if not execution_eligible:
         authority = "NONE"
-    return {
+    out = {
         "parity_version": SNIPER_PARITY_VERSION,
         "analysis_id": str(getattr(analysis, "analysis_id", "") or ""),
         "zone_id": str(getattr(zone, "zone_id", "") or ""),
@@ -57,6 +84,8 @@ def cloud_contract(analysis, zone, *, risk_context: str, base_risk_pct: float, e
         "base_risk_pct": float(base_risk_pct or 0.0),
         "execution_authority": authority,
     }
+    out["contract_fingerprint"] = contract_fingerprint(out)
+    return out
 
 
 def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_positions: int = 0) -> dict:
@@ -67,6 +96,7 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
     allowed and is reported separately.
     """
     seq = dict(sequence or {})
+    cloud_fp = contract_fingerprint(cloud or {})
     result = {
         "version": SNIPER_PARITY_VERSION,
         "status": "OFFLINE" if not online else "UNVERIFIED",
@@ -76,6 +106,8 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
         "reason": "SEQUENCE_OFFLINE" if not online else "LEGACY_TELEMETRY",
         "mismatches": [],
         "cloud": dict(cloud or {}),
+        "cloud_fingerprint": cloud_fp,
+        "sequence_fingerprint": str(seq.get("contract_fingerprint") or ""),
     }
     if not online:
         return result
@@ -105,6 +137,7 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
 
     result["mismatches"] = mismatches
     result["verified"] = not mismatches
+    result["computed_sequence_fingerprint"] = contract_fingerprint(seq)
     if mismatches:
         result["status"] = "MISMATCH"
         result["reason"] = "SNIPER_CONTRACT_MISMATCH"
