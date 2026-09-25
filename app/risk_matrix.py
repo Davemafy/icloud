@@ -5,7 +5,7 @@ from typing import Any
 from .config import SETTINGS
 from .models import Direction, Grade, Zone
 
-RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V5_BPLUS_EXEC"
+RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V6_EXHAUSTION_HARD_BLOCK"
 RISK_CONTEXT_TREND = "TREND"
 RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
 
@@ -15,6 +15,9 @@ RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
 # - B+ remains first-qualified-mitigation only so lower structural quality is not
 #   confused with A/A+ freshness.
 # - Freshness is measured by qualified directional mitigation cycles only.
+# - Once a zone exceeds the touch budget of its CURRENT execution grade, the
+#   original direction is MAP_ONLY / EXECUTION_BLOCKED. Keeping the historical
+#   structural/current grade visible must never restore execution authority.
 EXECUTION_GRADES = {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
 
 
@@ -66,8 +69,40 @@ def execution_touch_limit(zone: Zone) -> int:
     return -1
 
 
+def _note_value(zone: Zone, prefix: str) -> str:
+    for note in list(getattr(zone, "notes", None) or []):
+        text = str(note)
+        if text.startswith(prefix):
+            return text[len(prefix):].strip()
+    return ""
+
+
+def execution_authority_status(zone: Zone) -> str:
+    """Single fail-closed truth for original-direction NEW execution authority.
+
+    Structural/current grades remain useful map metadata. They are not authority.
+    An exhausted zone can stay visible for context and accepted-invalidation/flip
+    monitoring, but cannot reacquire its original direction through M1 handoff.
+    """
+    if zone.grade not in EXECUTION_GRADES:
+        return "GRADE_BLOCKED"
+
+    touches = int(zone.touch_count or 0)
+    limit = execution_touch_limit(zone)
+    degrade_reason = _note_value(zone, "grade_degrade_reason:").upper()
+
+    # Explicit exhaustion provenance is a permanent fail-closed signal for this
+    # published original-zone lifecycle, even if a downstream display later shows
+    # a B+ grade or an accidentally stale touch count.
+    if degrade_reason.startswith("EXHAUSTED_"):
+        return "MAP_ONLY_EXHAUSTED"
+    if limit < 0 or touches > limit:
+        return "MAP_ONLY_EXHAUSTED"
+    return "EXECUTION_ELIGIBLE"
+
+
 def execution_grade_eligible(zone: Zone) -> bool:
-    return zone.grade in EXECUTION_GRADES and execution_touch_limit(zone) >= int(zone.touch_count)
+    return execution_authority_status(zone) == "EXECUTION_ELIGIBLE"
 
 
 def matrix_payload() -> dict[str, Any]:
@@ -91,11 +126,19 @@ def matrix_payload() -> dict[str, Any]:
         "bplus_execution_authority": True,
         "touch_limits": {"A+": 1, "A": 2, "B+": 1},
         "freshness_basis": "QUALIFIED_DIRECTIONAL_MITIGATION_CYCLES_ONLY",
+        "exhaustion_authority": {
+            "state": "MAP_ONLY_EXHAUSTED",
+            "original_direction_new_execution": False,
+            "m1_reacquisition": False,
+            "context_visibility": True,
+            "flip_monitoring": True,
+            "flip_requires": "ACCEPTED_M15_INVALIDATION_THEN_RETEST_THEN_FRESH_M1_CONFIRMATION",
+        },
         "grading_contract": {
             "TREND": "continuation-source strength + qualified-mitigation freshness",
             "COUNTERTREND": "HTF extremity + structural liquidity sweep/rejection + reversal-response quality + qualified-mitigation freshness",
         },
-        "note": "Master Sniper base thesis risk is context x grade before entry-share/model multipliers. B+ has executable authority at the dedicated 0.25% reduced-risk budget and still requires every normal M15/M1/AI/safety gate.",
+        "note": "Master Sniper base thesis risk is context x grade before entry-share/model multipliers. B+ has executable authority at the dedicated 0.25% reduced-risk budget only while within its qualified-mitigation freshness limit. Exhausted original zones remain map/flip context only and cannot reacquire original-direction M1 authority.",
     }
 
 
