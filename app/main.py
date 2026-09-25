@@ -24,6 +24,7 @@ from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
+from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -501,6 +502,13 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     if not online:
         return "SEQUENCE OFFLINE" if status == "M1 READY" else status
 
+    parity = dict(seq.get("sniper_contract_parity") or {})
+    parity_status = str(parity.get("status") or "")
+    if status not in terminal and parity_status == "MISMATCH":
+        return "ENTRY BLOCKED: SNIPER CONTRACT MISMATCH"
+    if status not in terminal and status == "M1 READY" and parity_status in {"UNVERIFIED", "OFFLINE"}:
+        return "ENTRY BLOCKED: SNIPER CONTRACT UNVERIFIED"
+
     authority = str(seq.get("authority") or "NONE")
     stage = str(seq.get("gate_stage") or "UNKNOWN").upper()
     reason = str(seq.get("gate_reason") or "").upper()
@@ -541,6 +549,7 @@ def _sequence_debug_snapshot() -> dict:
     rows = latest_heartbeats(30)
     hb = next((x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"), None)
     if hb is None:
+        parity = evaluate_sequence_parity({}, {}, online=False, open_positions=0)
         return {
             "online": False,
             "version": "",
@@ -549,12 +558,29 @@ def _sequence_debug_snapshot() -> dict:
             "gate_reason": "NO_SEQUENCE_HEARTBEAT",
             "candidate_model": "NONE",
             "gate_age_seconds": None,
+            "sniper_contract_parity": parity,
         }
     payload = hb.get("payload") if isinstance(hb.get("payload"), dict) else {}
     details = dict(payload.get("details") or {}) if isinstance(payload, dict) else {}
     gate_ts = int(details.get("gate_ts") or 0)
+    online = now - int(hb.get("ts") or 0) <= 45
+    open_positions = int(details.get("open_positions") or 0)
+
+    cloud_contract = {}
+    analysis = active_analysis()
+    snapshot = latest_snapshot()
+    if analysis is not None and snapshot is not None:
+        cloud_contract = plan_contract_from_text(active_plan_text(analysis, snapshot))
+    sequence_contract = sequence_contract_from_details(details)
+    parity = evaluate_sequence_parity(
+        cloud_contract,
+        sequence_contract,
+        online=online,
+        open_positions=open_positions,
+    )
+
     return {
-        "online": now - int(hb.get("ts") or 0) <= 45,
+        "online": online,
         "version": str(hb.get("version") or ""),
         "authority": str(details.get("execution_authority") or "NONE"),
         "gate_stage": str(details.get("gate_stage") or "UNKNOWN"),
@@ -570,11 +596,15 @@ def _sequence_debug_snapshot() -> dict:
         "reentries": int(details.get("reentries") or 0),
         "flip_primary_entries": int(details.get("flip_primary_entries") or 0),
         "flip_reentries": int(details.get("flip_reentries") or 0),
-        "open_positions": int(details.get("open_positions") or 0),
+        "open_positions": open_positions,
         "restart_safe": bool(details.get("restart_safe")),
         "owner_mirror_active": bool(details.get("owner_mirror_active")),
         "owner_mirror_zone_id": str(details.get("owner_mirror_zone_id") or ""),
         "execution_handoff_ts": int(details.get("execution_handoff_ts") or 0),
+        "contract_execution_authority": str(details.get("contract_execution_authority") or ""),
+        "contract_parity_status": str(details.get("contract_parity_status") or ""),
+        "contract_fingerprint": str(details.get("contract_fingerprint") or ""),
+        "sniper_contract_parity": parity,
     }
 
 
