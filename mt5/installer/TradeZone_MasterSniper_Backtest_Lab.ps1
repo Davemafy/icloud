@@ -213,6 +213,25 @@ try{
   Copy-Item $next (Join-Path $desktop 'MasterSniper_Backtest_NEXT.txt') -Force
 
   $terminal=FindTerminal $install
+  $collector=Join-Path $desktop 'Collect_MasterSniper_Backtest_Results.bat'
+  $nl=[Environment]::NewLine
+  $commonRoot=$common
+  $resultMeta=Join-Path $resultDir 'SMC_v659_tester_plans_metadata.json'
+  $collectorText='@echo off'+$nl+
+    'setlocal'+$nl+
+    'set "OUT=%USERPROFILE%\Desktop\MasterSniper_Backtest_Result"'+$nl+
+    'if exist "%OUT%" rmdir /s /q "%OUT%"'+$nl+
+    'mkdir "%OUT%"'+$nl+
+    'copy /y "'+$commonRoot+'\MasterSniper_v659_tester_journal.csv" "%OUT%\" >nul'+$nl+
+    'copy /y "'+$commonRoot+'\MasterSniper_v659_tester_summary.txt" "%OUT%\" >nul'+$nl+
+    'copy /y "'+$resultMeta+'" "%OUT%\" >nul'+$nl+
+    'copy /y "'+(Join-Path $resultDir 'MasterSniper_Backtest_Job.json')+'" "%OUT%\" >nul'+$nl+
+    'powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path ''%OUT%\*'' -DestinationPath ''%USERPROFILE%\Desktop\MasterSniper_Backtest_Result.zip'' -Force"'+$nl+
+    'echo.'+$nl+
+    'echo DONE: MasterSniper_Backtest_Result.zip is on the Desktop.'+$nl+
+    'pause'+$nl
+  [IO.File]::WriteAllText($collector,$collectorText,[Text.ASCIIEncoding]::new())
+
   if($terminal){
     $ini=Join-Path $desktop 'MasterSniper_Backtest_RealTicks.ini'
     $expert='TradeZoneValidation\InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo'
@@ -260,7 +279,7 @@ try{
   Write-Host ''
   Write-Host 'Tester files are already in MT5 Common Files.' -ForegroundColor Cyan
   Write-Host 'Backtest EA is already compiled under Experts > TradeZoneValidation.' -ForegroundColor Cyan
-  Write-Host 'A real-tick tester launcher and NEXT instructions were placed on the Desktop.' -ForegroundColor Cyan
+  Write-Host 'A real-tick tester launcher, NEXT instructions, and result collector were placed on the Desktop.' -ForegroundColor Cyan
   Write-Host ''
   Write-Host 'Live DataBridge 1.51 / Sequence 3.42 were never replaced or detached.' -ForegroundColor Yellow
   PauseExit 0
