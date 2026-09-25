@@ -15,6 +15,99 @@ _FRESHNESS_LABEL_REPLACEMENT = (
     "'Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)')"
 )
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
+_VALIDATION_LEDGER_CARD = (
+    '<h2>Master Sniper validation ledger <span class="pill paper">OBSERVATION ONLY</span></h2>'
+    '<div class="grid">'
+    '<div class="card"><h3>Published samples</h3><div class="kpi" id="vLedgerPublished">0</div>'
+    '<div class="muted">Exact zone geometries recorded after publication.</div></div>'
+    '<div class="card"><h3>Live contacts</h3><div class="kpi" id="vLedgerContacts">0</div>'
+    '<div class="muted">Post-publication tactical-core contacts only.</div></div>'
+    '<div class="card"><h3>Confirmed reactions</h3><div class="kpi" id="vLedgerReactions">0</div>'
+    '<div class="muted" id="vLedgerReactionRate">No contacted sample yet.</div></div>'
+    '<div class="card"><h3>Executed samples</h3><div class="kpi" id="vLedgerExecuted">0</div>'
+    '<div class="muted">MT5 ENTRY_OPENED evidence linked to a publication.</div></div>'
+    '</div>'
+    '<div class="card scroll" style="margin-top:12px"><table><thead><tr>'
+    '<th>Published</th><th>Zone</th><th>Side</th><th>Grade</th><th>Core</th>'
+    '<th>Contact</th><th>Mitigations</th><th>M1 handoff</th><th>Lifecycle</th>'
+    '<th>Execution</th><th>Outcome</th>'
+    '</tr></thead><tbody id="sniperValidationLedger">'
+    '<tr><td colspan="11" class="muted">Waiting for validation evidence...</td></tr>'
+    '</tbody></table>'
+    '<p class="note"><b>Research boundary:</b> this ledger is read-only. It is built from already-persisted '
+    'publication, mitigation, lifecycle and MT5 journal truth. It cannot create a zone, alter a grade, '
+    'acquire execution authority, change risk, or send an order.</p></div>'
+)
+
+_VALIDATION_LEDGER_SCRIPT = r"""
+<script id="sniper-validation-ledger-script">
+(function(){
+  function le(v){
+    return String(v===undefined||v===null?'':v)
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+      .replaceAll('"','&quot;').replaceAll("'","&#039;");
+  }
+  function lt(ts){
+    const n=Number(ts||0);
+    if(!n)return '—';
+    try{return new Date(n*1000).toLocaleString();}catch(e){return String(n);}
+  }
+  function ln(v,d=3){
+    const n=Number(v);
+    if(!Number.isFinite(n))return '—';
+    return n.toLocaleString(undefined,{maximumFractionDigits:d});
+  }
+  function setText(id,value){
+    const el=document.getElementById(id);
+    if(el)el.textContent=String(value===undefined||value===null?'—':value);
+  }
+  async function refreshSniperValidationLedger(){
+    const body=document.getElementById('sniperValidationLedger');
+    if(!body)return;
+    try{
+      const response=await fetch('/validation/sniper-ledger?limit=30',{cache:'no-store'});
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      const data=await response.json();
+      const summary=data?.summary||{};
+      setText('vLedgerPublished',summary.publications??0);
+      setText('vLedgerContacts',summary.live_contacts??0);
+      setText('vLedgerReactions',summary.reaction_confirmed??0);
+      setText('vLedgerExecuted',summary.executed_publications??0);
+      const rate=document.getElementById('vLedgerReactionRate');
+      if(rate){
+        rate.textContent=summary.reaction_rate_after_contact_pct===null||summary.reaction_rate_after_contact_pct===undefined
+          ? 'No contacted sample yet.'
+          : ('Reaction after contact '+summary.reaction_rate_after_contact_pct+'% • descriptive only');
+      }
+      const rows=Array.isArray(data?.rows)?data.rows:[];
+      body.innerHTML=rows.length?rows.map(r=>{
+        const contact=r.live_core_touched_at?lt(r.live_core_touched_at):'NO';
+        const handoff=r.handoff_at?(lt(r.handoff_at)+'<br><span class="muted">'+le(r.handoff_authority||'')+'</span>'):'—';
+        const grade=le(r.structural_grade||'—')+(r.current_grade&&r.current_grade!==r.structural_grade
+          ? (' → <b>'+le(r.current_grade)+'</b>'):'');
+        return '<tr>'+
+          '<td>'+lt(r.published_at)+'</td>'+
+          '<td><b>'+le(r.zone_id||'—')+'</b><br><span class="muted">'+le(r.source_tf||'')+'</span></td>'+
+          '<td>'+le(r.direction||'—')+'</td>'+
+          '<td>'+grade+'</td>'+
+          '<td>'+ln(r.core_low)+'–'+ln(r.core_high)+'</td>'+
+          '<td>'+contact+'</td>'+
+          '<td>'+le(r.qualified_mitigations??0)+' qualified<br><span class="muted">'+le(r.raw_core_contacts??0)+' raw</span></td>'+
+          '<td>'+handoff+'</td>'+
+          '<td>'+le(String(r.lifecycle_status||'—').replaceAll('_',' '))+'</td>'+
+          '<td>'+le(String(r.execution_state||'—').replaceAll('_',' '))+'</td>'+
+          '<td><b>'+le(String(r.outcome||'—').replaceAll('_',' '))+'</b></td>'+
+          '</tr>';
+      }).join(''):'<tr><td colspan="11" class="muted">No exact zone publication has been recorded yet.</td></tr>';
+    }catch(error){
+      body.innerHTML='<tr><td colspan="11" class="muted">Validation ledger temporarily unavailable: '+le(error?.message||error)+'</td></tr>';
+    }
+  }
+  refreshSniperValidationLedger();
+  window.setInterval(refreshSniperValidationLedger,10000);
+})();
+</script>
+""".strip()
 _MITIGATION_AUDIT_CARD = (
     '<h2>Mitigation audit <span class="pill paper">GRADE AUTHORITY</span></h2>'
     '<div class="card scroll"><table><thead><tr>'
@@ -549,11 +642,17 @@ def compact_dashboard_html(html: str) -> str:
     if 'id="mitigationAudit"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
         cleaned = cleaned.replace(_JOURNAL_ANCHOR, _MITIGATION_AUDIT_CARD + "\n" + _JOURNAL_ANCHOR, 1)
 
+    if 'id="sniperValidationLedger"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
+        cleaned = cleaned.replace(_JOURNAL_ANCHOR, _VALIDATION_LEDGER_CARD + "\n" + _JOURNAL_ANCHOR, 1)
+
     if 'id="journalContext"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
         cleaned = cleaned.replace(_JOURNAL_ANCHOR, _JOURNAL_CONTEXT_CARD + "\n" + _JOURNAL_ANCHOR, 1)
 
     if 'id="htfScore"' not in cleaned and _READINESS_CARD in cleaned:
         cleaned = cleaned.replace(_READINESS_CARD, _READINESS_SPLIT, 1)
+
+    if 'id="sniper-validation-ledger-script"' not in cleaned and "</body>" in cleaned:
+        cleaned = cleaned.replace("</body>", _VALIDATION_LEDGER_SCRIPT + "\n</body>", 1)
 
     if 'id="journal-context-readonly-script"' not in cleaned and "</body>" in cleaned:
         cleaned = cleaned.replace("</body>", _JOURNAL_CONTEXT_SCRIPT + "\n</body>", 1)
