@@ -1,27 +1,37 @@
 from __future__ import annotations
 
+import os
 import threading
 
 from .db import connect, _path
 
 
 _SCHEMA_LOCK = threading.Lock()
-_READY_PATHS: set[str] = set()
+_READY_DATABASES: set[tuple[str, int, int]] = set()
+
+
+def _database_identity() -> tuple[str, int, int]:
+    path = str(_path())
+    try:
+        stat = os.stat(path)
+        return (path, int(stat.st_ino), int(stat.st_ctime_ns))
+    except OSError:
+        return (path, 0, 0)
+
 
 
 def ensure_zone_publication_schema() -> None:
     """Create exact-geometry publication truth for fail-safe execution handoff.
 
-    The schema check is cached per database path after successful creation so the
-    historical M1 replay does not execute the same CREATE/INDEX script tens of
-    thousands of times. Database isolation is preserved because the cache key is
-    the concrete DB path.
+    Schema creation is cached by the physical SQLite file identity. Replacing a DB
+    at the same path invalidates the cache automatically.
     """
-    key = str(_path())
-    if key in _READY_PATHS:
+    identity = _database_identity()
+    if identity in _READY_DATABASES:
         return
     with _SCHEMA_LOCK:
-        if key in _READY_PATHS:
+        identity = _database_identity()
+        if identity in _READY_DATABASES:
             return
         with connect() as db:
             db.executescript(
@@ -58,4 +68,4 @@ def ensure_zone_publication_schema() -> None:
                     ON zone_publications(zone_id,last_seen_at);
                 """
             )
-        _READY_PATHS.add(key)
+        _READY_DATABASES.add(_database_identity())
