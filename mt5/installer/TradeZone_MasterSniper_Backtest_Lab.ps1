@@ -4,7 +4,7 @@ $ProgressPreference='SilentlyContinue'
 $Host.UI.RawUI.WindowTitle='Trade Zone - Master Sniper Backtest Lab'
 
 $Repo='Davemafy/icloud'
-$Branch='master-sniper-backtest-v659'
+$Branch='main'
 $Raw="https://raw.githubusercontent.com/$Repo/$Branch"
 $ExporterRel='mt5/backtest/TradeZone_MasterSniper_HistoryExporter.mq5'
 $BacktestRel='mt5/backtest/InstitutionalSMC_SequenceEA_v3_42_MasterSniper_Backtest_Demo.mq5'
