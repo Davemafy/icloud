@@ -25,9 +25,12 @@ def test_nearer_valid_sell_outranks_remote_fresher_sell_for_today():
     assert prompt_intraday_rank(nearer, snapshot) < prompt_intraday_rank(remote, snapshot)
 
 
-def test_execution_grade_still_protects_against_weak_nearby_watch_zone():
+def test_reachable_valid_watch_zone_precedes_remote_pristine_context_zone():
     snapshot = SimpleNamespace(mid=4297.25, atr_h1=20.995, xau_h1=[])
     nearby_b_plus = _zone(4300.0, 4330.0, touches=2, grade=Grade.B_PLUS, ts=4)
     remote_a_plus = _zone(4367.49, 4407.49, touches=0, grade=Grade.A_PLUS, ts=5)
 
-    assert prompt_intraday_rank(remote_a_plus, snapshot) < prompt_intraday_rank(nearby_b_plus, snapshot)
+    # Master Sniper battlefield selection is reachability-first once structural
+    # validity is established. Grade/freshness controls execution authority; it
+    # must not let a remote pristine source erase a nearer valid reaction area.
+    assert prompt_intraday_rank(nearby_b_plus, snapshot) < prompt_intraday_rank(remote_a_plus, snapshot)
