@@ -251,8 +251,8 @@ def test_bar_series_reuses_cached_model_objects():
 
 def test_replay_uses_lifecycle_only_each_minute_and_persists_snapshot_only_for_analysis():
     text = Path("app/backtest.py").read_text(encoding="utf-8")
-    assert "update_zone_publication_contacts(snapshot)" in text
-    assert "update_zone_reactions(snapshot)" in text
+    assert text.count("update_zone_reactions(snapshot)") == 1
+    assert "update_zone_publication_contacts(snapshot)" not in text
     assert "save_snapshot_record(snapshot)" in text
     assert "save_snapshot(snapshot)" not in text
 
