@@ -10,6 +10,7 @@ from .config import SETTINGS
 from .models import Analysis, MarketSnapshot, Feedback, Heartbeat, MLCandidateTelemetry
 
 _lock = threading.Lock()
+_replay_local = threading.local()
 
 
 def _path() -> str:
@@ -24,7 +25,30 @@ def _path() -> str:
 
 
 def connect() -> sqlite3.Connection:
-    db = sqlite3.connect(_path(), timeout=10, check_same_thread=False)
+    path = _path()
+    replay_fast = os.getenv("TRADEZONE_REPLAY_FAST_DB", "").strip() == "1"
+
+    if replay_fast:
+        cached = getattr(_replay_local, "connection", None)
+        cached_path = getattr(_replay_local, "path", "")
+        if cached is not None and cached_path == path:
+            return cached
+
+        db = sqlite3.connect(path, timeout=30, check_same_thread=False)
+        # Historical replay runs against a disposable isolated SQLite file in one
+        # subprocess/thread. Durability against power loss is irrelevant there;
+        # avoiding WAL fsync/open-close churn materially improves large replays.
+        db.execute("PRAGMA journal_mode=MEMORY")
+        db.execute("PRAGMA synchronous=OFF")
+        db.execute("PRAGMA temp_store=MEMORY")
+        db.execute("PRAGMA cache_size=-131072")
+        db.execute("PRAGMA locking_mode=EXCLUSIVE")
+        db.row_factory = sqlite3.Row
+        _replay_local.connection = db
+        _replay_local.path = path
+        return db
+
+    db = sqlite3.connect(path, timeout=10, check_same_thread=False)
     db.execute("PRAGMA journal_mode=WAL")
     db.row_factory = sqlite3.Row
     return db
