@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import threading
 
-from .db import connect, _path
+from . import db as db_module
 
 
 _SCHEMA_LOCK = threading.Lock()
@@ -11,7 +11,7 @@ _READY_DATABASES: set[tuple[str, int, int]] = set()
 
 
 def _database_identity() -> tuple[str, int, int]:
-    path = str(_path())
+    path = str(db_module._path())
     try:
         stat = os.stat(path)
         return (path, int(stat.st_ino), int(stat.st_ctime_ns))
@@ -33,7 +33,7 @@ def ensure_zone_publication_schema() -> None:
         identity = _database_identity()
         if identity in _READY_DATABASES:
             return
-        with connect() as db:
+        with db_module.connect() as db:
             db.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS zone_publications(
