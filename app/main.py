@@ -25,7 +25,7 @@ from .security import require_api_key
 from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
 from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
-from .sniper_validation_ledger import build_validation_ledger
+from .sniper_validation_ledger import build_validation_ledger, export_validation_csv
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
@@ -858,6 +858,15 @@ def journal_current():
 @app.get("/validation/sniper-ledger")
 def sniper_validation_ledger(limit: int = 50):
     return build_validation_ledger(limit)
+
+
+@app.get("/validation/sniper-ledger.csv")
+def sniper_validation_ledger_csv(limit: int = 250):
+    return Response(
+        content=export_validation_csv(limit),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=master_sniper_validation_ledger.csv"},
+    )
 
 
 @app.get("/journal/trades")
