@@ -64,8 +64,19 @@ def test_native_proof_unlocked_immutable_342_151_candidates():
         '\"risk_context\":\"%s\"',
         '\"base_risk_pct\":%s',
         '\"contract_fingerprint\":\"%s\"',
+        '\"expected_contract_fingerprint\":\"%s\"',
+        '\"contract_execution_authority\":\"%s\"',
+        '\"contract_parity_status\":\"%s\"',
+        "TZ42_NewEntryParitySafe",
+        'TZ_SetGate("PARITY","SNIPER_CONTRACT_UNVERIFIED")',
+        'TZ_SetGate("PARITY","SNIPER_CONTRACT_MISMATCH")',
+        "g_tzFlipSniperContractVerified",
+        "sniper_contract_verified=",
+        "sniper_contract_fingerprint=",
     ):
         assert needle in seq
+    assert "TZ_PreCoreSync();ManagePositions();Evaluate();" in seq
+    assert 'if(!TZ42_NewEntryParitySafe())return false;' in seq
     assert '#property version "1.51"' in bridge
     assert '#define TZ_BRIDGE_VERSION "1.51"' in bridge
     assert '#define TZ_SEQUENCE_EXPECTED "3.42"' in bridge
