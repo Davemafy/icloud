@@ -35,9 +35,9 @@ def test_integrated_lab_uses_managed_cloud_credentials_without_embedding_them():
     assert "change-me" not in text
 
 
-def test_integrated_lab_launcher_targets_staging_branch_until_acceptance():
+def test_integrated_lab_launcher_targets_main_after_deployment():
     text = LAB_BAT.read_text(encoding="utf-8")
-    assert "master-sniper-backtest-v659" in text
+    assert "raw.githubusercontent.com/Davemafy/icloud/main/" in text
     assert "TradeZone_MasterSniper_Backtest_Lab.ps1" in text
 
 
