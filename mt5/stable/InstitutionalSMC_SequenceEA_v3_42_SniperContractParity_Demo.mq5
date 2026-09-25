@@ -106,6 +106,14 @@ double g_tzValidationInitialCapital=10000.0;
 string g_tzRiskContext="TREND";
 int g_tzQualifiedMitigations=0;
 string g_tzSniperContractFingerprint="";
+string g_tzExpectedSniperContractFingerprint="";
+string g_tzSniperContractAuthority="NONE";
+string g_tzSniperParityStatus="UNVERIFIED";
+bool g_tzSniperContractVerified=false;
+double g_tzOriginalRiskPct=0.0,g_tzFlipRiskPct=0.0,g_tzAcceptedFlipRiskPct=0.0;
+double g_tzGradeRiskPct=0.0; // legacy telemetry alias = original base thesis risk
+double g_tzLastRiskBase=0.0,g_tzLastRiskMoney=0.0,g_tzLastIntendedLots=0.0,g_tzLastActualLots=0.0;
+bool g_tzLastSplitPartial=false;
 
 void TZ42_RefreshSniperParityFromPlan(string text)
 {
@@ -114,14 +122,37 @@ void TZ42_RefreshSniperParityFromPlan(string text)
    string qmit=KV(text,"qualified_mitigations");
    if(qmit=="")qmit=KV(text,"touch_count");
    g_tzQualifiedMitigations=(int)StringToInteger(qmit);
+   g_tzSniperContractAuthority=KV(text,"execution_authority");
+   if(g_tzSniperContractAuthority=="")g_tzSniperContractAuthority="NONE";
+   g_tzExpectedSniperContractFingerprint=KV(text,"contract_fingerprint");
    g_tzSniperContractFingerprint=TZ_SniperContractFingerprint(
       g_plan.analysis_id,g_plan.zone_id,g_plan.original_direction,g_plan.grade,
-      g_tzQualifiedMitigations,g_tzRiskContext,g_tzOriginalRiskPct,g_tzExecutionAuthority);
+      g_tzQualifiedMitigations,g_tzRiskContext,g_tzOriginalRiskPct,g_tzSniperContractAuthority);
+   g_tzSniperContractVerified=(
+      g_tzExpectedSniperContractFingerprint!="" &&
+      g_tzExpectedSniperContractFingerprint==g_tzSniperContractFingerprint
+   );
+   g_tzSniperParityStatus=(
+      g_tzExpectedSniperContractFingerprint==""?"UNVERIFIED":
+      g_tzSniperContractVerified?"MATCH":"MISMATCH"
+   );
 }
-double g_tzOriginalRiskPct=0.0,g_tzFlipRiskPct=0.0,g_tzAcceptedFlipRiskPct=0.0;
-double g_tzGradeRiskPct=0.0; // legacy telemetry alias = original base thesis risk
-double g_tzLastRiskBase=0.0,g_tzLastRiskMoney=0.0,g_tzLastIntendedLots=0.0,g_tzLastActualLots=0.0;
-bool g_tzLastSplitPartial=false;
+
+bool TZ42_NewEntryParitySafe()
+{
+   if(IsTester()||OperatingMode!=LIVE_CLOUD)return true;
+   if(g_tzExpectedSniperContractFingerprint=="")
+   {
+      TZ_SetGate("PARITY","SNIPER_CONTRACT_UNVERIFIED");
+      return false;
+   }
+   if(!g_tzSniperContractVerified)
+   {
+      TZ_SetGate("PARITY","SNIPER_CONTRACT_MISMATCH");
+      return false;
+   }
+   return true;
+}
 
 bool TZ40_FailedZoneBreakerPD(
    bool buy,double oteLo,double oteHi,
@@ -507,6 +538,8 @@ string g_tzFlipSourceAnalysis="";
 string g_tzFlipSourceZone="";
 int g_tzAcceptedFlipEntries=0;
 int g_tzAcceptedFlipReentries=0;
+bool g_tzFlipSniperContractVerified=false;
+string g_tzFlipSourceContractFingerprint="";
 
 void TZ_SetGate(string stage,string reason)
 {
@@ -518,6 +551,7 @@ void TZ28_ClearAcceptedFlip(string reason)
 {
    g_tzFlipPlanStored=false;g_tzFlipAcceptedAt=0;g_tzFlipSourceAnalysis="";g_tzFlipSourceZone="";
    g_tzAcceptedFlipEntries=0;g_tzAcceptedFlipReentries=0;g_tzAcceptedFlipRiskPct=0.0;
+   g_tzFlipSniperContractVerified=false;g_tzFlipSourceContractFingerprint="";
    ZeroMemory(g_tzFlipPlan);
    FileDelete("TradeZone\\accepted_flip_state.txt");
    g_tzExecutionAuthority="NONE";
@@ -563,6 +597,8 @@ void TZ28_SaveAcceptedFlip()
    FileWriteString(h,"flip_risk_pct="+DoubleToString(g_tzAcceptedFlipRiskPct,4)+"\r\n");
    FileWriteString(h,"flip_entries="+IntegerToString(g_tzAcceptedFlipEntries)+"\r\n");
    FileWriteString(h,"flip_reentries="+IntegerToString(g_tzAcceptedFlipReentries)+"\r\n");
+   FileWriteString(h,"sniper_contract_verified="+(g_tzFlipSniperContractVerified?"1":"0")+"\r\n");
+   FileWriteString(h,"sniper_contract_fingerprint="+g_tzFlipSourceContractFingerprint+"\r\n");
    FileClose(h);
 }
 
@@ -605,6 +641,8 @@ void TZ28_LoadAcceptedFlip()
    g_tzFlipSourceAnalysis=p.analysis_id;g_tzFlipSourceZone=p.zone_id;
    g_tzAcceptedFlipEntries=(int)StringToInteger(TZ_ReadLocalKV("accepted_flip_state.txt","flip_entries"));
    g_tzAcceptedFlipReentries=(int)StringToInteger(TZ_ReadLocalKV("accepted_flip_state.txt","flip_reentries"));
+   g_tzFlipSniperContractVerified=(TZ_ReadLocalKV("accepted_flip_state.txt","sniper_contract_verified")=="1");
+   g_tzFlipSourceContractFingerprint=TZ_ReadLocalKV("accepted_flip_state.txt","sniper_contract_fingerprint");
    TZ_SetGate("FLIP_CANDIDATE","PERSISTED_ACCEPTED_ZONE_FLIP_RESTORED");
 }
 
@@ -617,6 +655,8 @@ void TZ28_ArmAcceptedFlip()
    g_tzFlipPlan=g_plan;g_tzFlipPlanStored=true;
    g_tzFlipAcceptedAt=(g_flipAcceptedAt>0?g_flipAcceptedAt:TimeCurrent());
    g_tzFlipSourceAnalysis=g_plan.analysis_id;g_tzFlipSourceZone=g_plan.zone_id;
+   g_tzFlipSniperContractVerified=g_tzSniperContractVerified;
+   g_tzFlipSourceContractFingerprint=g_tzSniperContractFingerprint;
    g_tzAcceptedFlipEntries=0;g_tzAcceptedFlipReentries=0;
    g_tzAcceptedFlipRiskPct=(g_tzFlipRiskPct>0?g_tzFlipRiskPct:TZ38_DefaultContextRiskPct(g_plan.grade,TZ38_OppositeRiskContext(TZ38_DefaultRiskContext(g_plan.setup_type))));
    g_tzExecutionAuthority="NONE";
@@ -630,6 +670,8 @@ bool TZ28_FlipSafetyGuards()
 {
    if(!IsTester()&&!IsDemo()){TZ_SetGate("SAFETY","NON_DEMO_ACCOUNT");return false;}
    if(!g_tzFlipPlanStored||!g_tzFlipPlan.valid){TZ_SetGate("FLIP_CANDIDATE","NO_PERSISTED_FAILED_ZONE");return false;}
+   if(!IsTester()&&OperatingMode==LIVE_CLOUD&&!g_tzFlipSniperContractVerified)
+   {TZ_SetGate("PARITY","SNIPER_CONTRACT_UNVERIFIED_FLIP_SOURCE");return false;}
    datetime now=TimeTradeServer();if(now<=0)now=TimeCurrent();
    if(g_tzAcceptedFlipEntries==0&&ResearchFlipCandidateMaxMinutes>0&&
       now-g_tzFlipAcceptedAt>ResearchFlipCandidateMaxMinutes*60)
@@ -977,6 +1019,9 @@ void TZ_WriteSequenceState()
    FileWriteString(h,"current_grade="+g_plan.grade+"\r\n");
    FileWriteString(h,"qualified_mitigations="+IntegerToString(g_tzQualifiedMitigations)+"\r\n");
    FileWriteString(h,"contract_fingerprint="+g_tzSniperContractFingerprint+"\r\n");
+   FileWriteString(h,"expected_contract_fingerprint="+g_tzExpectedSniperContractFingerprint+"\r\n");
+   FileWriteString(h,"contract_execution_authority="+g_tzSniperContractAuthority+"\r\n");
+   FileWriteString(h,"contract_parity_status="+g_tzSniperParityStatus+"\r\n");
    FileWriteString(h,"last_execution_model="+g_tzLastModel+"\r\n");
    FileWriteString(h,"gate_stage="+g_tzGateStage+"\r\n");
    FileWriteString(h,"gate_reason="+g_tzGateReason+"\r\n");
@@ -1010,7 +1055,7 @@ void TZ_SendSequenceHeartbeat()
    string body=StringFormat(
       "{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_SequenceEA\",\"version\":\"%s\",\"symbol\":\"%s\",\"account_login\":%I64d,"
       "\"details\":{\"paper_only\":true,\"research_mode\":true,\"restart_safe\":%s,\"active_sequence\":%s,\"open_positions\":%d,"
-      "\"state_persisted\":true,\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"plan_valid\":%s,\"execution_authority\":\"%s\",\"direction\":\"%s\",\"current_grade\":\"%s\",\"qualified_mitigations\":%d,\"risk_context\":\"%s\",\"base_risk_pct\":%s,\"contract_fingerprint\":\"%s\",\"last_execution_model\":\"%s\","
+      "\"state_persisted\":true,\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"plan_valid\":%s,\"execution_authority\":\"%s\",\"direction\":\"%s\",\"current_grade\":\"%s\",\"qualified_mitigations\":%d,\"risk_context\":\"%s\",\"base_risk_pct\":%s,\"contract_fingerprint\":\"%s\",\"expected_contract_fingerprint\":\"%s\",\"contract_execution_authority\":\"%s\",\"contract_parity_status\":\"%s\",\"last_execution_model\":\"%s\","
       "\"owner_mirror_contract\":\"%s\",\"owner_mirror_active\":%s,\"owner_mirror_saved_at\":%I64d,"
       "\"owner_mirror_analysis_id\":\"%s\",\"owner_mirror_zone_id\":\"%s\",\"owner_mirror_direction\":\"%s\","
       "\"owner_mirror_source_tf\":\"%s\",\"owner_mirror_source_ts\":%I64d,\"owner_mirror_grade\":\"%s\","
@@ -1025,7 +1070,7 @@ void TZ_SendSequenceHeartbeat()
       "\"updater_version\":\"%s\",\"stable_release\":\"%s\",\"installed_bridge_version\":\"%s\",\"installed_sequence_version\":\"%s\","
       "\"desired_bridge_version\":\"%s\",\"desired_sequence_version\":\"%s\",\"pending_reload\":\"%s\",\"update_result\":\"%s\"}}",
       (long)now,TZ_SEQUENCE_VERSION,TZ_JsonEscape(_Symbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),safe?"true":"false",openCount>0?"true":"false",openCount,
-      TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_plan.original_direction),TZ_JsonEscape(g_plan.grade),g_tzQualifiedMitigations,TZ_JsonEscape(g_tzRiskContext),DoubleToString(g_tzOriginalRiskPct,8),TZ_JsonEscape(g_tzSniperContractFingerprint),TZ_JsonEscape(g_tzLastModel),
+      TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_plan.original_direction),TZ_JsonEscape(g_plan.grade),g_tzQualifiedMitigations,TZ_JsonEscape(g_tzRiskContext),DoubleToString(g_tzOriginalRiskPct,8),TZ_JsonEscape(g_tzSniperContractFingerprint),TZ_JsonEscape(g_tzExpectedSniperContractFingerprint),TZ_JsonEscape(g_tzSniperContractAuthority),TZ_JsonEscape(g_tzSniperParityStatus),TZ_JsonEscape(g_tzLastModel),
       TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_contract")),
       TZ30_OwnerKV("owner_mirror_active")=="1"?"true":"false",
       (long)StringToInteger(TZ30_OwnerKV("owner_mirror_saved_at")),
@@ -1059,6 +1104,7 @@ bool TZ_ResearchGuards()
 {
    if(!IsTester()&&!IsDemo()){TZ_SetGate("SAFETY","NON_DEMO_ACCOUNT");return false;}
    if(!g_plan.valid){TZ_SetGate("PLAN","PLAN_INVALID");return false;}
+   if(!TZ42_NewEntryParitySafe())return false;
    if(g_plan.ea_mode!="DUAL_BRANCH"){TZ_SetGate("AUTHORITY","PLAN_WATCH_ONLY");return false;}
    if(g_tzExecutionAuthority!="HTF_CORE_HANDOFF"&&
       g_tzExecutionAuthority!="HTF_ZONE_SWEEP_HANDOFF"&&
