@@ -8,6 +8,8 @@ import sys
 import tempfile
 import threading
 import zipfile
+import uuid
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +30,9 @@ REQUIRED_HISTORY_FILES = {
 }
 _OPTIONAL_HISTORY_FILES = {"news.csv", "export_manifest.txt"}
 _JOB_LOCK = threading.Lock()
+_ASYNC_JOBS_LOCK = threading.Lock()
+_ASYNC_JOBS: dict[str, dict] = {}
+_ASYNC_JOB_DIR = Path(tempfile.gettempdir()) / "tradezone_v659_async_jobs"
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -218,3 +223,114 @@ def run_replay_job(
         raise BacktestJobError("historical replay exceeded the 20-minute job limit") from exc
     finally:
         _JOB_LOCK.release()
+
+
+def _prune_async_jobs(max_age_seconds: int = 21600) -> None:
+    now = time.time()
+    with _ASYNC_JOBS_LOCK:
+        stale = [
+            job_id for job_id, item in _ASYNC_JOBS.items()
+            if now - float(item.get("created_at") or now) > max_age_seconds
+        ]
+        for job_id in stale:
+            item = _ASYNC_JOBS.pop(job_id, {})
+            path = Path(str(item.get("result_path") or ""))
+            if path.exists():
+                path.unlink(missing_ok=True)
+
+
+def _run_async_job(job_id: str, payload: bytes, kwargs: dict) -> None:
+    with _ASYNC_JOBS_LOCK:
+        if job_id not in _ASYNC_JOBS:
+            return
+        _ASYNC_JOBS[job_id]["status"] = "RUNNING"
+        _ASYNC_JOBS[job_id]["started_at"] = time.time()
+    try:
+        result = run_replay_job(payload, **kwargs)
+        _ASYNC_JOB_DIR.mkdir(parents=True, exist_ok=True)
+        path = _ASYNC_JOB_DIR / f"{job_id}.zip"
+        path.write_bytes(result)
+        with _ASYNC_JOBS_LOCK:
+            _ASYNC_JOBS[job_id].update(
+                status="COMPLETED",
+                completed_at=time.time(),
+                result_path=str(path),
+                result_bytes=len(result),
+                error="",
+            )
+    except Exception as exc:
+        with _ASYNC_JOBS_LOCK:
+            _ASYNC_JOBS[job_id].update(
+                status="FAILED",
+                completed_at=time.time(),
+                error=str(exc)[-16000:],
+            )
+
+
+def start_replay_job(
+    payload: bytes,
+    *,
+    start: str,
+    end: str,
+    timezone_name: str = "Africa/Lagos",
+    spread_points: float = 16.0,
+    point: float = 0.01,
+) -> dict:
+    _validate_window(start, end)
+    _prune_async_jobs()
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise BacktestJobError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    with _ASYNC_JOBS_LOCK:
+        if any(item.get("status") in {"QUEUED", "RUNNING"} for item in _ASYNC_JOBS.values()):
+            raise BacktestJobError("another Master Sniper backtest job is already running")
+        job_id = uuid.uuid4().hex
+        _ASYNC_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "QUEUED",
+            "created_at": time.time(),
+            "started_at": 0,
+            "completed_at": 0,
+            "result_path": "",
+            "result_bytes": 0,
+            "error": "",
+        }
+    kwargs = {
+        "start": start,
+        "end": end,
+        "timezone_name": timezone_name,
+        "spread_points": float(spread_points),
+        "point": float(point),
+    }
+    thread = threading.Thread(
+        target=_run_async_job,
+        args=(job_id, bytes(payload), kwargs),
+        name=f"master-sniper-backtest-{job_id[:8]}",
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "QUEUED", "contract": BACKTEST_API_CONTRACT}
+
+
+def replay_job_status(job_id: str) -> dict:
+    _prune_async_jobs()
+    with _ASYNC_JOBS_LOCK:
+        item = dict(_ASYNC_JOBS.get(str(job_id)) or {})
+    if not item:
+        raise BacktestJobError("backtest job not found")
+    item.pop("result_path", None)
+    return item
+
+
+def replay_job_result(job_id: str) -> bytes:
+    with _ASYNC_JOBS_LOCK:
+        item = dict(_ASYNC_JOBS.get(str(job_id)) or {})
+    if not item:
+        raise BacktestJobError("backtest job not found")
+    if item.get("status") == "FAILED":
+        raise BacktestJobError(str(item.get("error") or "backtest job failed"))
+    if item.get("status") != "COMPLETED":
+        raise BacktestJobError("backtest job is not complete")
+    path = Path(str(item.get("result_path") or ""))
+    if not path.exists():
+        raise BacktestJobError("backtest result package is no longer available")
+    return path.read_bytes()
