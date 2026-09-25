@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.31",
+  "release": "6.3.32",
   "repository": "Davemafy/icloud",
-  "ref": "439fe61fcc5ff88f7e82d99ebb84fca3d6911e72",
-  "data_bridge_version": "1.50",
-  "sequence_ea_version": "3.41",
+  "ref": "bced82261e5067141fe01c7beebfd1ba61108f6d",
+  "data_bridge_version": "1.51",
+  "sequence_ea_version": "3.42",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -160,24 +160,30 @@
     "no_retrospective_prepublication_zone_shading",
     "accepted_zone_breaker_pd_array",
     "accepted_zone_breaker_retest_mss_displacement_entry",
-    "accepted_zone_breaker_no_chase"
+    "accepted_zone_breaker_no_chase",
+    "master_sniper_contract_parity_v1",
+    "cloud_mt5_contract_fingerprint",
+    "qualified_mitigation_truth",
+    "fail_closed_sniper_contract_gate",
+    "sequence_342_parity_runtime",
+    "databridge_151_sequence_342_truth"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
       "requires_reload": true,
-      "sha256": "e5dbb953da20ab40a57d485ed57face221b6ff9a305ad0ee0f08d0ee7288f294"
+      "sha256": "d05c0cd1e7a04b2524c272840d770179a05488b42d0e512b12f553256e74522e"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
       "requires_reload": true,
-      "sha256": "e6a6b545c8d255f5b6a099a38ca8d4a2ad1491b8731004c24d85bbc9692cafeb"
+      "sha256": "a5062ddad59a5ad43f035954832022c2f0815f203b86a714d446fa7b9d6c2583"
     }
   ],
   "support_files": [
@@ -204,6 +210,14 @@
       "target": "Include\\TradeZoneCore",
       "target_name": "InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5",
       "sha256": "f14dac6ec673893707b804b0202ede01e1b1d435f73060df28f21523c864874f"
+    },
+    {
+      "role": "sniper_contract_parity",
+      "name": "SniperContractParityV1.mqh",
+      "path": "mt5/stable/SniperContractParityV1.mqh",
+      "target": "Include\\TradeZoneCore",
+      "target_name": "SniperContractParityV1.mqh",
+      "sha256": "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0"
     }
   ]
 }
