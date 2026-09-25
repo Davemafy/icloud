@@ -32,12 +32,27 @@ def transform_sequence() -> None:
     if SEQ_NEW.exists():
         raise RuntimeError(f"refusing to overwrite immutable target: {SEQ_NEW}")
     s = SEQ_OLD.read_text(encoding="utf-8")
-    require_all(s, ('#property version   "3.41"', '#define TZ_SEQUENCE_VERSION "3.41"'), label="sequence")
+    require_all(
+        s,
+        (
+            '#property version   "3.41"',
+            '#define TZ_SEQUENCE_VERSION "3.41"',
+            'void TZ_SendSequenceHeartbeat()',
+            'TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),g_plan.valid?"true":"false",TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_tzLastModel),',
+            'g_tzExecutionAuthority=KV(text,"execution_authority");',
+            'TZ38_LoadRiskContract(text,g_plan.grade,g_plan.setup_type);',
+        ),
+        label="sequence",
+    )
     s = replace_once(s, '#property version   "3.41"', '#property version   "3.42"', label="sequence property version")
     s = replace_once(s, '#define TZ_SEQUENCE_VERSION "3.41"', '#define TZ_SEQUENCE_VERSION "3.42"', label="sequence define version")
-    # Contract echo/fingerprint insertion is deliberately gated until exact heartbeat
-    # anchors are captured and asserted. Never publish a version-only parity file.
-    raise RuntimeError("sequence heartbeat parity anchors not yet approved; refusing partial transformation")
+
+    # We have now captured the real heartbeat serializer and the real /mt5/plan load
+    # anchors from v3.41. The next transformation must add the missing contract echo
+    # fields and a canonical fingerprint at THIS serializer, not invent a second
+    # authority channel. Keep fail-closed until the canonical MQL fingerprint function
+    # is proven byte-for-byte compatible with app/sniper_contract_parity.py.
+    raise RuntimeError("canonical MQL fingerprint parity not yet proven; refusing partial 3.42 transformation")
 
 
 def transform_bridge() -> None:
@@ -48,13 +63,12 @@ def transform_bridge() -> None:
     b = replace_once(b, '#property version "1.50"', '#property version "1.51"', label="bridge property version")
     b = replace_once(b, '#define TZ_BRIDGE_VERSION "1.50"', '#define TZ_BRIDGE_VERSION "1.51"', label="bridge define version")
     b = replace_once(b, '#define TZ_SEQUENCE_EXPECTED "3.41"', '#define TZ_SEQUENCE_EXPECTED "3.42"', label="bridge sequence expectation")
-    # Do not write until Sequence parity is complete and validated.
     return None
 
 
 def main() -> None:
     # Sequence intentionally runs first and aborts before any file is written while
-    # heartbeat anchors are pending. This makes the current transformer safe to land.
+    # fingerprint equivalence is pending. This makes the current transformer safe.
     transform_sequence()
     transform_bridge()
 
