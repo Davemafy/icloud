@@ -1,4 +1,4 @@
-# Master Sniper 6.5.89 / Sequence 3.42 Backtest Harness
+# Master Sniper 6.5.90 / Sequence 3.42 Backtest Harness
 
 Status: STAGING / DEMO-PAPER RESEARCH ONLY
 
@@ -128,3 +128,38 @@ Do not start with P/L. Review in this order:
 
 The final objective is a walk-forward test: fix defects on one historical period,
 freeze the rules, then test a different unseen period without modifying the system.
+
+
+## Integrated VPS workflow
+
+After the backtest-lab release is deployed, use:
+
+```text
+TradeZone_MasterSniper_Backtest_Lab.bat
+```
+
+The lab deliberately reduces the whole preparation process to one guided Windows
+workflow. It:
+
+1. asks for test dates, XAU symbol, DXY symbol and replay spread;
+2. compiles the no-trading history exporter and backtest-only Sequence 3.42 EA;
+3. waits while you run the exporter once from MT5;
+4. checks that all required XAU/DXY files exist;
+5. uploads the ZIP to the authenticated `/validation/backtest/v659/replay` endpoint;
+6. runs the production Master Sniper replay in a disposable Cloud process/database;
+7. verifies the no-lookahead metadata;
+8. places `SMC_v6_tester_plans.csv` and
+   `SMC_v659_tester_plans_contract.csv` directly in MT5 Common Files;
+9. creates a desktop Strategy Tester configuration using `Model=4`
+   (Every tick based on real ticks).
+
+The Cloud job is single-flight, authenticated with the same managed X-API-Key as the
+EAs, limited to 120 days per run, bounded in upload/uncompressed size, and never
+writes to the live snapshot, analysis or journal database.
+
+Because the normal MT5 terminal may be running the live paper-validation charts, the
+lab does not forcibly close or relaunch it. The generated desktop tester launcher
+refuses no safety rules: use it only after the normal terminal is closed, or simply
+open Strategy Tester manually in the existing terminal and use the prepared files.
+
+The live stable payload remains 6.3.32 / DataBridge 1.51 / Sequence 3.42 throughout.
