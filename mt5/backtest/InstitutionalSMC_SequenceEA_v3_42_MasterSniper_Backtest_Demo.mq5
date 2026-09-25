@@ -1,6 +1,6 @@
 #property strict
 #property version   "3.42"
-#property description "DEMO/PAPER XAU M1 BACKTEST HARNESS: Master Sniper 6.5.89 replay contract + Sequence 3.42 execution."
+#property description "DEMO/PAPER XAU M1 BACKTEST HARNESS: Master Sniper 6.5.90 replay contract + Sequence 3.42 execution."
 
 // Research wrapper around the validated v3.21 execution core.
 // DEMO/PAPER ONLY. Real accounts remain hard-blocked.
@@ -51,8 +51,6 @@ input double ResearchEscapeRetraceMax=0.55;
 input double ResearchEscapeMaxChaseATR=0.12;
 input int ResearchFlipCandidateMaxMinutes=120;
 input string TesterContractFile="SMC_v659_tester_plans_contract.csv";
-input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";
-input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";
 input string TesterJournalFile="MasterSniper_v659_tester_journal.csv";
 input string TesterSummaryFile="MasterSniper_v659_tester_summary.txt";
 
@@ -140,69 +138,6 @@ struct TZBTContract
 };
 TZBTContract g_tzTesterContracts[];
 string g_tzTesterThesisKey="";
-
-void TZBT_InitJournal()
-{
-   if(!IsTester())return;
-   FileDelete(TesterJournalFile,FILE_COMMON);
-   FileDelete(TesterSummaryFile,FILE_COMMON);
-   int h=FileOpen(TesterJournalFile,FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
-   if(h==INVALID_HANDLE){Print("Backtest journal create failed err=",GetLastError());return;}
-   FileWrite(h,
-      "time","deal_id","position_id","entry","deal_type","volume","price","profit","commission","swap","comment",
-      "analysis_id","zone_id","grade","execution_authority","risk_context","qualified_mitigations",
-      "contract_fingerprint","sequence_version","replay_contract");
-   FileClose(h);
-}
-
-void TZBT_LogDeal(ulong deal)
-{
-   if(!IsTester()||deal==0)return;
-   if(!HistoryDealSelect(deal))return;
-   if((ulong)HistoryDealGetInteger(deal,DEAL_MAGIC)!=MagicNumber)return;
-
-   int h=FileOpen(TesterJournalFile,FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON,',');
-   if(h==INVALID_HANDLE)return;
-   FileSeek(h,0,SEEK_END);
-
-   long positionId=HistoryDealGetInteger(deal,DEAL_POSITION_ID);
-   datetime dealTime=(datetime)HistoryDealGetInteger(deal,DEAL_TIME);
-   ENUM_DEAL_ENTRY entry=(ENUM_DEAL_ENTRY)HistoryDealGetInteger(deal,DEAL_ENTRY);
-   ENUM_DEAL_TYPE dtype=(ENUM_DEAL_TYPE)HistoryDealGetInteger(deal,DEAL_TYPE);
-   double volume=HistoryDealGetDouble(deal,DEAL_VOLUME);
-   double price=HistoryDealGetDouble(deal,DEAL_PRICE);
-   double profit=HistoryDealGetDouble(deal,DEAL_PROFIT);
-   double commission=HistoryDealGetDouble(deal,DEAL_COMMISSION);
-   double swap=HistoryDealGetDouble(deal,DEAL_SWAP);
-   string comment=HistoryDealGetString(deal,DEAL_COMMENT);
-
-   FileWrite(h,
-      (long)dealTime,(long)deal,(long)positionId,EnumToString(entry),EnumToString(dtype),
-      DoubleToString(volume,2),DoubleToString(price,_Digits),DoubleToString(profit,2),
-      DoubleToString(commission,2),DoubleToString(swap,2),comment,
-      g_plan.analysis_id,g_plan.zone_id,g_plan.grade,g_tzExecutionAuthority,g_tzRiskContext,
-      g_tzQualifiedMitigations,g_tzSniperContractFingerprint,TZ_SEQUENCE_VERSION,TZ_BACKTEST_CONTRACT);
-   FileClose(h);
-}
-
-void TZBT_WriteSummary()
-{
-   if(!IsTester())return;
-   int h=FileOpen(TesterSummaryFile,FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
-   if(h==INVALID_HANDLE)return;
-   FileWriteString(h,"contract="+TZ_BACKTEST_CONTRACT+"\r\n");
-   FileWriteString(h,"sequence_version="+TZ_SEQUENCE_VERSION+"\r\n");
-   FileWriteString(h,"net_profit="+DoubleToString(TesterStatistics(STAT_PROFIT),2)+"\r\n");
-   FileWriteString(h,"trades="+IntegerToString((int)TesterStatistics(STAT_TRADES))+"\r\n");
-   FileWriteString(h,"profit_trades="+IntegerToString((int)TesterStatistics(STAT_PROFIT_TRADES))+"\r\n");
-   FileWriteString(h,"loss_trades="+IntegerToString((int)TesterStatistics(STAT_LOSS_TRADES))+"\r\n");
-   FileWriteString(h,"profit_factor="+DoubleToString(TesterStatistics(STAT_PROFIT_FACTOR),4)+"\r\n");
-   FileWriteString(h,"expected_payoff="+DoubleToString(TesterStatistics(STAT_EXPECTED_PAYOFF),4)+"\r\n");
-   FileWriteString(h,"balance_drawdown_pct="+DoubleToString(TesterStatistics(STAT_BALANCE_DDREL_PERCENT),4)+"\r\n");
-   FileWriteString(h,"equity_drawdown_pct="+DoubleToString(TesterStatistics(STAT_EQUITY_DDREL_PERCENT),4)+"\r\n");
-   FileWriteString(h,"sharpe="+DoubleToString(TesterStatistics(STAT_SHARPE_RATIO),4)+"\r\n");
-   FileClose(h);
-}
 
 void TZBT_InitJournal()
 {
@@ -2024,18 +1959,6 @@ void OnTick()
    TZ_PreCoreSync();ManagePositions();Evaluate();
    if(g_tzFlipPlanStored){g_flipPrimaryEntries=g_tzAcceptedFlipEntries;g_flipReentries=g_tzAcceptedFlipReentries;}
    TZ28_SaveAcceptedFlip();TZ_SavePersistentState();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
-}
-
-void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
-{
-   if(IsTester()&&trans.type==TRADE_TRANSACTION_DEAL_ADD&&trans.deal>0)TZBT_LogDeal(trans.deal);
-}
-
-double OnTester()
-{
-   TZBT_WriteSummary();
-   Print("Master Sniper backtest results written to FILE_COMMON: ",TesterJournalFile," and ",TesterSummaryFile);
-   return TesterStatistics(STAT_PROFIT);
 }
 
 void OnTradeTransaction(const MqlTradeTransaction &trans,const MqlTradeRequest &request,const MqlTradeResult &result)
