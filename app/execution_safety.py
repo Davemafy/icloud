@@ -354,6 +354,9 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["risk_context"] = zone_risk_context(zone)
     kv["grade_risk_pct"] = f"{float(base_risk_pct):.2f}"
     kv["original_risk_pct"] = f"{float(base_risk_pct):.2f}"
+    kv["base_risk_pct"] = f"{float(base_risk_pct):.8f}"
+    kv["current_grade"] = str(kv.get("current_grade") or kv.get("grade") or "")
+    kv["qualified_mitigations"] = str(kv.get("qualified_mitigations", kv.get("touch_count", "0")))
     kv["flip_risk_pct"] = f"{float(flip_risk_pct(zone)):.2f}"
     kv["bplus_reduced_risk"] = "0"
     kv["bplus_execution_authority"] = "0"
