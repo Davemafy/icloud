@@ -72,3 +72,23 @@ def test_backtest_job_module_never_writes_live_db():
         assert forbidden not in text
     assert "TemporaryDirectory" in text
     assert "another Master Sniper backtest job is already running" in text
+
+
+def test_async_backtest_job_endpoints_are_authenticated_and_pollable():
+    text = Path("app/main.py").read_text(encoding="utf-8")
+    assert '@app.post("/validation/backtest/v659/jobs", dependencies=[Depends(require_api_key)])' in text
+    assert '@app.get("/validation/backtest/v659/jobs/{job_id}", dependencies=[Depends(require_api_key)])' in text
+    assert '@app.get("/validation/backtest/v659/jobs/{job_id}/download", dependencies=[Depends(require_api_key)])' in text
+    assert "start_replay_job" in text
+    assert "replay_job_status" in text
+    assert "replay_job_result" in text
+
+
+def test_async_job_manager_is_single_flight_and_persists_result_outside_request_scope():
+    text = Path("app/backtest_jobs.py").read_text(encoding="utf-8")
+    assert "_ASYNC_JOBS" in text
+    assert "threading.Thread(" in text
+    assert "daemon=True" in text
+    assert '"COMPLETED"' in text
+    assert '"FAILED"' in text
+    assert "another Master Sniper backtest job is already running" in text
