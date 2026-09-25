@@ -24,18 +24,37 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 4. A complete disagreement is `SNIPER_CONTRACT_MISMATCH` and blocks new entries.
 5. Contract mismatch must not disable management of an already-open position.
 6. Numeric wire representations must canonicalize before fingerprinting.
-7. Stable rollback truth remains release 6.3.31 / DataBridge 1.50 / Sequence 3.41 until promotion completes.
-8. Existing v1.50/v3.41 stable files remain immutable; create new versioned files for parity.
+7. The final fingerprint is stamped only after every Cloud plan safety/separation layer has finalized execution authority.
+8. Sequence revalidates the current Cloud fingerprint immediately before a normal order send.
+9. Accepted-zone flips may use only a source contract that was already parity-verified when the failed zone was captured.
+10. Stable rollback truth remains release 6.3.31 / DataBridge 1.50 / Sequence 3.41 until promotion completes.
+11. Existing v1.50/v3.41 stable files remain immutable.
+
+## Proven staging evidence
+
+- [x] Native MT5 canonical-string vector 1 PASS.
+- [x] Native MT5 standard SHA-256 `abc` vector PASS.
+- [x] Native MT5 canonical-string vector 2 PASS.
+- [x] Native HASH1/HASH2 match the frozen Python vectors byte-for-byte.
+- [x] Immutable Sequence 3.42 parity candidate staged.
+- [x] Immutable DataBridge 1.51 compatibility candidate staged.
+- [x] Native-vector-proven parity include staged separately from the rollback stack.
+- [x] Stable manifest remains 6.3.31 / 1.50 / 3.41.
 
 ## Promotion gates
 
-- [ ] Cloud reconciliation is wired to `app/sniper_contract_parity.py`.
-- [ ] Sequence heartbeat echoes every authoritative field plus the fingerprint.
-- [ ] DataBridge/Sequence compatibility truth is advanced together where required.
-- [ ] Python regression suite passes.
-- [ ] Python compile/syntax checks pass.
-- [ ] MQL structural checks pass.
-- [ ] Stable file SHA-256 checks pass.
+- [x] Cloud reconciliation is wired to `app/sniper_contract_parity.py`.
+- [x] Final `/mt5/plan` publishes explicit current grade, qualified mitigations, base risk and fingerprint after authority finalization.
+- [x] Sequence 3.42 candidate echoes every authoritative field plus local/expected fingerprint status.
+- [x] Sequence 3.42 candidate fails closed for normal new entries on UNVERIFIED/MISMATCH and revalidates immediately before order send.
+- [x] Accepted-flip source parity is persisted and legacy/unverified flip state fails closed for new flip entries.
+- [x] DataBridge 1.51 expects Sequence 3.42.
+- [ ] Full Python regression suite passes at the final candidate head.
+- [ ] Python compile/syntax checks pass at the final candidate head.
+- [ ] MQL structural checks pass at the final candidate head.
+- [ ] Native MetaEditor compile proves DataBridge 1.51: 0 errors / 0 warnings.
+- [ ] Native MetaEditor compile proves Sequence 3.42: 0 errors / 0 warnings.
+- [ ] Candidate SHA-256 values are frozen for promotion.
 - [ ] End-to-end runtime test proves MATCH permits the intended new-entry path.
 - [ ] End-to-end runtime test proves UNVERIFIED fails closed for new entries.
 - [ ] End-to-end runtime test proves MISMATCH fails closed for new entries.
@@ -45,4 +64,4 @@ The Cloud and Sequence must agree on all fields below for a new entry to be trus
 
 ## Release method
 
-Use the repository-native GitHub Actions transformation pattern so Actions reads the complete immutable source locally, generates the next versioned Sequence/DataBridge files, performs controlled Cloud integration, updates tests/checksums, and validates the resulting branch. Do not reconstruct or overwrite large execution-facing source files from truncated connector output.
+The proven 1.50 / 3.41 files remain immutable rollback truth. The 1.51 / 3.42 candidates and parity include are immutable staging artifacts on the isolated parity branch. `scripts/sniper_contract_parity_release.py` is now a fail-closed candidate verifier: it verifies rollback versions, candidate parity anchors, the native-proven include, and that the stable manifest has not advanced. Candidate compile/runtime validation is performed without replacing the working MT5 EAs. Manifest promotion remains a separate final operation after all gates above pass.
