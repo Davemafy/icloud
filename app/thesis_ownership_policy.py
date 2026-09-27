@@ -23,9 +23,9 @@ INTERZONE_OWNER_RELEASE_REASON = "PREZONE_LIQUIDITY_OWNER_RELEASED_FOR_INTERZONE
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
-    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. WATCH state alone or an exhausted
-    repeatedly mitigated zone may remain visible, but cannot block the opposite side merely because price interacted with it.
-    A+ and A are the only execution grades under the context-grade V2 risk contract; B+ is watch/research only and may not acquire new execution ownership. A legacy owner acquired under an older B+ contract is retired from execution locking only after a fresh Sequence heartbeat proves zero open positions; otherwise the system fails closed. Once an eligible qualified handoff has acquired ownership, that
+    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. Zone interaction alone
+    never blocks the opposite side. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
+    requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
     completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
     from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
@@ -56,9 +56,8 @@ def _zone_reaction_key(zone: Zone) -> str:
 def _sequence_position_truth(now: int) -> tuple[bool, int]:
     """Return (fresh, open_positions) from the live Sequence heartbeat.
 
-    Grade-contract migration is allowed to retire a legacy non-executable owner
-    only when the Sequence EA is freshly online and explicitly reports that no
-    managed positions remain. Missing/stale telemetry therefore fails closed.
+    Used for safe owner-release transitions that depend on proving the Sequence
+    is flat. It is not a grade or touch-count eligibility check.
     """
     rows = latest_heartbeats(30)
     hb = next(
@@ -87,10 +86,11 @@ def _owner_execution_lock_eligible(owner: dict[str, Any]) -> bool:
             zone = Zone.model_validate_json(payload)
             return execution_grade_eligible(zone)
         except Exception:
-            # Fall through to the persisted grade. Ambiguous A/A+ rows are kept
-            # fail-closed; known B+ legacy rows are the compatibility case.
+            # Fall through to the persisted grade only if the frozen payload
+            # cannot be decoded. The immutable-grade contract treats A+/A/B+
+            # identically for ownership eligibility; risk differs by grade/context.
             pass
-    return str(owner.get("grade") or "").upper() != "B+"
+    return str(owner.get("grade") or "").upper() in {"A+", "A", "B+"}
 
 
 def _retire_legacy_owner_execution_lock(owner: dict[str, Any], now: int) -> None:
@@ -263,10 +263,9 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
         if _owner_execution_lock_eligible(owner):
             return owner
 
-        # v6.5.51 made B+ watch-only. Historical B+ locks created under the
-        # older reduced-risk contract must not starve a fresh A/A+ opposite
-        # setup forever once the old campaign is flat. We retire the execution
-        # monopoly only with fresh, explicit Sequence position truth.
+        # Compatibility path for genuinely unsupported/undecodable historical
+        # owners only. A+, A and B+ valid frozen owners return above and never
+        # reach this branch merely because of grade or touch telemetry.
         if not sequence_fresh or open_positions > 0:
             owner["compat_execution_lock_protected"] = True
             owner["compat_execution_lock_reason"] = (
