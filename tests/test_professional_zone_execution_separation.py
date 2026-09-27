@@ -5,6 +5,7 @@ from app.professional_zone_execution_separation import (
     apply_execution_separation,
     conservative_runway,
     history_audit,
+    history_window_metrics,
     zone_layer,
 )
 
@@ -126,3 +127,17 @@ def test_final_separation_uses_next_open_target_not_behind_activation_tp1(monkey
     assert out["required_runway"] == "10.00000"
     assert out["usable_runway_ok"] == "1"
     assert out["separation_guard"] == "PASS"
+
+
+def test_calendar_window_rejects_nominal_d1_bar_count_when_span_is_too_short():
+    day = 86400
+    end = 400 * day
+    snapshot = _snapshot(True)
+    # 280 daily bars can be misleading when a broker produces Sunday/partial
+    # daily candles: bar count looks large, but the actual calendar span is <1y.
+    snapshot.xau_d1 = _bars(121 * day, end, day)  # exactly 280 bars, only 279d span
+    ok, failures = history_audit(snapshot)
+    assert not ok
+    assert "XAU_D1_1Y" in failures
+    metrics = history_window_metrics(snapshot)
+    assert "XAU_D1_1Y:280bars:279.00d/350.00d" in metrics
