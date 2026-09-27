@@ -94,7 +94,7 @@ function CopyWithRetry([string]$Source,[string]$Destination,[int]$Attempts=20){
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ' Trade Zone - MASTER SNIPER BACKTEST LAB' -ForegroundColor Cyan
 Write-Host ' One guided workflow: compile -> export -> replay -> tester package' -ForegroundColor Cyan
-Write-Host ' LIVE 6.3.33 EAs ARE NOT REPLACED OR ATTACHED.' -ForegroundColor Yellow
+Write-Host ' LIVE 6.3.34 EAs ARE NOT REPLACED OR ATTACHED.' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ''
 
@@ -374,7 +374,7 @@ try{
   Write-Host 'Backtest EA is already compiled under Experts > TradeZoneValidation.' -ForegroundColor Cyan
   Write-Host 'A real-tick tester launcher, NEXT instructions, and result collector were placed on the Desktop.' -ForegroundColor Cyan
   Write-Host ''
-  Write-Host 'Live DataBridge 1.52 / Sequence 3.43 were never replaced or detached.' -ForegroundColor Yellow
+  Write-Host 'Live DataBridge 1.52 / Sequence 3.44 were never replaced or detached.' -ForegroundColor Yellow
   PauseExit 0
 }catch{
   Write-Host ''
