@@ -52,7 +52,7 @@ class NewsEvent(BaseModel):
 
 
 class MarketSnapshot(BaseModel):
-    protocol: int = 6
+    protocol: int = 7
     kind: str = "LIVE"
     reason: str = "TICK"
     sent_at: int
