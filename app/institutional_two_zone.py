@@ -419,22 +419,24 @@ def _grade_audit(
     structural_liquidity_tf: str,
     psy_confluence: bool,
 ) -> dict:
-    """Return the deterministic grade plus the exact criteria that produced it."""
+    """Return the immutable structural grade plus mitigation telemetry.
+
+    Mitigation/touch count is deliberately excluded from every grade check and
+    score. The zone grade is produced by the institutional analysis and remains
+    unchanged for the life of that analysis cycle.
+    """
     tf = str(candidate.source_tf).upper()
     liq_tf = str(structural_liquidity_tf).upper()
     htf_liquidity = liq_tf in {"D1", "H4"}
     sweep_rejection = "SWEEP_REJECTION" in str(candidate.source_kind).upper()
     displacement = "DISPLACEMENT_BOS_SOURCE" in str(candidate.source_kind).upper()
-    reversal_evidence = sum(
-        (
-            1 if sweep_rejection else 0,
-            1 if candidate.fvg else 0,
-            1 if candidate.volume_expansion else 0,
-            1 if candidate.strength >= 2.0 else 0,
-            1 if psy_confluence else 0,
-        )
-    )
-
+    reversal_evidence = sum((
+        1 if sweep_rejection else 0,
+        1 if candidate.fvg else 0,
+        1 if candidate.volume_expansion else 0,
+        1 if candidate.strength >= 2.0 else 0,
+        1 if psy_confluence else 0,
+    ))
     if countertrend:
         aplus_checks = {
             "h4_h1_source": tf == "H4>H1",
@@ -443,7 +445,6 @@ def _grade_audit(
             "strength_ge_2": candidate.strength >= 2.0,
             "sweep_rejection": sweep_rejection,
             "reversal_evidence_ge_2": reversal_evidence >= 2,
-            "mitigations_le_1": mitigations <= 1,
         }
         a_checks = {
             "h4_or_h4_h1_source": tf in {"H4>H1", "H4"},
@@ -452,30 +453,17 @@ def _grade_audit(
             "strength_ge_1_6": candidate.strength >= 1.6,
             "sweep_or_displacement": sweep_rejection or displacement,
             "reversal_evidence_ge_1": reversal_evidence >= 1,
-            "mitigations_le_2": mitigations <= 2,
         }
-        if all(aplus_checks.values()):
-            grade = Grade.A_PLUS
-        elif all(a_checks.values()):
-            grade = Grade.A
-        else:
-            grade = Grade.B_PLUS
+        grade = Grade.A_PLUS if all(aplus_checks.values()) else Grade.A if all(a_checks.values()) else Grade.B_PLUS
         return {
-            "grade": grade,
-            "model": "COUNTERTREND_REVERSAL",
-            "source_tf": tf,
-            "structural_liquidity_tf": liq_tf,
-            "location_score": round(float(location_score), 4),
+            "grade": grade, "model": "COUNTERTREND_REVERSAL", "source_tf": tf,
+            "structural_liquidity_tf": liq_tf, "location_score": round(float(location_score), 4),
             "source_strength": round(float(candidate.strength), 4),
-            "reversal_evidence_count": int(reversal_evidence),
-            "sweep_rejection": bool(sweep_rejection),
-            "displacement": bool(displacement),
-            "fvg": bool(candidate.fvg),
-            "volume_expansion": bool(candidate.volume_expansion),
-            "psy_confluence": bool(psy_confluence),
-            "mitigations": int(mitigations),
-            "aplus_checks": aplus_checks,
-            "a_checks": a_checks,
+            "reversal_evidence_count": int(reversal_evidence), "sweep_rejection": bool(sweep_rejection),
+            "displacement": bool(displacement), "fvg": bool(candidate.fvg),
+            "volume_expansion": bool(candidate.volume_expansion), "psy_confluence": bool(psy_confluence),
+            "mitigations": int(mitigations), "mitigations_are_telemetry_only": True,
+            "aplus_checks": aplus_checks, "a_checks": a_checks,
             "aplus_missing": [name for name, ok in aplus_checks.items() if not ok],
             "a_missing": [name for name, ok in a_checks.items() if not ok],
         }
@@ -486,35 +474,19 @@ def _grade_audit(
         "fvg": 1 if candidate.fvg else 0,
         "displacement": 1 if displacement else 0,
         "volume_expansion": 1 if candidate.volume_expansion else 0,
-        "freshness": 2 if mitigations == 0 else 1 if mitigations == 1 else 0 if mitigations == 2 else -3,
         "location": 1 if location_score >= 7.0 else 0,
     }
     score = int(sum(score_parts.values()))
-    if mitigations >= 3:
-        grade = Grade.B_PLUS
-    elif score >= 8 and mitigations <= 1:
-        grade = Grade.A_PLUS
-    elif score >= 5 and mitigations <= 2:
-        grade = Grade.A
-    else:
-        grade = Grade.B_PLUS
+    grade = Grade.A_PLUS if score >= 8 else Grade.A if score >= 5 else Grade.B_PLUS
     return {
-        "grade": grade,
-        "model": "TREND_CONTINUATION",
-        "source_tf": tf,
+        "grade": grade, "model": "TREND_CONTINUATION", "source_tf": tf,
         "location_score": round(float(location_score), 4),
         "source_strength": round(float(candidate.strength), 4),
-        "score": score,
-        "score_parts": score_parts,
-        "mitigations": int(mitigations),
-        "aplus_threshold": "score>=8 and mitigations<=1",
-        "a_threshold": "score>=5 and mitigations<=2",
-        "aplus_missing": (
-            ["mitigations_le_1"] if mitigations > 1 else []
-        ) + (["score_ge_8"] if score < 8 else []),
-        "a_missing": (
-            ["mitigations_le_2"] if mitigations > 2 else []
-        ) + (["score_ge_5"] if score < 5 else []),
+        "score": score, "score_parts": score_parts, "mitigations": int(mitigations),
+        "mitigations_are_telemetry_only": True,
+        "aplus_threshold": "structural_score>=8", "a_threshold": "structural_score>=5",
+        "aplus_missing": ["score_ge_8"] if score < 8 else [],
+        "a_missing": ["score_ge_5"] if score < 5 else [],
     }
 
 
@@ -641,13 +613,9 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         psy_confluence=psy_confluence,
     )
     structural_grade = structural_audit["grade"]
-    grade = current_audit["grade"]
+    # Immutable zone-grade contract: mitigation history is journal telemetry only.
+    grade = structural_grade
     freshness_history_complete = bool(mitigation_audit.get("history_complete"))
-    if not freshness_history_complete and structural_grade in {Grade.A_PLUS, Grade.A}:
-        # Never infer freshness from a truncated M15 window. Keep the institutional
-        # source visible, but fail closed for fresh execution until its reuse
-        # history can be proven.
-        grade = Grade.B_PLUS
     mitigation_audit = _mitigation_grade_ledger(
         mitigation_audit,
         candidate,
@@ -656,15 +624,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
         structural_liquidity_tf=str(getattr(attached, "source_tf", "")),
         psy_confluence=psy_confluence,
     )
-    grade_degrade_reason = ""
-    if not freshness_history_complete and structural_grade in {Grade.A_PLUS, Grade.A}:
-        grade_degrade_reason = "FRESHNESS_HISTORY_INCOMPLETE"
-    elif structural_grade in {Grade.A_PLUS, Grade.A} and grade == Grade.B_PLUS and touches >= 3:
-        grade_degrade_reason = "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
-    elif structural_grade == Grade.A_PLUS and grade == Grade.A:
-        grade_degrade_reason = "FRESHNESS_REDUCED"
-    elif structural_grade == Grade.B_PLUS:
-        grade_degrade_reason = "STRUCTURAL_QUALITY_BELOW_A"
+    grade_degrade_reason = "STRUCTURAL_QUALITY_BELOW_A" if structural_grade == Grade.B_PLUS else ""
     conf = {"LIQUIDITY_IN_MARKED_ZONE", f"{required}_IN_MARKED_ZONE", "SOURCE_CANDLE_ANCHORED", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "SWEEP_ROOM_RESERVED"}
     if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
         conf.add("INSTITUTIONAL_DISPLACEMENT")
@@ -688,7 +648,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     vals = original_targets + [0.0] * (4 - len(original_targets))
     fvals = flip_targets + [0.0] * (4 - len(flip_targets))
     clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
-    readiness = "ARMED" if ((grade == Grade.A_PLUS and touches <= 1) or (grade == Grade.A and touches <= 2)) else "WATCH"
+    readiness = "ARMED" if grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} else "WATCH"
 
     zone = Zone(
         zone_id=f"PZ_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}",
@@ -748,8 +708,8 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
             f"grade_source_strength:{float(candidate.strength):.4f}",
             f"grade_context:{'COUNTERTREND_REVERSAL' if countertrend else 'TREND_CONTINUATION'}",
             "Core is source-anchored and normalized to 100-150 points. Envelope is 200-300 points and contains the required structural liquidity with reserved distal sweep room.",
-            "Qualified mitigation is directional and complete: SELL requires below-envelope -> core -> below-envelope; BUY requires above-envelope -> core -> above-envelope. Wrong-side contacts never consume freshness.",
-            "Grade uses only pre-entry structural evidence. Momentum after price leaves the zone validates execution quality but cannot retroactively upgrade the zone.",
+            "Qualified mitigation is directional telemetry only: SELL requires below-envelope -> core -> below-envelope; BUY requires above-envelope -> core -> above-envelope. It never changes zone grade, risk, ranking or execution eligibility.",
+            "Grade uses only pre-entry structural evidence and is immutable for this analysis cycle. Only structural invalidation or a new analysis cycle may retire or replace the zone.",
             "D1 gives context. H4 is primary. H1 refines/falls back. M15 validates health. M1 only times entry.",
         ],
     )
@@ -798,7 +758,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
 def _rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(zone.source_tf, 9)
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
-    return (tf_rank, grade_rank, int(zone.touch_count), 0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1, 0 if "TICK_VOLUME_EXPANSION" in zone.confluences else 1, -float(zone.location_score), _distance(snapshot.mid, zone.zone_low, zone.zone_high), -int(zone.source_ts))
+    return (tf_rank, grade_rank, 0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1, 0 if "TICK_VOLUME_EXPANSION" in zone.confluences else 1, -float(zone.location_score), _distance(snapshot.mid, zone.zone_low, zone.zone_high), -int(zone.source_ts))
 
 
 def _readiness(zone: Zone) -> str:
@@ -956,7 +916,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         strongest = None
         if rejected:
             tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}
-            strongest = sorted(rejected, key=lambda x: (tf_rank.get(str(x.get("source_tf")), 9), int(x.get("touches") or 0), float(x.get("distance_h1_atr") or 999.0), -int(x.get("source_ts") or 0)))[0]
+            strongest = sorted(rejected, key=lambda x: (tf_rank.get(str(x.get("source_tf")), 9), float(x.get("distance_h1_atr") or 999.0), -int(x.get("source_ts") or 0)))[0]
         rejected_summary[direction.value.lower()] = {
             "candidate_count": len(rows),
             "rejected_count": len(rejected),
@@ -985,22 +945,25 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
         "distance_is_not_a_hard_zone_filter": True,
         "psy_is_confluence_not_qualification": True,
         "dxy_is_confirmation_not_qualification": True,
-        "mitigation_count_affects_grade_not_zone_geometry": True,
+        "mitigation_count_affects_grade_not_zone_geometry": False,
+        "mitigation_count_is_telemetry_only": True,
+        "zone_grade_immutable_for_analysis_cycle": True,
+        "touch_count_changes_risk_ranking_or_execution": False,
         "touch_count_semantics": "DIRECTIONAL_COMPLETE_CORE_MITIGATIONS_ONLY",
         "sell_mitigation_cycle": "BELOW_ENVELOPE_TO_CORE_TO_BELOW_ENVELOPE",
         "buy_mitigation_cycle": "ABOVE_ENVELOPE_TO_CORE_TO_ABOVE_ENVELOPE",
         "wrong_side_core_contact_consumes_freshness": False,
         "accepted_invalidation_stops_original_zone_counting": True,
-        "incomplete_m15_freshness_history_is_watch_only": True,
+        "incomplete_m15_freshness_history_is_watch_only": False,
         "context_specific_grade_models": {
-            "TREND": "CONTINUATION_SOURCE_STRENGTH_FRESHNESS",
+            "TREND": "CONTINUATION_SOURCE_STRUCTURAL_STRENGTH",
             "COUNTERTREND": "HTF_EXTREMITY_LIQUIDITY_SWEEP_REJECTION_RESPONSE",
         },
         "post_reaction_profit_never_upgrades_historical_grade": True,
         "dual_grade_truth": {
-            "structural_grade": "SOURCE_QUALITY_BEFORE_REUSE_FRESHNESS_PENALTY",
-            "current_execution_grade": "STRUCTURAL_GRADE_AFTER_QUALIFIED_MITIGATION_FRESHNESS",
-            "execution_uses_current_execution_grade_only": True,
+            "structural_grade": "SOURCE_QUALITY_AT_ANALYSIS_TIME",
+            "current_execution_grade": "SAME_AS_STRUCTURAL_GRADE_FOR_ANALYSIS_CYCLE",
+            "execution_uses_immutable_analysis_grade": True,
         },
         "wick_only_does_not_invalidate": True,
         "rejected_diagnostics": rejected_summary,
@@ -1008,7 +971,7 @@ def apply_two_zone_institutional_map(analysis: Analysis, snapshot: MarketSnapsho
     }
     analysis.execution_policy = policy
     summary = "; ".join(labels) if labels else "none"
-    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate A+/A qualification models: trend grades continuation-source strength/freshness; countertrend grades HTF extremity + structural liquidity raid/rejection + reversal response quality. The map now reports structural grade separately from current execution grade: a structurally A+/A zone can become current B+ after repeated qualified reuse without rewriting what the source quality was. Qualified mitigations are directional complete cycles: SELL below->core->below; BUY above->core->above. Wrong-side contacts and post-invalidation crossings never consume freshness. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with at least 50 points reserved above it for a raid; BUY requires structural SSL inside the envelope with at least 50 points reserved below it. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. Distance, PSY and DXY do not manufacture zones. M1 remains entry timing only. Post-reaction profit never retroactively upgrades the zone grade."
+    analysis.trader_brief = f"D1 context={context.value}. Prompt sweep-room map: {summary}. Trend and countertrend use separate structural A+/A qualification models. The grade produced by this analysis is immutable for the analysis cycle. Qualified mitigations/touches remain directional journal telemetry only and never downgrade, block, re-rank or resize a valid zone. Core width is 100-150 points. Outer envelope is 200-300 points. SELL requires structural BSL inside the envelope with distal raid room; BUY requires structural SSL inside the envelope with distal raid room. H4 is primary; H1 refines or falls back. M15 checks accepted invalidation. DXY confirms context; spread, ATR and USD news remain analysis/safety inputs. M1 remains execution timing only. Only structural invalidation or a new analysis cycle may retire or replace a zone."
     return analysis.zones
 
 
@@ -1059,15 +1022,18 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
                 "xau_h1": structure_bias(snapshot.xau_h1).value,
                 "xau_m15": structure_bias(snapshot.xau_m15).value,
                 "dxy_d1": structure_bias(snapshot.dxy_d1).value,
+                "dxy_h4": structure_bias(snapshot.dxy_h4).value,
                 "dxy_h1": structure_bias(snapshot.dxy_h1).value,
             },
             "market_inputs": {
+                "atr_d1": float(atr(snapshot.xau_d1)),
+                "atr_h4": float(atr(snapshot.xau_h4)),
                 "atr_h1": float(snapshot.atr_h1 or atr(snapshot.xau_h1)),
                 "atr_m15": float(snapshot.atr_m15 or atr(snapshot.xau_m15)),
                 "spread_points": float(snapshot.spread_points),
                 "usd_news": usd_news,
                 "prompt_snapshot_complete": prompt_snapshot_complete(snapshot),
-                "dxy_confirmation_timeframes": ["D1", "H1"],
+                "dxy_confirmation_timeframes": ["D1", "H4", "H1"],
             },
             "zone_geometry": {
                 "core_width_points": [CORE_MIN_POINTS, CORE_MAX_POINTS],
@@ -1076,7 +1042,7 @@ def build_prompt_analysis(snapshot: MarketSnapshot, generated_at: int | None = N
                 "sell_sweep_room_side": "ABOVE_BSL",
                 "buy_sweep_room_side": "BELOW_SSL",
             },
-            "primary": ["D1_CONTEXT", "H4_SOURCE_LOCATION", "H1_REFINEMENT_OR_FALLBACK", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "STRUCTURAL_BSL_OR_SSL_INSIDE_ENVELOPE", "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM", "DISPLACEMENT_BOS_OR_SWEEP_REJECTION", "FVG_CONFLUENCE_IF_PRESENT", "MITIGATION_COUNT", "M15_ACCEPTED_INVALIDATION", "M1_SWEEP_MSS_DISPLACEMENT_VALUE_ENTRY"],
+            "primary": ["D1_CONTEXT", "H4_SOURCE_LOCATION", "H1_REFINEMENT_OR_FALLBACK", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "STRUCTURAL_BSL_OR_SSL_INSIDE_ENVELOPE", "MINIMUM_50_POINT_DISTAL_SWEEP_ROOM", "DISPLACEMENT_BOS_OR_SWEEP_REJECTION", "FVG_CONFLUENCE_IF_PRESENT", "MITIGATION_TELEMETRY_ONLY", "M15_ACCEPTED_INVALIDATION", "M1_SWEEP_MSS_DISPLACEMENT_VALUE_ENTRY"],
             "reentry": ["THESIS_VALID", "OBJECTIVE_OPEN", "CONTINUATION_BOS", "NEW_DISPLACEMENT", "NEW_M1_DEALING_RANGE", "INTERNAL_LIQUIDITY", "PREMIUM_DISCOUNT", "FRESH_PD_ARRAY"],
             "flip": ["M15_ACCEPTANCE_INVALIDATION", "NO_INSTANT_REVERSE", "OPPOSITE_SIDE_RETEST", "M1_MSS_BOS", "DISPLACEMENT", "NEW_M1_DEALING_RANGE", "PREMIUM_DISCOUNT", "OTE", "FRESH_PD_ARRAY"],
             "risk": ["ONE_BUDGET_PER_THESIS", "NO_AVERAGING_DOWN", "NO_SL_WIDENING", "STRUCTURE_AWARE_BE", "LIQUIDITY_PARTIALS", "M5_ATR_RUNNER_TRAIL"],
