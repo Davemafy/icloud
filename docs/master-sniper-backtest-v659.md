@@ -1,4 +1,4 @@
-# Master Sniper 6.5.96 / Sequence 3.42 Backtest Harness
+# Master Sniper 6.5.97 / Sequence 3.42 Backtest Harness
 
 Status: STAGING / DEMO-PAPER RESEARCH ONLY
 
@@ -162,4 +162,4 @@ lab does not forcibly close or relaunch it. The generated desktop tester launche
 refuses no safety rules: use it only after the normal terminal is closed, or simply
 open Strategy Tester manually in the existing terminal and use the prepared files.
 
-The live stable payload is 6.3.35 / DataBridge 1.52 / Sequence 3.45; the isolated tester still executes the frozen Sequence 3.42 backtest contract.
+The live stable payload is 6.3.36 / DataBridge 1.53 / Sequence 3.45; the isolated tester still executes the frozen Sequence 3.42 backtest contract.
