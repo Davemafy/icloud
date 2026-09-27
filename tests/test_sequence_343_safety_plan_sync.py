@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SEQ = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5")
+SEQ = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5")
 
 
 def test_live_block_does_not_erase_plan_authority_or_parity():
@@ -22,7 +22,7 @@ def test_cloud_live_block_is_enforced_in_order_guards():
     assert 'if(!TZ42_NewEntryParitySafe())return false;' in guards
 
 
-def test_sequence_version_is_343():
+def test_sequence_version_is_344():
     text = SEQ.read_text(encoding="utf-8")
-    assert '#property version   "3.43"' in text
-    assert '#define TZ_SEQUENCE_VERSION "3.43"' in text
+    assert '#property version   "3.44"' in text
+    assert '#define TZ_SEQUENCE_VERSION "3.44"' in text
