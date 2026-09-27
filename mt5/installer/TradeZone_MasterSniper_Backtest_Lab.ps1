@@ -237,7 +237,7 @@ try{
   $resultZip=Join-Path $tmp 'master_sniper_backtest_package.zip'
 
   Write-Host ''
-  Write-Host 'Starting Master Sniper 6.5.90 isolated Cloud replay job...' -ForegroundColor Cyan
+  Write-Host 'Starting Master Sniper 6.5.91 isolated Cloud replay job...' -ForegroundColor Cyan
   $startResponse=Invoke-RestMethod -Method POST -Uri $startUri -Headers @{'X-API-Key'=$apiKey} -ContentType 'application/zip' -InFile $upload -TimeoutSec 120
   $jobId=[string]$startResponse.job_id
   if([string]::IsNullOrWhiteSpace($jobId)){throw 'Cloud did not return a backtest job ID.'}
