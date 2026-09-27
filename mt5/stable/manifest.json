@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.34",
+  "release": "6.3.35",
   "repository": "Davemafy/icloud",
-  "ref": "c239cda51454cad4a2f5f1820604fbd4ab5a01c5",
+  "ref": "fe5c203feac97f5233c5ae34f0d2842f3b8a5a7b",
   "data_bridge_version": "1.52",
-  "sequence_ea_version": "3.44",
+  "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -171,7 +171,10 @@
     "cloud_live_block_keeps_execution_authority_visible",
     "secondary_zone_thin_edge_overlap",
     "nearest_qualified_secondary_battlefield",
-    "active_owner_supersedes_dormant_accepted_flip"
+    "active_owner_supersedes_dormant_accepted_flip",
+    "next_open_owner_objective_runway_guard",
+    "finalized_mt5_plan_dashboard_truth",
+    "active_owner_priority_before_flip_authority_mutation"
   ],
   "files": [
     {
@@ -184,11 +187,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
       "requires_reload": true,
-      "sha256": "df07eae6f98a9c79b91653a9d4dc29c7d3fcea13235511ad49d62838557ef66c"
+      "sha256": "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9"
     }
   ],
   "support_files": [
