@@ -67,12 +67,11 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "h4_parent_location_is_primary": True,
             "h1_refines_h4_or_is_fallback_only": True,
             "xau_points_per_pip": 10,
-            "geometry_by_source_tf": {
-                "H1": {"core_width_pips": [60, 100], "envelope_width_pips": [140, 220]},
-                "H4": {"core_width_pips": [80, 140], "envelope_width_pips": [180, 260]},
-                "H4>H1": {"core_width_pips": [60, 100], "envelope_width_pips": [180, 260]},
-            },
-            "minimum_distal_sweep_room_pips": 50,
+            "geometry_authority": "MASTER_SNIPER_TACTICAL_MAP_V6593",
+            "source_candles_are_provenance_not_fixed_width_alert_boxes": True,
+            "native_h1_refinement_can_extend_h4_parent_edge": True,
+            "distal_sweep_room_is_volatility_scaled": True,
+            "source_edge_snap_must_preserve_distal_sweep_room": True,
             "sell_requires_structural_bsl_inside_envelope": True,
             "buy_requires_structural_ssl_inside_envelope": True,
             "sell_sweep_room_is_above_bsl": True,
@@ -111,8 +110,8 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "order_flow_disabled_without_centralized_feed": True,
             "risk": "AI never sets lot size",
             "context_grade_risk_contract": "TREND A+=1.00%, TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25% of non-compounding validation capital before entry-share/model multipliers",
-            "bplus_execution_authority": False,
-            "bplus_role": "research context/watch only",
+            "bplus_execution_authority": True,
+            "bplus_role": "reduced-risk execution grade at 0.25% with all normal M15/M1/AI/safety gates",
         },
     }
 
@@ -127,15 +126,15 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 2. Every published primary zone must be anchored to a visible H4/H1 source that either:
    a) caused decisive displacement/BOS away, or
    b) swept liquidity, rejected, and was followed by decisive displacement.
-3. Trade Zone uses 1 XAU pip = 10 broker points. Use source-timeframe professional geometry:
-   H1 core 60-100 pips with a 140-220 pip envelope; H4 core 80-140 pips with a 180-260 pip envelope;
-   H4>H1 uses the H1-refined 60-100 pip core inside the H4 180-260 pip envelope. The source location
-   anchors the geometry; never widen beyond the applicable maximum merely to make a candidate qualify.
-4. SELL supply is valid only when structural BSL is physically inside the final envelope, with at least
-   50 pips of envelope remaining ABOVE that BSL for an expected raid. BUY demand is valid only when
-   structural SSL is physically inside the final envelope, with at least 50 pips remaining BELOW that
-   SSL for an expected raid. If source + required liquidity + sweep room cannot fit inside the applicable
-   source-timeframe envelope, reject the candidate.
+3. Trade Zone uses 1 XAU pip = 10 broker points. H4/H1 source candles are provenance and the H1 child
+   may refine the H4 parent near an edge. The published alert zone is the native tactical reaction band
+   built from the exact institutional core, attached structural liquidity and volatility-scaled M15 sweep
+   room. Do not impose old fixed-width 60/100/180/260-pip padding or reject a valid H1 refinement merely
+   because it extends slightly beyond the parent wick.
+4. SELL supply requires genuine structural BSL attached to the institutional source; BUY demand requires
+   genuine structural SSL. Preserve volatility-scaled distal sweep room beyond that liquidity. If a source
+   edge is used for display precision, snapping must NEVER collapse the distal sweep room to zero. Remote
+   liquidity must not be dragged into a source merely to make it qualify.
 5. Equal highs/equal lows are liquidity objects only. They may identify resting BSL/SSL, sweep objectives,
    or inducement, but they do NOT create a trading zone by themselves. A zone still requires the valid
    H4/H1 institutional source in rule 2.
@@ -153,26 +152,27 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
    block, resize, re-rank, promote or demote a zone. The analysis-time structural grade is immutable for that
    analysis cycle. Only accepted structural invalidation or a new analysis cycle may retire or replace the zone.
 9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
-   strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/
-   rejection, reversal-source strength, displacement/FVG/volume evidence and qualified mitigation. A
-   countertrend zone is not downgraded merely because D1 points the other way; it must instead satisfy the
-   stricter reversal-location model. Never upgrade a historical zone because price later moved strongly
-   away from it; post-reaction momentum is execution/lifecycle evidence, not permission for look-ahead
-   grading. A+ and A are execution grades; B+ is research context/watch only. Base thesis risk is TREND A+=1.00%, TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25% of the non-compounding validation capital before entry-share/model multipliers. Intraday reachability ranks today's alert candidates
-   before freshness and remote HTF authority. A much nearer structurally valid zone may outrank a remote
-   higher-grade candidate only under the deterministic ranking contract; grade remains an explicit quality/risk input. Distance NEVER
-   manufactures a zone and NEVER excuses missing BSL/SSL. A remote valid HTF source may remain context.
+   strength and HTF authority. COUNTERTREND grades HTF extremity, structural liquidity raid/rejection,
+   reversal-source strength and displacement/FVG/volume/PSY evidence. Mitigation/touch history is telemetry
+   only and never changes the analysis-time grade, risk, ranking or execution eligibility. A countertrend
+   zone is not downgraded merely because D1 points the other way. Never upgrade a historical zone because
+   price later moved strongly away from it. A+, A and B+ are execution grades; B+ uses 0.25% reduced-risk
+   authority and still requires every normal M15/M1/AI/safety gate. Base thesis risk is TREND A+=1.00%,
+   TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25%, B+=0.25% of non-compounding validation capital
+   before entry-share/model multipliers. Intraday reachability ranks structurally valid alert candidates;
+   touch/freshness telemetry never participates in ranking. Distance never manufactures a zone and never
+   excuses missing structural source/liquidity evidence.
 10. Closed M15 body acceptance beyond the OUTER envelope invalidates the original zone and permanently
     stops its mitigation/freshness counter. A wick-only liquidity raid does not invalidate it.
 11. Publish at most one PRIMARY SELL and one PRIMARY BUY, but DO NOT force both sides. If no valid BUY
     exists below/interacting with price, PRIMARY BUY=NONE. If no valid SELL exists above/interacting with
     price, PRIMARY SELL=NONE.
 12. A SECONDARY level is a reserve only. At most one reserve per side may be exposed in execution_policy.
-    It must pass the same structural/liquidity/geometry/M15 rules, be A/A+, have <=1 mitigation, come from
-    a distinct non-overlapping institutional source, and sit beyond the primary invalidation side: higher
-    supply for SELL, lower demand for BUY. While Level 1 is valid, Level 2 has zero execution authority.
-    Level-1 invalidation does NOT instantly activate Level 2. A fresh analysis must requalify Level 2 before
-    it can become primary. Do not manufacture a reserve if no second independent institutional source qualifies.
+    It must pass the same structural/liquidity/geometry/M15 rules, be A/A+, come from a distinct non-overlapping
+    institutional source, and sit beyond the primary invalidation side: higher supply for SELL, lower demand
+    for BUY. Mitigation count is telemetry only and cannot remove the reserve. While Level 1 is valid, Level 2
+    remains plotted context; a fresh analysis requalifies it before any promotion. Do not manufacture a reserve
+    if no second independent institutional source qualifies.
 13. M1 cannot redefine the HTF zone. Once any zone becomes primary, execution still requires the existing
     sweep -> MSS/BOS -> displacement -> new dealing range -> value/OTE/PD-array sequence.
 14. When there is NO acquired thesis owner, a valid PRIMARY BUY and PRIMARY SELL are independent execution
