@@ -46,11 +46,11 @@ def _snapshot(mid: float = 4295.0) -> MarketSnapshot:
     )
 
 
-def test_sell_level_two_is_distinct_higher_reserve_and_never_execution(monkeypatch):
+def test_sell_level_two_prefers_nearest_distinct_reserve_and_never_execution(monkeypatch):
     from app import institutional_two_zone as zoning
 
     primary = _zone("SELL_L1", Direction.SELL, 4282.75, 4322.75, 4305.88, 4315.88, 100, touches=1)
-    overlapping = _zone("SELL_OVERLAP", Direction.SELL, 4310.0, 4350.0, 4330.0, 4340.0, 200)
+    overlapping = _zone("SELL_OVERLAP", Direction.SELL, 4318.0, 4350.0, 4330.0, 4340.0, 200)
     higher = _zone("SELL_L2", Direction.SELL, 4367.49, 4407.49, 4392.49, 4402.49, 300)
     candidates = ["primary", "overlap", "higher"]
     zones = {"primary": primary, "overlap": overlapping, "higher": higher}
@@ -70,8 +70,8 @@ def test_sell_level_two_is_distinct_higher_reserve_and_never_execution(monkeypat
     apply_secondary_zone_policy(analysis, _snapshot())
 
     reserve = analysis.execution_policy["public_zone_map"]["secondary"]["sell"]
-    assert reserve["low"] == 4367.49
-    assert reserve["high"] == 4407.49
+    assert reserve["low"] == 4318.0
+    assert reserve["high"] == 4350.0
     assert reserve["state"] == "RESERVE"
     assert reserve["execution_authority"] is False
     assert reserve["fresh_requalification_required"] is True
@@ -79,17 +79,17 @@ def test_sell_level_two_is_distinct_higher_reserve_and_never_execution(monkeypat
     assert [z.zone_id for z in analysis.zones] == ["SELL_L1"]
 
 
-def test_buy_level_two_must_be_lower_than_primary_and_is_not_forced(monkeypatch):
+def test_buy_level_two_allows_thin_edge_overlap_for_distinct_source(monkeypatch):
     from app import institutional_two_zone as zoning
 
-    primary = _zone("BUY_L1", Direction.BUY, 4248.57, 4288.57, 4253.57, 4270.98, 100, touches=1)
-    overlapping = _zone("BUY_OVERLAP", Direction.BUY, 4220.0, 4260.0, 4230.0, 4240.0, 200)
+    primary = _zone("BUY_L1", Direction.BUY, 4253.53, 4275.79, 4254.41, 4275.79, 100, touches=1)
+    lower = _zone("BUY_L2", Direction.BUY, 4236.00, 4255.00, 4238.00, 4252.50, 200)
 
-    monkeypatch.setattr(zoning, "_build_candidates", lambda snapshot: ["primary", "overlap"])
+    monkeypatch.setattr(zoning, "_build_candidates", lambda snapshot: ["primary", "lower"])
     monkeypatch.setattr(
         zoning,
         "_candidate_zone",
-        lambda candidate, snapshot, liq, context, index: ((primary if candidate == "primary" else overlapping), {}),
+        lambda candidate, snapshot, liq, context, index: ((primary if candidate == "primary" else lower), {}),
     )
     monkeypatch.setattr(zoning, "_rank", lambda zone, snapshot: (0,))
 
@@ -104,6 +104,22 @@ def test_buy_level_two_must_be_lower_than_primary_and_is_not_forced(monkeypatch)
     apply_secondary_zone_policy(analysis, _snapshot())
 
     reserve = analysis.execution_policy["public_zone_map"]["secondary"]["buy"]
-    assert reserve is None
+    assert reserve is not None
+    assert reserve["low"] == 4236.00
+    assert reserve["high"] == 4255.00
+    assert reserve["execution_authority"] is False
     assert analysis.selected_zone_id == "BUY_L1"
     assert [z.zone_id for z in analysis.zones] == ["BUY_L1"]
+
+
+def test_level_two_rejects_materially_merged_overlap(monkeypatch):
+    from app import institutional_two_zone as zoning
+
+    primary = _zone("BUY_L1", Direction.BUY, 4250.0, 4275.0, 4255.0, 4270.0, 100)
+    merged = _zone("BUY_MERGED", Direction.BUY, 4238.0, 4265.0, 4242.0, 4258.0, 200)
+    monkeypatch.setattr(zoning, "_build_candidates", lambda snapshot: ["primary", "merged"])
+    monkeypatch.setattr(zoning, "_candidate_zone", lambda candidate, snapshot, liq, context, index: ((primary if candidate == "primary" else merged), {}))
+    monkeypatch.setattr(zoning, "_rank", lambda zone, snapshot: (0,))
+    analysis = Analysis(analysis_id="A3",generated_at=1,snapshot_at=1,overall_bias=Direction.SELL,zones=[primary],selected_zone_id="BUY_L1")
+    apply_secondary_zone_policy(analysis, _snapshot())
+    assert analysis.execution_policy["public_zone_map"]["secondary"]["buy"] is None
