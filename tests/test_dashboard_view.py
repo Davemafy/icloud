@@ -168,3 +168,16 @@ def test_dashboard_explains_finalized_cloud_plan_watch_only_hold():
         "Finalized Cloud execution plan is intentionally non-executable",
     ]:
         assert needle in cleaned
+
+
+def test_dashboard_surfaces_exact_finalized_history_gate_truth():
+    cleaned = compact_dashboard_html('<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><h2>Live trading journal</h2></body>')
+    for needle in [
+        "cloud_history_failures",
+        "cloud_history_warnings",
+        "cloud_history_metrics",
+        "Failed history:",
+        "Snapshot depth:",
+        "DXY extended-depth warning (non-blocking)",
+    ]:
+        assert needle in cleaned
