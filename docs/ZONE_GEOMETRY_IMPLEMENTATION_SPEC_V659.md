@@ -249,3 +249,12 @@ Deployment order:
 6. publish stable release;
 7. updater installs support files, recompiles DataBridge, and safe-reloads MT5 only when runtime reports restart-safe;
 8. verify dashboard desired/installed/running version truth and chart rendering.
+
+
+## V6593 refinement / source-edge correction
+
+- H4 remains parent provenance and H1 remains the tactical refinement.
+- When an H1 child overlaps the H4 parent within the approved refinement tolerance, the combined provenance range is the union of the H4 and H1 source ranges. A valid H1 core is not rejected merely because it extends slightly beyond the H4 wick.
+- If attached BSL/SSL lies on a source edge, the published tactical band must retain volatility-scaled distal sweep room beyond that liquidity. Display snapping may remove floating-point noise only when it does not collapse required sweep room.
+- These corrections do not invent a zone, pull in remote liquidity, weaken M15 invalidation, or bypass M1 execution confirmation.
+- The intended public chart remains up to four qualified institutional zones: one primary and one distinct secondary per side when the market actually provides them.
