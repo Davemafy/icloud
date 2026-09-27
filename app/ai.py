@@ -88,19 +88,22 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
             "liquidity_sweep_rejection_source_is_valid_htf_source": True,
             "displacement_bos_source_is_valid_htf_source": True,
             "fvg_is_quality_confluence_not_mandatory": True,
-            "mitigation_count_affects_strength_and_grade": True,
+            "mitigation_count_affects_strength_and_grade": False,
+            "mitigation_count_is_telemetry_only": True,
+            "zone_grade_immutable_for_analysis_cycle": True,
+            "touch_count_changes_risk_ranking_or_execution": False,
             "touch_count_semantics": "directional complete mitigation cycles only",
             "sell_mitigation_cycle": "below envelope -> core -> below envelope",
             "buy_mitigation_cycle": "above envelope -> core -> above envelope",
             "wrong_side_contact_consumes_freshness": False,
             "accepted_invalidation_stops_original_zone_counter": True,
             "mitigation_clock_starts_after_source_candle_close": True,
-            "incomplete_m15_freshness_history_is_watch_only": True,
+            "incomplete_m15_freshness_history_is_watch_only": False,
             "trend_countertrend_use_separate_grade_models": True,
             "post_reaction_profit_never_upgrades_historical_grade": True,
             "m15_closed_body_acceptance_beyond_outer_envelope_invalidates": True,
             "wick_only_liquidity_raid_does_not_invalidate": True,
-            "dxy_d1_h1_is_confirmation_not_zone_authority": True,
+            "dxy_d1_h4_h1_is_confirmation_not_zone_authority": True,
             "zone_has_two_branches": True,
             "invalidation_is_not_flip_entry": True,
             "m1_confirmation_cannot_redefine_htf_zone": True,
@@ -143,16 +146,12 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
 7. PSY levels are confluence only and never replace BSL/SSL. FVG/imbalance, rejection wick,
    premium/discount, tick-volume expansion, H4/H1 overlap and DXY may strengthen a zone, but none can
    replace the required structural liquidity.
-8. Mitigation count is directional and measures COMPLETE institutional re-use, not every core contact.
+8. Mitigation count is directional JOURNAL TELEMETRY only.
    SELL mitigation = CLOSED M15 below envelope -> later tactical-core overlap -> CLOSED M15 back below envelope.
    BUY mitigation = CLOSED M15 above envelope -> later tactical-core overlap -> CLOSED M15 back above envelope.
-   Wrong-side contacts consume zero freshness: SELL approached from above and BUY approached from below are
-   interactions only. The first touch does not change grade; freshness changes only when the expected-side
-   M15 exit closes. Continuous chop inside one envelope remains one campaign. The mitigation clock starts only
-   after the H1/H4 source candle (and any H1 refinement) has CLOSED and the exact source is causally knowable.
-   If the supplied M15 history does not reach back to that source-ready timestamp, freshness is UNVERIFIED and
-   the zone must not be promoted to A/A+; B+ may retain only its reduced 0.25% execution authority if every normal gate passes. Accepted distal M15 invalidation
-   terminates the original zone's mitigation history permanently; later crossings belong to flip/reclaim logic.
+   Record qualified mitigations and raw contacts for research, but NEVER use touch/mitigation count to downgrade,
+   block, resize, re-rank, promote or demote a zone. The analysis-time structural grade is immutable for that
+   analysis cycle. Only accepted structural invalidation or a new analysis cycle may retire or replace the zone.
 9. TREND and COUNTERTREND use different A+/A qualification models. TREND grades continuation-source
    strength, HTF authority and freshness. COUNTERTREND grades HTF extremity, structural liquidity raid/
    rejection, reversal-source strength, displacement/FVG/volume evidence and qualified mitigation. A
