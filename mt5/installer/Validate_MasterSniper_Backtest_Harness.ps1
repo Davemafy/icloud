@@ -64,7 +64,7 @@ function FindMetaEditor($T){
 
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ' Trade Zone - MASTER SNIPER 6.5.89 BACKTEST HARNESS COMPILER' -ForegroundColor Cyan
-Write-Host ' Validation only. Stable live 3.42 / 1.51 are NOT replaced.' -ForegroundColor Yellow
+Write-Host ' Validation only. Stable live 3.43 / 1.52 are NOT replaced.' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
 
 try{
@@ -77,7 +77,7 @@ try{
     (Join-Path $core 'InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5'),
     (Join-Path $core 'SniperContractParityV1.mqh')
   )
-  foreach($p in $required){if(!(Test-Path $p)){throw "Required 6.3.32 support file missing: $p"}}
+  foreach($p in $required){if(!(Test-Path $p)){throw "Required 6.3.33 support file missing: $p"}}
 
   $dest=Join-Path $t.MQL5 'Experts\TradeZoneValidation'
   New-Item -ItemType Directory -Force -Path $dest|Out-Null
