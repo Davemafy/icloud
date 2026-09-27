@@ -14,20 +14,16 @@ def _zone(grade: Grade, touches: int):
     return SimpleNamespace(grade=grade, touch_count=touches)
 
 
-def test_a_plus_a_and_bplus_can_acquire_new_execution_authority():
+def test_a_plus_a_and_bplus_authority_is_independent_of_touch_count():
     assert EXECUTION_GRADES == {Grade.A_PLUS, Grade.A, Grade.B_PLUS}
-    assert execution_grade_eligible(_zone(Grade.A_PLUS, 0))
-    assert execution_grade_eligible(_zone(Grade.A_PLUS, 1))
-    assert not execution_grade_eligible(_zone(Grade.A_PLUS, 2))
-    assert execution_grade_eligible(_zone(Grade.A, 2))
-    assert not execution_grade_eligible(_zone(Grade.A, 3))
-    assert execution_grade_eligible(_zone(Grade.B_PLUS, 0))
-    assert execution_grade_eligible(_zone(Grade.B_PLUS, 1))
-    assert not execution_grade_eligible(_zone(Grade.B_PLUS, 2))
+    for grade in (Grade.A_PLUS, Grade.A, Grade.B_PLUS):
+        assert execution_grade_eligible(_zone(grade, 0))
+        assert execution_grade_eligible(_zone(grade, 2))
+        assert execution_grade_eligible(_zone(grade, 20))
 
 
 def test_bplus_has_reduced_execution_authority_at_point_25_percent():
-    assert execution_touch_limit(_zone(Grade.B_PLUS, 0)) == 1
+    assert execution_touch_limit(_zone(Grade.B_PLUS, 0)) > 1_000_000
     assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.25
     assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.25
     payload = matrix_payload()
