@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.96"
+    app_version: str = "6.5.97"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -88,7 +88,7 @@ class Settings:
     m15_single_accept_body_atr: float = _f("M15_SINGLE_ACCEPT_BODY_ATR", 0.40)
     m15_double_accept_body_atr: float = _f("M15_DOUBLE_ACCEPT_BODY_ATR", 0.20)
 
-    protocol_version: int = _i("PROTOCOL_VERSION", 6)
+    protocol_version: int = _i("PROTOCOL_VERSION", 7)
     tester_plan_filename: str = os.getenv("TESTER_PLAN_FILENAME", "SMC_v6_tester_plans.csv")
 
 
