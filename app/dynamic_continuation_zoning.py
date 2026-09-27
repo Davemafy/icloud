@@ -222,13 +222,9 @@ def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: 
         mitigation_start_ts,
         snapshot.xau_m15,
     )
-    if not bool(mitigation_audit.get("history_complete")):
-        return None
     if int(mitigation_audit.get("invalidated_at") or 0) > 0:
         return None
     touches = int(mitigation_audit.get("qualified_mitigations") or 0)
-    if touches > 1:
-        return None
 
     core_mid = (core_low + core_high) / 2.0
     loc = _location_score(event.direction, core_mid, snapshot, analysis.liquidity_map)
@@ -507,28 +503,10 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     if not expansion["aligned"]:
         return analysis
 
-    # Demote only genuinely exhausted countertrend locations. A structurally valid B+
-    # second-touch zone remains eligible for reduced-risk research execution; trend
-    # alignment alone does not prove that the opposing HTF source is invalid.
-    kept: list[Zone] = []
-    for zone in analysis.zones:
-        exhausted_countertrend = bool(
-            zone.original_direction != context
-            and int(zone.touch_count) >= COUNTERTREND_DEMOTE_TOUCHES
-        )
-        if exhausted_countertrend:
-            audit_meta["demoted_context_zones"].append(
-                {
-                    **_zone_payload(zone),
-                    "reason": "COUNTERTREND_EXHAUSTED_THREE_PLUS_TOUCHES_DURING_ALIGNED_EXPANSION",
-                    "execution_authority": False,
-                }
-            )
-            if analysis.selected_zone_id == zone.zone_id:
-                analysis.selected_zone_id = ""
-            continue
-        kept.append(zone)
-    analysis.zones = kept
+    # Immutable-grade contract: mitigation/touch history is telemetry only.
+    # Aligned expansion may discover a fresh continuation source, but it must never
+    # demote or delete an opposing valid zone merely because of prior touches.
+    audit_meta["touch_count_can_demote_zone"] = False
 
     dynamic_candidates = [
         zone
@@ -539,7 +517,6 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         dynamic_candidates.sort(
             key=lambda z: (
                 _distance(float(snapshot.mid), float(z.core_low), float(z.core_high)),
-                int(z.touch_count),
                 0 if z.grade == Grade.A_PLUS else 1,
                 -int(z.source_ts),
             )
@@ -591,7 +568,7 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     if audit_meta["demoted_context_zones"]:
         sides = ",".join(str(x.get("zone_id")) for x in audit_meta["demoted_context_zones"])
         analysis.trader_brief += (
-            f" Dynamic continuation context: {sides} demoted from the execution map because it is countertrend and exhausted; historical lifecycle remains preserved."
+            f" Dynamic continuation context: {sides} recorded as telemetry only; touch count cannot demote a valid zone."
         )
     if audit_meta["dynamic_primary"]:
         z = audit_meta["dynamic_primary"]
