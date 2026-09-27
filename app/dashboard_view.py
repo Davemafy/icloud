@@ -495,6 +495,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const cloudMode=String(seq.cloud_ea_mode||'UNKNOWN');
     const cloudGuard=String(seq.cloud_execution_guard_reason||'');
     const cloudSeparation=String(seq.cloud_separation_guard||'');
+    const cloudHistoryFailures=String(seq.cloud_history_window_failures||'NONE');
+    const cloudHistoryMetrics=String(seq.cloud_history_window_metrics||'');
     const cloudRunway=String(seq.cloud_usable_runway||'');
     const cloudRequiredRunway=String(seq.cloud_required_runway||'');
     const cloudRunwayTarget=String(seq.cloud_runway_target||'');
@@ -535,7 +537,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           runwayText=' Runway '+(cloudRunway||'—')+' / required '+(cloudRequiredRunway||'—')+
             (cloudRunwayTarget?' to target '+cloudRunwayTarget:'')+'.';
         }
-        seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+' Entry permission: NO.';
+        let historyText='';
+        if(cloudHistoryFailures && cloudHistoryFailures!=='NONE'){
+          historyText=' Missing history: '+cloudHistoryFailures+'.'+(cloudHistoryMetrics?' Coverage '+cloudHistoryMetrics+'.':'');
+        }
+        seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+historyText+runwayText+' Entry permission: NO.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
@@ -575,7 +581,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     }else if(seqOnline && seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
       state='CLOUD PLAN WATCH ONLY';
       cls='warn';
-      meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+(cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD')+'. Entry permission: NO.';
+      meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+(cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD')+'. '+
+        ((cloudHistoryFailures&&cloudHistoryFailures!=='NONE')?('Missing history: '+cloudHistoryFailures+'. '):'')+'Entry permission: NO.';
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
