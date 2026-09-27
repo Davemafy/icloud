@@ -492,6 +492,12 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqStage=String(seq.gate_stage||'UNKNOWN');
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
+    const cloudMode=String(seq.cloud_ea_mode||'UNKNOWN');
+    const cloudGuard=String(seq.cloud_execution_guard_reason||'');
+    const cloudSeparation=String(seq.cloud_separation_guard||'');
+    const cloudRunway=String(seq.cloud_usable_runway||'');
+    const cloudRequiredRunway=String(seq.cloud_required_runway||'');
+    const cloudRunwayTarget=String(seq.cloud_runway_target||'');
     const seqOnline=seq.online===true;
     const seqMismatch=seq.authority_mismatch===true;
     const seqOpen=Number(seq.open_positions||0);
@@ -520,10 +526,20 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               ? 'Cloud thesis owner is preserved; order permission is suspended by '
               : 'Cloud handoff context is preserved; order permission is suspended by ')
         )+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'.';
+      }else if(seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
+        seqGate.textContent='CLOUD PLAN WATCH ONLY';
+        seqGate.className='kpi warn';
+        let why=cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD';
+        let runwayText='';
+        if(cloudRunway||cloudRequiredRunway||cloudRunwayTarget){
+          runwayText=' Runway '+(cloudRunway||'—')+' / required '+(cloudRequiredRunway||'—')+
+            (cloudRunwayTarget?' to target '+cloudRunwayTarget:'')+'.';
+        }
+        seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+' Entry permission: NO.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
-        seqMeta.textContent='Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority=NONE. Gate '+seqStage+' • '+seqReason;
+        seqMeta.textContent='Final Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority='+seqAuthority+'. Gate '+seqStage+' • '+seqReason;
       }else if(seqStage==='ORDER_SENT'){
         seqGate.textContent='ORDER SENT';
         seqGate.className='kpi ok';
@@ -556,10 +572,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         ? 'Macro authority '+seqAuthority+' remains synchronized. '
         : 'Macro owner/context remains preserved. ')
         +'Order permission is blocked by '+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'. Entry permission: NO.';
+    }else if(seqOnline && seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
+      state='CLOUD PLAN WATCH ONLY';
+      cls='warn';
+      meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+(cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD')+'. Entry permission: NO.';
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
-      meta=checklist+'Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
+      meta=checklist+'Final Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
     }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
       const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
       const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
