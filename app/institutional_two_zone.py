@@ -369,8 +369,8 @@ def _qualified_mitigations(
 ) -> int:
     """Compatibility wrapper around the professional directional ledger.
 
-    raw_touch_episodes is deliberately not allowed to manufacture freshness.
-    Only a completed directionally-correct mitigation cycle can change grade.
+    raw_touch_episodes and completed mitigation cycles are journal telemetry only.
+    They never change the immutable analysis-time grade.
     """
     audit = audit_directional_mitigations(
         direction,
