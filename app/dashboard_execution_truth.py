@@ -31,10 +31,8 @@ _SCRIPT = r'''
   }
   function reasonFor(z,pm){
     if(z?.execution_grade_eligible===true)return 'ELIGIBLE';
-    if(pm?.mitigation_history_complete===false)return 'FRESHNESS HISTORY INCOMPLETE';
-    if(pm?.publication_execution_status)return text(pm.publication_execution_status).replaceAll('_',' ');
-    if(pm?.grade_degrade_reason && pm.grade_degrade_reason!=='NONE')return text(pm.grade_degrade_reason).replaceAll('_',' ');
     if(z?.execution_grade_eligible===false)return 'GRADE / AUTHORITY BLOCK';
+    if(pm?.publication_execution_status)return text(pm.publication_execution_status).replaceAll('_',' ');
     return 'UNKNOWN';
   }
   function refresh(){
