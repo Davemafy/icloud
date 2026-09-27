@@ -943,6 +943,9 @@ def _journal_snapshot():
     sequence_debug["cloud_required_runway"] = str(final_plan.get("required_runway") or "")
     sequence_debug["cloud_runway_target"] = str(final_plan.get("usable_runway_target") or "")
     sequence_debug["cloud_runway_target_basis"] = str(final_plan.get("usable_runway_target_basis") or "")
+    sequence_debug["cloud_history_failures"] = str(final_plan.get("history_window_failures") or "")
+    sequence_debug["cloud_history_warnings"] = str(final_plan.get("history_confluence_warnings") or "")
+    sequence_debug["cloud_history_metrics"] = str(final_plan.get("history_window_metrics") or "")
     sequence_debug["authority_mismatch"] = bool(
         cloud_authority != "NONE"
         and sequence_debug.get("online")
