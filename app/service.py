@@ -16,7 +16,7 @@ from .liquidity_reversal_handoff import (
 )
 from .ml_foundation import capture_cloud_candidates
 from .models import Analysis
-from .risk_matrix import matrix_payload
+from .risk_matrix import execution_grade_eligible, matrix_payload, original_risk_pct, zone_risk_context
 from .prompt_contract import apply_prompt_confirmation_contract
 from .prompt_intraday_selection import PROMPT_SELECTION_CONTRACT, install_prompt_intraday_selection
 from .secondary_zone_policy import apply_secondary_zone_policy
@@ -59,7 +59,6 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
         "GRADE_SCALED_EXECUTION_TIER",
         "CORRECT_SIDE_OF_CURRENT_PRICE",
         "INTRADAY_REACHABILITY",
-        "FRESHNESS",
         "GRADE",
         "HTF_AUTHORITY",
         "CONFLUENCE_QUALITY",
@@ -68,6 +67,14 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
     zone_map["bplus_is_research_context_only"] = False
     zone_map["bplus_execution_authority"] = True
     zone_map["context_grade_risk_matrix"] = matrix_payload()
+    for z in list(a.zones or []):
+        side = str(z.original_direction.value).lower()
+        mapped = dict(zone_map.get(side) or {})
+        mapped["execution_grade_eligible"] = bool(execution_grade_eligible(z))
+        mapped["risk_context"] = zone_risk_context(z)
+        mapped["base_risk_pct"] = float(original_risk_pct(z))
+        mapped["touch_mitigation_is_telemetry_only"] = True
+        zone_map[side] = mapped
     zone_map["four_zone_map_contract"] = {
         "primary_per_side": 1,
         "reserve_per_side": 1,
