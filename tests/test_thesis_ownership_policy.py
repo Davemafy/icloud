@@ -332,7 +332,7 @@ def _seed_legacy_bplus_owner(tmp_path, monkeypatch, *, heartbeat_ts: int | None,
     return key, zone
 
 
-def test_flat_legacy_bplus_owner_is_retired_with_fresh_sequence_truth(tmp_path, monkeypatch):
+def test_existing_bplus_owner_is_not_retired_by_grade_or_touch_telemetry(tmp_path, monkeypatch):
     key, _ = _seed_legacy_bplus_owner(
         tmp_path,
         monkeypatch,
@@ -340,16 +340,17 @@ def test_flat_legacy_bplus_owner_is_retired_with_fresh_sequence_truth(tmp_path, 
         open_positions=0,
     )
 
-    assert policy.active_owner_snapshot(10_000) is None
+    owner = policy.active_owner_snapshot(10_000)
+    assert owner is not None
+    assert owner["reaction_key"] == key
 
     with db.connect() as conn:
         row = conn.execute(
             "SELECT ownership_acquired_at,status,last_reason FROM zone_reactions WHERE reaction_key=?",
             (key,),
         ).fetchone()
-    assert int(row["ownership_acquired_at"] or 0) == 0
+    assert int(row["ownership_acquired_at"] or 0) == 9060
     assert row["status"] == "OBJECTIVE_IN_PROGRESS"
-    assert policy.LEGACY_OWNER_RELEASE_REASON in str(row["last_reason"])
 
 
 def test_legacy_bplus_owner_stays_locked_while_sequence_has_open_positions(tmp_path, monkeypatch):
@@ -364,8 +365,7 @@ def test_legacy_bplus_owner_stays_locked_while_sequence_has_open_positions(tmp_p
 
     assert owner is not None
     assert owner["reaction_key"] == key
-    assert owner["compat_execution_lock_protected"] is True
-    assert owner["compat_execution_lock_reason"] == "SEQUENCE_POSITIONS_OPEN"
+    assert "compat_execution_lock_protected" not in owner
     with db.connect() as conn:
         row = conn.execute(
             "SELECT ownership_acquired_at FROM zone_reactions WHERE reaction_key=?",
@@ -386,8 +386,7 @@ def test_legacy_bplus_owner_fails_closed_when_sequence_truth_is_stale(tmp_path, 
 
     assert owner is not None
     assert owner["reaction_key"] == key
-    assert owner["compat_execution_lock_protected"] is True
-    assert owner["compat_execution_lock_reason"] == "SEQUENCE_POSITION_TRUTH_UNAVAILABLE"
+    assert "compat_execution_lock_protected" not in owner
 
 
 def test_bplus_cannot_acquire_new_execution_ownership_directly(tmp_path, monkeypatch):
