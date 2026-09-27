@@ -36,6 +36,7 @@ def _zone(grade=Grade.A, touches=0, direction=Direction.BUY, countertrend=False,
         core_high=101.0,
         original_target1=target,
         countertrend=countertrend,
+        setup_type="REVERSAL" if countertrend else "CONTINUATION",
     )
 
 
