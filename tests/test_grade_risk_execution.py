@@ -73,10 +73,10 @@ def test_context_x_grade_matrix_exact_percentages():
         assert execution_grade_eligible(zone)
 
 
-def test_second_touch_a_remains_eligible_but_a_plus_and_bplus_do_not():
-    assert execution_grade_eligible(_zone(Grade.A, touches=2))
-    assert not execution_grade_eligible(_zone(Grade.A_PLUS, touches=2))
-    assert not execution_grade_eligible(_zone(Grade.B_PLUS, touches=2))
+def test_touch_count_never_changes_grade_execution_eligibility():
+    assert execution_grade_eligible(_zone(Grade.A, touches=20))
+    assert execution_grade_eligible(_zone(Grade.A_PLUS, touches=20))
+    assert execution_grade_eligible(_zone(Grade.B_PLUS, touches=20))
 
 
 def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
@@ -97,11 +97,11 @@ def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
     assert "SNAPSHOT" in plan["separation_guard"]
 
 
-def test_bplus_second_qualified_mitigation_is_watch_only():
-    zone = _zone(Grade.B_PLUS, touches=2)
+def test_bplus_touch_count_does_not_remove_grade_authority():
+    zone = _zone(Grade.B_PLUS, touches=20)
     plan = _kv(active_plan_text(_analysis(zone)))
-    assert plan["ea_mode"] == "WATCH_ONLY"
-    assert plan["bplus_execution_authority"] == "0"
+    assert execution_grade_eligible(zone)
+    assert plan["bplus_execution_authority"] == "1"
 
 
 def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
