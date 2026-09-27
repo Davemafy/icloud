@@ -4,9 +4,10 @@ from .engine import atr
 from .models import Analysis, Direction, Grade, MarketSnapshot, Zone
 from .risk_matrix import execution_grade_eligible, original_risk_pct, zone_risk_context
 
-SECONDARY_ZONE_CONTRACT = "MASTER_SNIPER_FOUR_ZONE_RESERVE_V6588"
+SECONDARY_ZONE_CONTRACT = "MASTER_SNIPER_FOUR_ZONE_RESERVE_V6594"
 XAU_POINTS_PER_PIP = 10.0
 RESERVE_GRADES = {Grade.A_PLUS, Grade.A}
+MAX_EDGE_OVERLAP_FRACTION = 0.20
 
 
 def _distance(price: float, low: float, high: float) -> float:
@@ -26,16 +27,38 @@ def _same_source(a: Zone, b: Zone) -> bool:
 
 
 def _clean_level_two(primary: Zone, reserve: Zone) -> bool:
-    """L2 is a separate tactical reaction band beyond L1, never an overlap clone."""
+    """L2 is a distinct source beyond L1; small edge overlap is allowed.
+
+    Institutional reaction bands can touch/overlap slightly at their distal edges
+    even when their source candles and centers are clearly separate. Reject clones
+    and materially merged bands, but do not hide a legitimate second zone solely
+    because the envelopes share a thin boundary slice.
+    """
     if reserve.original_direction != primary.original_direction:
         return False
     if _same_source(primary, reserve):
         return False
     if reserve.grade not in RESERVE_GRADES or not execution_grade_eligible(reserve):
         return False
+
+    p_lo, p_hi = sorted((float(primary.zone_low), float(primary.zone_high)))
+    r_lo, r_hi = sorted((float(reserve.zone_low), float(reserve.zone_high)))
+    p_mid, r_mid = (p_lo + p_hi) * 0.5, (r_lo + r_hi) * 0.5
+    overlap = max(0.0, min(p_hi, r_hi) - max(p_lo, r_lo))
+    smaller_width = max(min(p_hi - p_lo, r_hi - r_lo), 1e-9)
+    if overlap / smaller_width > MAX_EDGE_OVERLAP_FRACTION + 1e-9:
+        return False
+
     if primary.original_direction == Direction.SELL:
-        return float(reserve.zone_low) >= float(primary.zone_high) - 1e-9
-    return float(reserve.zone_high) <= float(primary.zone_low) + 1e-9
+        return r_mid > p_mid and r_hi > p_hi + 1e-9
+    return r_mid < p_mid and r_lo < p_lo - 1e-9
+
+
+def _reserve_edge_distance(primary: Zone, reserve: Zone) -> float:
+    """Distance from L1 distal edge; zero for an allowed thin edge overlap."""
+    if primary.original_direction == Direction.SELL:
+        return max(0.0, float(reserve.zone_low) - float(primary.zone_high))
+    return max(0.0, float(primary.zone_low) - float(reserve.zone_high))
 
 
 def _note_value(zone: Zone, prefix: str) -> float:
@@ -121,7 +144,9 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         options = [z for z in accepted[direction] if _clean_level_two(primary, z)]
         if not options:
             continue
-        options.sort(key=lambda z: zoning._rank(z, snapshot))
+        # The reserve is the next qualified battlefield beyond L1, not the most
+        # remote pristine source. Structural rank breaks ties after proximity.
+        options.sort(key=lambda z: (_reserve_edge_distance(primary, z), zoning._rank(z, snapshot)))
         reserve = options[0]
         payload = _reserve_payload(primary, reserve, snapshot)
         reserve_map[direction.value.lower()] = payload
@@ -139,9 +164,12 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         "secondary_is_context_only": True,
         "secondary_has_no_execution_authority": True,
         "secondary_uses_same_tactical_geometry_as_primary": True,
-        "secondary_must_be_distinct_and_non_overlapping": True,
-        "sell_secondary_must_be_at_or_above_primary_distal_edge": True,
-        "buy_secondary_must_be_at_or_below_primary_distal_edge": True,
+        "secondary_must_be_distinct_source": True,
+        "secondary_edge_overlap_allowed": True,
+        "secondary_max_edge_overlap_fraction": MAX_EDGE_OVERLAP_FRACTION,
+        "secondary_prefers_nearest_qualified_battlefield": True,
+        "sell_secondary_must_extend_beyond_primary_distal_side": True,
+        "buy_secondary_must_extend_beyond_primary_distal_side": True,
         "primary_m15_invalidation_required_before_promotion": True,
         "fresh_requalification_required_before_promotion": True,
         "m1_confirmation_still_required_after_promotion": True,
@@ -158,6 +186,6 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         )
     else:
         analysis.trader_brief += (
-            " Secondary Master Sniper reserve map: none currently qualifies. No L2 is forced; it must be a separate A+/A tactical source beyond L1."
+            " Secondary Master Sniper reserve map: none currently qualifies. No L2 is forced; it must be a separate A+/A tactical source beyond L1. Thin edge overlap is allowed only for distinct sources."
         )
     return analysis
