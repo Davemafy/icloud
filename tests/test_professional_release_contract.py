@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.35"
-    assert manifest["data_bridge_version"] == "1.52"
+    assert manifest["release"] == "6.3.36"
+    assert manifest["data_bridge_version"] == "1.53"
     assert manifest["sequence_ea_version"] == "3.45"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -66,6 +66,9 @@ def test_professional_release_contract_is_self_consistent():
         "next_open_owner_objective_runway_guard",
         "finalized_mt5_plan_dashboard_truth",
         "active_owner_priority_before_flip_authority_mutation",
+        "master_sniper_calendar_history_contract",
+        "history_window_ingress_fail_closed",
+        "history_window_failure_observability",
         "secondary_zone_thin_edge_overlap",
         "nearest_qualified_secondary_battlefield",
         "spread_guard_suspends_orders_not_thesis",
