@@ -201,7 +201,7 @@ bool SendSnapshot(string reason)
 }
 void SendHeartbeat()
 {
-   string b=StringFormat("{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_DataBridge\",\"version\":\"1.31\",\"symbol\":\"%s\",\"account_login\":%I64d,\"details\":{\"dxy\":\"%s\",\"journal_sync\":true,\"sequence_magic\":%I64d,\"sequence_expected_version\":\"%s\",\"paper_only\":true}}",(long)TimeTradeServer(),JsonEscape(XauSymbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),JsonEscape(DxySymbol),(long)SequenceMagicNumber,JsonEscape(JournalSequenceVersion()));
+   string b=StringFormat("{\"ts\":%I64d,\"ea\":\"InstitutionalSMC_DataBridge\",\"version\":\"1.32\",\"symbol\":\"%s\",\"account_login\":%I64d,\"details\":{\"dxy\":\"%s\",\"journal_sync\":true,\"sequence_magic\":%I64d,\"sequence_expected_version\":\"%s\",\"paper_only\":true}}",(long)TimeTradeServer(),JsonEscape(XauSymbol),(long)AccountInfoInteger(ACCOUNT_LOGIN),JsonEscape(DxySymbol),(long)SequenceMagicNumber,JsonEscape(JournalSequenceVersion()));
    string r;Post("/mt5/heartbeat",b,r);
 }
 void RefreshPlanContext()
