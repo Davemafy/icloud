@@ -147,3 +147,9 @@ def test_dashboard_exposes_target_ladder_truth():
     from pathlib import Path
     html = Path("static/index.html").read_text(encoding="utf-8")
     for needle in ["Target lifecycle","Target ladder truth","Activation reference","Target ladder valid for current phase"]: assert needle in html
+
+
+def test_dashboard_checklist_names_all_execution_grades():
+    from pathlib import Path
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "grade_executable:'A+ / A / B+ execution grade'" in html
