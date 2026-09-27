@@ -1,0 +1,44 @@
+import pytest
+from fastapi import HTTPException
+
+from app import main
+from app.models import MarketSnapshot
+
+
+def _snapshot():
+    return MarketSnapshot(
+        sent_at=1000,
+        bid=4260.0,
+        ask=4260.18,
+        spread_points=18.0,
+        point=0.01,
+    )
+
+
+def test_incomplete_history_snapshot_is_not_saved(monkeypatch):
+    saved = []
+    monkeypatch.setattr(main, "history_audit", lambda _s: (False, ["XAU_D1_1Y"]))
+    monkeypatch.setattr(main, "history_window_metrics", lambda _s: "XAU_D1_1Y:280bars:279.00d/350.00d")
+    monkeypatch.setattr(main, "save_snapshot", lambda s: saved.append(s))
+
+    with pytest.raises(HTTPException) as exc:
+        main.market_snapshot(_snapshot())
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "MASTER_SNIPER_HISTORY_WINDOW_INCOMPLETE"
+    assert exc.value.detail["failures"] == ["XAU_D1_1Y"]
+    assert saved == []
+
+
+def test_complete_history_snapshot_is_saved(monkeypatch):
+    saved = []
+    monkeypatch.setattr(main, "history_audit", lambda _s: (True, []))
+    monkeypatch.setattr(main, "history_window_metrics", lambda _s: "ALL_OK")
+    monkeypatch.setattr(main, "save_snapshot", lambda s: saved.append(s))
+
+    result = main.market_snapshot(_snapshot())
+
+    assert result["ok"] is True
+    assert result["history_window_ok"] is True
+    assert result["history_window_failures"] == []
+    assert len(saved) == 1
