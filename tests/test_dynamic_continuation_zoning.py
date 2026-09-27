@@ -18,12 +18,12 @@ def _event():
     return policy.ContinuationEvent(direction=Direction.SELL,source_tf="H1",source_ts=19_100,displacement_ts=19_200,strength=2.2,fvg_low=104.0,fvg_high=105.0,age_bars=1)
 
 
-def test_exhausted_countertrend_buy_is_demoted_from_execution_map(monkeypatch):
-    sell=_zone("SELL_REMOTE",Direction.SELL,Grade.A_PLUS,0,130,131,128,132); buy=_zone("BUY_USED",Direction.BUY,Grade.B_PLUS,3,99,101,97,103); analysis=_analysis([sell,buy]); analysis.selected_zone_id="SELL_REMOTE"
+def test_high_touch_countertrend_buy_is_not_demoted_by_touch_count(monkeypatch):
+    sell=_zone("SELL_REMOTE",Direction.SELL,Grade.A_PLUS,0,130,131,128,132); buy=_zone("BUY_USED",Direction.BUY,Grade.B_PLUS,30,99,101,97,103); analysis=_analysis([sell,buy]); analysis.selected_zone_id="SELL_REMOTE"
     monkeypatch.setattr(policy,"active_owner_snapshot",lambda now:None); monkeypatch.setattr(policy,"_recent_events",lambda snapshot,direction:[_event()]); monkeypatch.setattr(policy,"_expansion_state",lambda snapshot,context,events:{"aligned":True,"d1":"SELL","h1":"SELL","h4":"SELL","recent_event_count":1}); monkeypatch.setattr(policy,"_build_dynamic_zone",lambda event,analysis,snapshot:None)
     policy.apply_dynamic_continuation_rezone(analysis,_snapshot())
-    assert [z.zone_id for z in analysis.zones]==["SELL_REMOTE"]
-    meta=analysis.execution_policy["dynamic_continuation_rezone"]; assert meta["demoted_context_zones"][0]["zone_id"]=="BUY_USED"; assert meta["demoted_context_zones"][0]["execution_authority"] is False
+    assert [z.zone_id for z in analysis.zones]==["SELL_REMOTE","BUY_USED"]
+    meta=analysis.execution_policy["dynamic_continuation_rezone"]; assert meta["demoted_context_zones"]==[]; assert meta["touch_count_can_demote_zone"] is False
 
 
 def test_nearer_fresh_continuation_replaces_remote_primary(monkeypatch):
