@@ -133,7 +133,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     # separate final execution hold and never destroys an earned thesis/map.
     reasons = []
     if not execution_grade_eligible(zone):
-        reasons.append("GRADE_OR_QUALIFIED_MITIGATION_EXHAUSTED")
+        reasons.append("GRADE_NOT_EXECUTABLE")
     if not history_ok:
         reasons.append("ANALYSIS_HISTORY_WINDOW_INCOMPLETE")
     if not runway_ok:
@@ -169,7 +169,7 @@ def install_ai_contract_correction() -> None:
         payload = original_payload(a, s)
         rules = payload.setdefault("rules", {})
         rules["bplus_execution_authority"] = True
-        rules["bplus_role"] = "reduced-risk execution candidate at 0.25% through <=1 qualified mitigation; all normal gates still required"
+        rules["bplus_role"] = "reduced-risk execution candidate at 0.25% when structurally produced; mitigation count is telemetry only and all normal gates still apply"
         rules["institutional_layers"] = ["MAP_CONTEXT", "EXECUTION_CANDIDATE", "M1_AUTHORIZED"]
         rules["map_location_is_not_execution_authority"] = True
         rules["analysis_history_windows"] = {
@@ -181,7 +181,7 @@ def install_ai_contract_correction() -> None:
             "DXY_H4": "4-6 months",
             "DXY_H1": "4-6 weeks",
         }
-        rules["lifecycle_history_is_separate"] = "Mitigation/freshness history may retain older M15 bars than the 3-5 trading-day analysis window; older bars are lifecycle evidence only and must not widen or relocate a source-exact zone."
+        rules["lifecycle_history_is_separate"] = "Mitigation history may retain older M15 bars than the 3-5 trading-day analysis window; it is lifecycle telemetry only and must not change grade, risk, ranking, authority, width or location."
         rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
         rules["clear_run_semantics"] = "usable directional space from conservative tactical-core edge to valid target; never a reason to move the institutional zone"
         return payload
