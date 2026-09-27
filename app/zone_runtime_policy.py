@@ -156,7 +156,7 @@ def intraday_zone_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
     grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2, Grade.REJECT: 9}.get(zone.grade, 9)
     tf_rank = {"H4>H1": 0, "H4": 1, "H1": 2}.get(str(zone.source_tf), 9)
     reach_bucket, distance_atr = _reachability_bucket(zone, snapshot)
-    return (execution_tier, int(zone.touch_count), reach_bucket, grade_rank, tf_rank, -float(zone.location_score), distance_atr, -int(zone.source_ts))
+    return (execution_tier, reach_bucket, grade_rank, tf_rank, -float(zone.location_score), distance_atr, -int(zone.source_ts))
 
 
 def install_zone_rank_policy() -> None:
