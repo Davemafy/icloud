@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from app.models import Direction, Grade
 from app.professional_zone_execution_separation import (
+    apply_execution_separation,
     conservative_runway,
     history_audit,
     zone_layer,
@@ -73,3 +74,54 @@ def test_bplus_touch_count_is_telemetry_only_for_execution_layer():
 def test_runway_failure_does_not_reject_or_move_zone_it_only_removes_execution_layer():
     z = _zone(Grade.A_PLUS, touches=0)
     assert zone_layer(z, True, False) == "MAP_CONTEXT"
+
+def test_conservative_runway_can_use_next_open_owner_objective():
+    zone = _zone(direction=Direction.BUY, countertrend=True, target=110.0)
+    runway, required, ok = conservative_runway(zone, target_override=130.0)
+    assert runway == 29.0
+    assert required == 10.0
+    assert ok is True
+
+
+def test_final_separation_uses_next_open_target_not_behind_activation_tp1(monkeypatch):
+    zone = SimpleNamespace(
+        zone_id="PZ_H4H1_BUY_6",
+        grade=Grade.A_PLUS,
+        touch_count=0,
+        original_direction=Direction.BUY,
+        core_low=4254.41,
+        core_high=4275.79,
+        original_target1=4285.0,
+        countertrend=True,
+        setup_type="REVERSAL",
+    )
+    analysis = SimpleNamespace(zones=[zone], generated_at=1000)
+    snapshot = SimpleNamespace(
+        spread_points=19.0,
+        sent_at=1000,
+        kind="HISTORICAL_REPLAY",
+    )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation.history_audit",
+        lambda _snapshot: (True, []),
+    )
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "zone_id=PZ_H4H1_BUY_6\n"
+        "execution_authority=HTF_CORE_HANDOFF\n"
+        "next_open_target=4303.32000\n"
+        "original_target1=4285.00000\n"
+    )
+    out = dict(
+        line.split("=", 1)
+        for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
+        if "=" in line
+    )
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
+    assert out["usable_runway_target"] == "4303.32000"
+    assert out["usable_runway_target_basis"] == "FINAL_PLAN_NEXT_OPEN_TARGET"
+    assert abs(float(out["usable_runway"]) - 27.53) < 1e-9
+    assert out["required_runway"] == "10.00000"
+    assert out["usable_runway_ok"] == "1"
+    assert out["separation_guard"] == "PASS"
