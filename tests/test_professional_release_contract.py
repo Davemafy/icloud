@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.32"
-    assert manifest["data_bridge_version"] == "1.51"
-    assert manifest["sequence_ea_version"] == "3.42"
+    assert manifest["release"] == "6.3.33"
+    assert manifest["data_bridge_version"] == "1.52"
+    assert manifest["sequence_ea_version"] == "3.43"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -42,7 +42,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -59,7 +59,11 @@ def test_professional_release_contract_is_self_consistent():
         "zone_sweep_objective_progress_from_handoff_anchor",
         "paper_ai_no_provider_fallback",
         "execution_pipeline_integration_gate",
-        "safety_block_preserves_owner_mirror",
+        "safety_block_preserves_owner_mirror_and_plan_parity",
+        "safety_block_suspends_orders_not_plan_sync",
+        "cloud_live_block_keeps_execution_authority_visible",
+        "secondary_zone_thin_edge_overlap",
+        "nearest_qualified_secondary_battlefield",
         "spread_guard_suspends_orders_not_thesis",
         "safety_hold_dashboard_semantics",
         "owner_mirror_updates_before_live_block",
@@ -102,7 +106,7 @@ def test_professional_release_contract_is_self_consistent():
         "journal_immediate_resync_on_cloud_version_change",
         "journal_periodic_continuity_resync",
         "context_grade_risk_matrix",
-        "a_second_touch_reduced_risk_eligibility",
+        "touch_mitigation_telemetry_only",
         "fixed_10000_research_risk_anchor",
         "trend_countertrend_risk_scaling",
         "non_compounding_validation_capital_anchor",
