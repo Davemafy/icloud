@@ -132,7 +132,7 @@ def test_mql_backtest_harness_uses_sidecar_authority_and_does_not_modify_stable_
     assert 'if(IsTester()){RefreshPlan();return;}' in text
     assert 'if(IsTester())\n   {\n      return RefreshPlan();\n   }' in text
     assert 'if(IsTester())return;\n   string p=TZ_StatePrefix();' in text
-    stable = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5").read_text(encoding="utf-8")
+    stable = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5").read_text(encoding="utf-8")
     assert "TesterContractFile" not in stable
 
 
@@ -231,7 +231,7 @@ def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_pat
     meta = json.loads(metadata.read_text(encoding="utf-8"))
     assert meta["contract"] == backtest.REPLAY_CONTRACT
     assert meta["no_lookahead"] is True
-    assert meta["cloud_version"] == "6.5.93"
+    assert meta["cloud_version"] == "6.5.94"
     assert meta["sequence_contract"] == "3.42"
     progress = json.loads((tmp_path / "progress.json").read_text(encoding="utf-8"))
     assert progress["phase"] == "COMPLETED"
