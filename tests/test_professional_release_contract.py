@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.34"
+    assert manifest["release"] == "6.3.35"
     assert manifest["data_bridge_version"] == "1.52"
-    assert manifest["sequence_ea_version"] == "3.44"
+    assert manifest["sequence_ea_version"] == "3.45"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5"
@@ -42,7 +42,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -63,6 +63,9 @@ def test_professional_release_contract_is_self_consistent():
         "safety_block_suspends_orders_not_plan_sync",
         "cloud_live_block_keeps_execution_authority_visible",
         "active_owner_supersedes_dormant_accepted_flip",
+        "next_open_owner_objective_runway_guard",
+        "finalized_mt5_plan_dashboard_truth",
+        "active_owner_priority_before_flip_authority_mutation",
         "secondary_zone_thin_edge_overlap",
         "nearest_qualified_secondary_battlefield",
         "spread_guard_suspends_orders_not_thesis",
