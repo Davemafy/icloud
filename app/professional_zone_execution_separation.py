@@ -52,14 +52,21 @@ def history_window_metrics(snapshot: MarketSnapshot | None) -> str:
     """Compact read-only coverage telemetry using the same evidence windows as history_audit."""
     if snapshot is None:
         return "SNAPSHOT_MISSING"
+    xau_d1 = list(getattr(snapshot, "xau_d1", []) or [])
+    xau_h4 = list(getattr(snapshot, "xau_h4", []) or [])
+    xau_h1 = list(getattr(snapshot, "xau_h1", []) or [])
+    xau_m15 = list(getattr(snapshot, "xau_m15", []) or [])
+    dxy_d1 = list(getattr(snapshot, "dxy_d1", []) or [])
+    dxy_h4 = list(getattr(snapshot, "dxy_h4", []) or [])
+    dxy_h1 = list(getattr(snapshot, "dxy_h1", []) or [])
     fields = (
-        ("XAU_D1_1Y", len(snapshot.xau_d1), _span_days(snapshot.xau_d1), D1_MIN_CALENDAR_DAYS, "d"),
-        ("XAU_H4_4M", len(snapshot.xau_h4), _span_days(snapshot.xau_h4), H4_MIN_CALENDAR_DAYS, "d"),
-        ("XAU_H1_4W", len(snapshot.xau_h1), _span_days(snapshot.xau_h1), H1_MIN_CALENDAR_DAYS, "d"),
-        ("XAU_M15_3TD", len(snapshot.xau_m15), float(_trading_days(snapshot.xau_m15)), float(M15_MIN_TRADING_DAYS), "td"),
-        ("DXY_D1_1Y", len(snapshot.dxy_d1), _span_days(snapshot.dxy_d1), D1_MIN_CALENDAR_DAYS, "d"),
-        ("DXY_H4_4M", len(snapshot.dxy_h4), _span_days(snapshot.dxy_h4), H4_MIN_CALENDAR_DAYS, "d"),
-        ("DXY_H1_4W", len(snapshot.dxy_h1), _span_days(snapshot.dxy_h1), H1_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_D1_1Y", len(xau_d1), _span_days(xau_d1), D1_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_H4_4M", len(xau_h4), _span_days(xau_h4), H4_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_H1_4W", len(xau_h1), _span_days(xau_h1), H1_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_M15_3TD", len(xau_m15), float(_trading_days(xau_m15)), float(M15_MIN_TRADING_DAYS), "td"),
+        ("DXY_D1_1Y", len(dxy_d1), _span_days(dxy_d1), D1_MIN_CALENDAR_DAYS, "d"),
+        ("DXY_H4_4M", len(dxy_h4), _span_days(dxy_h4), H4_MIN_CALENDAR_DAYS, "d"),
+        ("DXY_H1_4W", len(dxy_h1), _span_days(dxy_h1), H1_MIN_CALENDAR_DAYS, "d"),
     )
     return ";".join(
         f"{name}:{count}bars:{actual:.2f}{unit}/{required:.2f}{unit}"
