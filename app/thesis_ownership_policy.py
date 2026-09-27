@@ -411,6 +411,86 @@ def _ownership_zone_snapshot(owner: dict[str, Any]) -> Zone | None:
         return None
 
 
+def _enrich_legacy_owner_snapshot(
+    analysis: Analysis,
+    owner: dict[str, Any],
+    frozen: Zone | None,
+) -> Zone | None:
+    """Repair a minimal legacy mirror from the current exact same-source map.
+
+    This path is deliberately narrow: it never changes owner identity, direction,
+    source, core, authority, target lifecycle or acquisition time. It only restores
+    the rich structural zone fields (setup type, countertrend context, confluences,
+    clear-run and exact source envelope) that were lost by an old mirror fallback.
+    """
+    if frozen is None or str(frozen.core_method or "") != "PERSISTED_OWNER_MIRROR_LEGACY":
+        return frozen
+
+    wanted = str(owner.get("ownership_zone_id") or owner.get("latest_zone_id") or "")
+    direction = str(owner.get("direction") or "")
+    source_tf = str(owner.get("source_tf") or "")
+    source_ts = int(owner.get("source_ts") or 0)
+    candidate = next(
+        (
+            z for z in analysis.zones
+            if z.zone_id == wanted
+            and z.original_direction.value == direction
+            and z.state == ZoneState.ACTIVE
+            and (not source_tf or z.source_tf == source_tf)
+            and (source_ts <= 0 or int(z.source_ts or 0) == source_ts)
+            and abs(float(z.core_low) - float(owner.get("core_low") or 0.0)) <= 1e-6
+            and abs(float(z.core_high) - float(owner.get("core_high") or 0.0)) <= 1e-6
+        ),
+        None,
+    )
+    if candidate is None:
+        return frozen
+
+    enriched = candidate.model_copy(deep=True)
+    # Target lifecycle belongs to the acquired owner. Structural enrichment must
+    # never silently replace objectives already frozen when authority was acquired.
+    for attr, key in (
+        ("original_target1", "target1"),
+        ("original_target2", "target2"),
+        ("original_target3", "target3"),
+    ):
+        value = float(owner.get(key) or 0.0)
+        if value > 0:
+            setattr(enriched, attr, value)
+    enriched.notes = [
+        "legacy_owner_enriched_from_exact_same_source_map",
+        *[n for n in list(enriched.notes or []) if str(n) != "legacy_owner_enriched_from_exact_same_source_map"],
+    ]
+
+    payload = enriched.model_dump_json()
+    key = str(owner.get("reaction_key") or "")
+    if key:
+        with connect() as db:
+            db.execute(
+                """
+                UPDATE zone_reactions
+                SET ownership_zone_id=?,ownership_zone_payload=?,last_reason=?
+                WHERE reaction_key=? AND ownership_acquired_at>0
+                  AND invalidated_at=0 AND objective_complete_at=0
+                """,
+                (
+                    enriched.zone_id,
+                    payload,
+                    "LEGACY_OWNER_ENRICHED_FROM_EXACT_SAME_SOURCE_MAP",
+                    key,
+                ),
+            )
+        owner["ownership_zone_id"] = enriched.zone_id
+        owner["ownership_zone_payload"] = payload
+        audit(
+            int(analysis.generated_at or analysis.snapshot_at or 0),
+            "thesis.execution_owner.enriched",
+            f"reaction_key={key} zone={enriched.zone_id} setup={enriched.setup_type} "
+            f"countertrend={int(bool(enriched.countertrend))}",
+        )
+    return enriched
+
+
 def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any]:
     status = str(owner.get("status") or "INTERACTING")
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
@@ -633,6 +713,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
 
     frozen = _ownership_zone_snapshot(owner)
+    frozen = _enrich_legacy_owner_snapshot(analysis, owner, frozen)
     owner_zone = frozen if frozen is not None else next((z for z in analysis.zones if _matches_owner(z, owner)), None)
 
     if owner_zone is not None and frozen is not None:
