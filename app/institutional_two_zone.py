@@ -233,7 +233,21 @@ def _build_candidates(snapshot: MarketSnapshot) -> list[PromptCandidate]:
             if matches:
                 child = max(matches, key=lambda x: (x.source_ts, x.strength))
                 used_children.add(id(child))
-                out.append(PromptCandidate(direction, "H4>H1", max(parent.source_ts, child.source_ts), child.core_low, child.core_high, parent.zone_low, parent.zone_high, max(parent.strength, child.strength), parent.fvg or child.fvg, f"{parent.source_kind}+{child.source_kind}", parent.volume_expansion or child.volume_expansion, "PROMPT_H4_PARENT_H1_REFINEMENT", max(_source_ready_ts(parent), _source_ready_ts(child))))
+                out.append(PromptCandidate(
+                    direction,
+                    "H4>H1",
+                    max(parent.source_ts, child.source_ts),
+                    child.core_low,
+                    child.core_high,
+                    min(float(parent.zone_low), float(child.zone_low)),
+                    max(float(parent.zone_high), float(child.zone_high)),
+                    max(parent.strength, child.strength),
+                    parent.fvg or child.fvg,
+                    f"{parent.source_kind}+{child.source_kind}",
+                    parent.volume_expansion or child.volume_expansion,
+                    "PROMPT_H4_PARENT_H1_REFINEMENT",
+                    max(_source_ready_ts(parent), _source_ready_ts(child)),
+                ))
             else:
                 out.append(PromptCandidate(direction, "H4", parent.source_ts, parent.core_low, parent.core_high, parent.zone_low, parent.zone_high, parent.strength, parent.fvg, parent.source_kind, parent.volume_expansion, "PROMPT_H4_SOURCE_CANDLE", _source_ready_ts(parent)))
         for child in children:
