@@ -65,9 +65,9 @@ def test_conservative_runway_uses_tactical_core_edge_not_zone_midpoint():
     assert ok == (runway >= required)
 
 
-def test_exhausted_bplus_remains_map_context_but_fresh_bplus_is_candidate():
+def test_bplus_touch_count_is_telemetry_only_for_execution_layer():
     assert zone_layer(_zone(Grade.B_PLUS, touches=1), True, True) == "EXECUTION_CANDIDATE"
-    assert zone_layer(_zone(Grade.B_PLUS, touches=2), True, True) == "MAP_CONTEXT"
+    assert zone_layer(_zone(Grade.B_PLUS, touches=20), True, True) == "EXECUTION_CANDIDATE"
 
 
 def test_runway_failure_does_not_reject_or_move_zone_it_only_removes_execution_layer():
