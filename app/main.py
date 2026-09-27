@@ -465,7 +465,7 @@ def mt5_plan():
     a = active_analysis()
     s = latest_snapshot()
     if a is None:
-        return PlainTextResponse("protocol=6\nea_mode=NO_TRADE\nreason=NO_ANALYSIS\n", status_code=200)
+        return PlainTextResponse(f"protocol={SETTINGS.protocol_version}\nea_mode=NO_TRADE\nreason=NO_ANALYSIS\n", status_code=200)
     text = _append_multimodel_plan(active_plan_text(a, s), a)
     text += owner_plan_text(int(datetime.now(timezone.utc).timestamp()))
     if s:
