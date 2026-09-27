@@ -506,6 +506,19 @@ def _detail_value(raw):
         return text
 
 
+def _plan_kv(text: str) -> dict[str, str]:
+    """Parse the finalized MT5 key/value plan for read-only dashboard truth."""
+    out: dict[str, str] = {}
+    for raw in str(text or "").splitlines():
+        if "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        if key:
+            out[key] = value.strip()
+    return out
+
+
 def _selected_zone(a):
     """Return the selected public plan or M1-ready execution zone."""
     if a is None or not a.zones or not a.selected_zone_id:
@@ -775,6 +788,12 @@ def _journal_snapshot():
     s = latest_snapshot()
     z = _selected_zone(a)
     readiness = _readiness_prefix(z)
+    final_plan: dict[str, str] = {}
+    if a is not None and s is not None:
+        try:
+            final_plan = _plan_kv(active_plan_text(a, s))
+        except Exception:
+            final_plan = {}
     all_events = recent_feedback(500)
     analysis_id = a.analysis_id if a else ""
     zone_id = z.zone_id if z else ""
@@ -859,18 +878,43 @@ def _journal_snapshot():
         }
     )
 
+    finalized_runway = str(final_plan.get("usable_runway_ok") or "")
+    if finalized_runway in {"0", "1"}:
+        clear_run_ok = finalized_runway == "1"
+    else:
+        required_runway = (
+            float(SETTINGS.clear_run_countertrend)
+            if z is not None and zone_risk_context(z) == "COUNTERTREND"
+            else float(SETTINGS.clear_run_with_trend)
+        )
+        clear_run_ok = bool(z and float(z.clear_run or 0.0) >= required_runway)
+
+    finalized_mode = str(final_plan.get("ea_mode") or "")
+    finalized_authority = str(final_plan.get("execution_authority") or "NONE")
+    finalized_handoff = bool(
+        finalized_mode == "DUAL_BRANCH"
+        and finalized_authority != "NONE"
+        and (
+            str(final_plan.get("core_handoff_ready") or "") == "1"
+            or str(final_plan.get("zone_sweep_handoff_ready") or "") == "1"
+            or str(final_plan.get("liquidity_handoff_ready") or "") == "1"
+            or str(final_plan.get("owner_continuation_ready") or "") == "1"
+        )
+    )
+    map_m1_ready = bool(z and readiness == "M1_READY")
+
     checks = {
         "fresh_zone": bool(z and execution_touch_limit(z) >= 0 and z.touch_count <= execution_touch_limit(z)),
         "liquidity_in_marked_zone": bool(z and "LIQUIDITY_IN_MARKED_ZONE" in set(z.confluences)),
         "two_plus_confluences": bool(z and z.independent_confluence_count >= 2),
-        "clear_run": bool(z and z.clear_run > 0),
+        "clear_run": clear_run_ok,
         "m15_zone_healthy": bool(z and z.state.value in {"ACTIVE", "FLIP_ACTIVE"}),
         "grade_executable": bool(z and execution_grade_eligible(z)),
         "target_ladder_phase_valid": bool(
             str(target_truth.get("status") or "") == "PLANNED_NOT_ACTIVATED"
             or bool(target_truth.get("authority_safe"))
         ),
-        "m1_handoff_ready": bool(z and readiness == "M1_READY"),
+        "m1_handoff_ready": finalized_handoff if final_plan else map_m1_ready,
         "live_data_safe": bool(
             s
             and s.spread_points <= SETTINGS.max_spread_points
@@ -882,14 +926,27 @@ def _journal_snapshot():
     # Before a zone activates, its TP ladder remains a forward PLAN. Historical
     # price travel through those future TP prices does not consume the ladder.
     sequence_debug = _sequence_debug_snapshot()
-    cloud_authority = str(
-        dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE"
-    ) if a else "NONE"
+    cloud_authority = (
+        finalized_authority
+        if final_plan
+        else (
+            str(dict((a.execution_policy or {}).get("execution_authority") or {}).get("authority") or "NONE")
+            if a
+            else "NONE"
+        )
+    )
     sequence_debug["cloud_authority"] = cloud_authority
+    sequence_debug["cloud_ea_mode"] = finalized_mode or "UNKNOWN"
+    sequence_debug["cloud_execution_guard_reason"] = str(final_plan.get("execution_guard_reason") or "")
+    sequence_debug["cloud_separation_guard"] = str(final_plan.get("separation_guard") or "")
+    sequence_debug["cloud_usable_runway"] = str(final_plan.get("usable_runway") or "")
+    sequence_debug["cloud_required_runway"] = str(final_plan.get("required_runway") or "")
+    sequence_debug["cloud_runway_target"] = str(final_plan.get("usable_runway_target") or "")
+    sequence_debug["cloud_runway_target_basis"] = str(final_plan.get("usable_runway_target_basis") or "")
     sequence_debug["authority_mismatch"] = bool(
         cloud_authority != "NONE"
         and sequence_debug.get("online")
-        and str(sequence_debug.get("authority") or "NONE") == "NONE"
+        and str(sequence_debug.get("authority") or "NONE") != cloud_authority
     )
     macro_status = _event_status(current_events, z.state.value if z else "", readiness)
     reconciled_status = _sequence_reconciled_status(macro_status, sequence_debug)
