@@ -449,8 +449,8 @@ async def generate_v659(
     from .timezones import safe_zoneinfo
     from .zone_reaction_lifecycle import update_zone_reactions
 
-    if SETTINGS.app_version != "6.5.92":
-        raise RuntimeError(f"BACKTEST_VERSION_DRIFT: expected Cloud 6.5.92, found {SETTINGS.app_version}")
+    if SETTINGS.app_version != "6.5.93":
+        raise RuntimeError(f"BACKTEST_VERSION_DRIFT: expected Cloud 6.5.93, found {SETTINGS.app_version}")
     if not SETTINGS.paper_only:
         raise RuntimeError("BACKTEST_REQUIRES_PAPER_ONLY")
 
