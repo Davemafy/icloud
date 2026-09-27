@@ -74,6 +74,11 @@ def _stamp_prompt_selection_contract(a: Analysis) -> None:
         "max_visible_zones": 4,
         "same_side_simultaneous_ownership": False,
         "reserve_promotes_only_after_primary_invalidation_and_fresh_requalification": True,
+        "zone_grade_immutable_for_analysis_cycle": True,
+        "touch_mitigation_is_telemetry_only": True,
+        "touch_count_changes_grade_risk_ranking_or_execution": False,
+        "plot_up_to_four_qualified_zones": True,
+        "never_force_missing_zone": True,
     }
     policy["public_zone_map"] = zone_map
     a.execution_policy = policy
@@ -361,13 +366,12 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     # cannot acquire thesis ownership, so this cannot create an execution lock.
     if SETTINGS.paper_only:
         register_analysis_zones(a)
-    # PAPER/DEMO ONLY: after a confirmed directional expansion, allow a fresh
-    # displacement/FVG retest with nearby structural liquidity to replace a remote
-    # same-direction primary. Only genuinely exhausted three-plus-touch countertrend
-    # zones are removed from the execution map; B+ remains visible research context but cannot acquire new execution authority. An already-
-    # acquired thesis is protected and disables this re-ranking.
+    # PAPER/DEMO ONLY: after a confirmed directional expansion, a genuinely fresh
+    # structural continuation source may replace a remote same-direction primary.
+    # Touch/mitigation count is telemetry only and can never demote/delete a zone.
+    # An already-acquired thesis remains protected from re-ranking.
     apply_dynamic_continuation_rezone(a, s)
-    # Includes DXY D1/H1 confirmation and the one user-facing pip/display pass.
+    # Includes DXY D1/H4/H1 confirmation and the one user-facing pip/display pass.
     apply_prompt_confirmation_contract(a, s)
     _stamp_prompt_selection_contract(a)
     # PAPER/DEMO ONLY: expose one distinct non-executable Level-2 reserve per
