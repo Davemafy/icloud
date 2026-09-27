@@ -48,7 +48,7 @@ def test_integrated_lab_compiles_exports_replays_and_prepares_real_tick_test():
         "ToDate=$($testerTo.ToString('yyyy.MM.dd'))",
         "MT5 date parity:",
         "MasterSniper_Backtest_Result.zip",
-        "Live DataBridge 1.52 / Sequence 3.44 were never replaced or detached.",
+        "Live DataBridge 1.52 / Sequence 3.45 were never replaced or detached.",
     ):
         assert required in text
 
