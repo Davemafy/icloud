@@ -11,8 +11,8 @@ _EXECUTION_CONTRACT_BINDING = "$('policy').textContent=JSON.stringify(a.executio
 _EXECUTION_POLICY_BINDING = "window.tradeZoneExecutionPolicy=a.execution_policy||{};"
 _FRESHNESS_LABEL_BINDING = "fresh_zone:'Fresh zone (0–1 touch)'"
 _FRESHNESS_LABEL_REPLACEMENT = (
-    "fresh_zone:(z.zone_id?(z.zone_id+' touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)'):"
-    "'Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)')"
+    "fresh_zone:(z.zone_id?(z.zone_id+' mitigation telemetry (no grade/risk authority)'):"
+    "'Selected-zone mitigation telemetry (no grade/risk authority)')"
 )
 _JOURNAL_ANCHOR = '<h2>Live trading journal'
 _VALIDATION_LEDGER_CARD = (
@@ -110,7 +110,7 @@ _VALIDATION_LEDGER_SCRIPT = r"""
 </script>
 """.strip()
 _MITIGATION_AUDIT_CARD = (
-    '<h2>Mitigation audit <span class="pill paper">GRADE AUTHORITY</span></h2>'
+    '<h2>Mitigation audit <span class="pill paper">OBSERVATION ONLY</span></h2>'
     '<div class="card scroll"><table><thead><tr>'
     '<th>Zone</th><th>Expected cycle</th><th>Event</th><th>Approach</th>'
     '<th>Armed</th><th>Core touch</th><th>Qualified / exit</th>'
@@ -118,9 +118,9 @@ _MITIGATION_AUDIT_CARD = (
     '</tr></thead><tbody id="mitigationAudit">'
     '<tr><td colspan="9" class="muted">Waiting for mitigation audit…</td></tr>'
     '</tbody></table>'
-    '<p class="note"><b>Freshness rule:</b> SELL = below envelope → core → below envelope; '
-    'BUY = above envelope → core → above envelope. Wrong-side contact never downgrades a zone. '
-    'Accepted distal M15 invalidation permanently stops the original zone counter.</p></div>'
+    '<p class="note"><b>Telemetry rule:</b> SELL = below envelope → core → below envelope; '
+    'BUY = above envelope → core → above envelope. Touch/mitigation count never changes zone grade, risk, ranking or execution eligibility. '
+    'Accepted distal M15 invalidation still ends the original zone lifecycle.</p></div>'
 )
 
 _JOURNAL_CONTEXT_CARD = (
@@ -205,11 +205,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         : 'ABOVE → CORE → ABOVE';
       if(!historyComplete){
         rows.push(
-          '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td><b class="warn">FRESHNESS HISTORY INCOMPLETE</b></td>'+
+          '<tr><td>'+auditText(zoneId)+'</td><td>'+cycle+'</td><td><b class="warn">MITIGATION HISTORY INCOMPLETE</b></td>'+
           '<td>'+auditText(expected)+'</td><td>'+auditTime(audit.history_start_ts||z.mitigation_history_start_ts)+'</td>'+
           '<td>—</td><td>Required from '+auditTime(audit.history_required_from_ts||z.mitigation_history_required_from_ts)+'</td>'+
-          '<td><b>NO</b></td><td>'+auditText(audit.history_gap_reason||z.mitigation_history_gap_reason||'M15 history cannot prove full freshness')+
-          ' • New A+/A/B+ execution authority is blocked.</td></tr>'
+          '<td><b>NO</b></td><td>'+auditText(audit.history_gap_reason||z.mitigation_history_gap_reason||'M15 history cannot prove full mitigation telemetry')+
+          ' • Observation only; zone grade and execution authority are unchanged.</td></tr>'
         );
       }
       rawContacts.forEach((r)=>{
