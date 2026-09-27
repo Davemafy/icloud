@@ -6,7 +6,7 @@ from .config import SETTINGS
 from .db import connect
 from .engine import atr, evaluate_zone_state
 from .models import Analysis, Grade, MarketSnapshot, Zone, ZoneState
-from .risk_matrix import execution_grade_eligible, execution_touch_limit
+from .risk_matrix import execution_grade_eligible
 from .zone_reaction_lifecycle import publication_state_for_zone
 
 # Public primary zones stay analysis-only until either (a) live price reaches the
@@ -79,8 +79,8 @@ def _common_zone_health(zone: Zone, snapshot: MarketSnapshot) -> bool:
 
 
 def _execution_touch_limit(zone: Zone) -> int:
-    """Context-grade matrix: A+ <=1 touch, A <=2 touches, B+ <=1 touch at reduced-risk authority."""
-    return execution_touch_limit(zone)
+    """Compatibility helper: touch count is telemetry only and never limits authority."""
+    return 2_147_483_647
 
 
 def _reaction_key(zone: Zone) -> str:
@@ -470,7 +470,6 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
             bias_rank,
             tf_rank,
             -float(z.location_score),
-            int(z.touch_count),
         )
 
     candidates.sort(key=rank)
