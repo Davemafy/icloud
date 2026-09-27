@@ -143,11 +143,26 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     if not snapshot_ok:
         reasons.append("SNAPSHOT_SAFETY_HOLD")
 
-    if layer != "EXECUTION_CANDIDATE" or not spread_ok or not snapshot_ok:
+    structural_block = layer != "EXECUTION_CANDIDATE"
+    safety_hold = not spread_ok or not snapshot_ok
+
+    if structural_block:
+        # Structural/history/runway failure means execution authority was never
+        # legitimately earned for this plan.
         _replace_or_append(rows, "ea_mode", "WATCH_ONLY")
         _replace_or_append(rows, "execution_authority", "NONE")
+        _replace_or_append(rows, "safety_hold_preserves_authority", "0")
         _replace_or_append(rows, "separation_guard", ",".join(reasons) or "MAP_CONTEXT_ONLY")
+    elif safety_hold:
+        # Spread/snapshot safety suspends ORDER permission only. Keep the already-
+        # earned macro authority in the plan so MT5 parity/ownership truth remains
+        # synchronized. WATCH_ONLY is a second fail-closed barrier; /mt5/plan also
+        # exports live_block=1 and Sequence refuses the order before micro execution.
+        _replace_or_append(rows, "ea_mode", "WATCH_ONLY")
+        _replace_or_append(rows, "safety_hold_preserves_authority", "1")
+        _replace_or_append(rows, "separation_guard", ",".join(reasons) or "SAFETY_HOLD")
     else:
+        _replace_or_append(rows, "safety_hold_preserves_authority", "0")
         _replace_or_append(rows, "separation_guard", "PASS")
 
     return "\n".join(rows) + "\n"
