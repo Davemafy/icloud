@@ -498,6 +498,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const cloudRunway=String(seq.cloud_usable_runway||'');
     const cloudRequiredRunway=String(seq.cloud_required_runway||'');
     const cloudRunwayTarget=String(seq.cloud_runway_target||'');
+    const cloudHistoryFailures=String(seq.cloud_history_failures||'');
+    const cloudHistoryWarnings=String(seq.cloud_history_warnings||'');
+    const cloudHistoryMetrics=String(seq.cloud_history_metrics||'');
     const seqOnline=seq.online===true;
     const seqMismatch=seq.authority_mismatch===true;
     const seqOpen=Number(seq.open_positions||0);
@@ -535,7 +538,12 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           runwayText=' Runway '+(cloudRunway||'—')+' / required '+(cloudRequiredRunway||'—')+
             (cloudRunwayTarget?' to target '+cloudRunwayTarget:'')+'.';
         }
-        seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+' Entry permission: NO.';
+        let historyText='';
+        if(why.includes('ANALYSIS_HISTORY_WINDOW_INCOMPLETE')){
+          historyText=' Failed history: '+(cloudHistoryFailures||'UNSPECIFIED')+'.'+
+            (cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'');
+        }
+        seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+historyText+' Entry permission: NO.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
@@ -575,7 +583,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     }else if(seqOnline && seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
       state='CLOUD PLAN WATCH ONLY';
       cls='warn';
-      meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+(cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD')+'. Entry permission: NO.';
+      const why=cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD';
+      const historyText=why.includes('ANALYSIS_HISTORY_WINDOW_INCOMPLETE')
+        ? ' Failed history: '+(cloudHistoryFailures||'UNSPECIFIED')+'.'+(cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'')
+        : '';
+      meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+why+'.'+historyText+' Entry permission: NO.';
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
@@ -627,6 +639,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }
     }
 
+    if(cloudHistoryWarnings && cloudHistoryWarnings!=='NONE' && cloudMode!=='WATCH_ONLY'){
+      meta+=' DXY extended-depth warning (non-blocking): '+cloudHistoryWarnings+'.';
+    }
     if(exec.textContent!==state)exec.textContent=state;
     exec.className='kpi '+cls;
     execMeta.textContent=meta;
