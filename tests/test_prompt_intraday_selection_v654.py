@@ -31,6 +31,6 @@ def test_reachable_valid_watch_zone_precedes_remote_pristine_context_zone():
     remote_a_plus = _zone(4367.49, 4407.49, touches=0, grade=Grade.A_PLUS, ts=5)
 
     # Master Sniper battlefield selection is reachability-first once structural
-    # validity is established. Grade/freshness controls execution authority; it
-    # must not let a remote pristine source erase a nearer valid reaction area.
+    # validity is established. Touch/mitigation telemetry has no ranking authority
+    # and must not let a remote pristine source erase a nearer valid reaction area.
     assert prompt_intraday_rank(nearby_b_plus, snapshot) < prompt_intraday_rank(remote_a_plus, snapshot)
