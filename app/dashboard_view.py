@@ -511,12 +511,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         seqGate.textContent='MANAGING '+seqOpen+' POSITION'+(seqOpen===1?'':'S');
         seqGate.className='kpi ok';
         seqMeta.textContent='Authority '+seqAuthority+' • current micro gate '+seqStage.replaceAll('_',' ')+' • '+(seqReason||'position management active')+'. This is management telemetry, not a new-entry signal.';
-      }else if(seqMismatch && seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:')){
+      }else if(seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:')){
         seqGate.textContent='SAFETY HOLD';
         seqGate.className='kpi bad';
-        seqMeta.textContent=(ownerMatch
-          ? 'Cloud thesis owner is preserved, but Sequence execution authority is intentionally suspended by '
-          : 'Cloud handoff exists, but no acquired thesis owner is currently locked; Sequence execution authority is suspended by '
+        seqMeta.textContent=(seqAuthority!=='NONE'
+          ? 'Macro authority '+seqAuthority+' is preserved; order permission is suspended by '
+          : (ownerMatch
+              ? 'Cloud thesis owner is preserved; order permission is suspended by '
+              : 'Cloud handoff context is preserved; order permission is suspended by ')
         )+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'.';
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
@@ -542,10 +544,18 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }
     }
 
+    const liveSafetyHold=seqStage==='SAFETY' && seqReason.startsWith('CLOUD_LIVE_BLOCK:');
     if(m1 && !seqOnline){
       state='SEQUENCE OFFLINE';
       cls='bad';
       meta=checklist+'Macro handoff exists, but fresh Sequence telemetry is unavailable. Entry permission: NO.';
+    }else if(seqOnline && liveSafetyHold){
+      state='EXECUTION HOLD';
+      cls='bad';
+      meta=checklist+(seqAuthority!=='NONE'
+        ? 'Macro authority '+seqAuthority+' remains synchronized. '
+        : 'Macro owner/context remains preserved. ')
+        +'Order permission is blocked by '+seqReason.replace('CLOUD_LIVE_BLOCK:','')+'. Entry permission: NO.';
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
