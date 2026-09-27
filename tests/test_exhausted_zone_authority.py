@@ -25,30 +25,30 @@ def _zone(grade: Grade, touches: int, notes=None) -> Zone:
     )
 
 
-def test_exhausted_bplus_is_map_only_even_while_zone_remains_active():
-    zone = _zone(Grade.B_PLUS, 4, ["grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"])
+def test_high_touch_count_is_telemetry_only_for_active_zone():
+    zone = _zone(Grade.A_PLUS, 40, ["grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"])
     assert zone.state == ZoneState.ACTIVE
-    assert execution_authority_status(zone) == "MAP_ONLY_EXHAUSTED"
-    assert execution_grade_eligible(zone) is False
-
-
-def test_explicit_exhaustion_provenance_fails_closed_even_if_touch_count_is_stale():
-    zone = _zone(Grade.B_PLUS, 0, ["grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"])
-    assert execution_authority_status(zone) == "MAP_ONLY_EXHAUSTED"
-    assert execution_grade_eligible(zone) is False
-
-
-def test_fresh_bplus_retains_reduced_risk_execution_eligibility():
-    zone = _zone(Grade.B_PLUS, 1, ["grade_degrade_reason:STRUCTURAL_QUALITY_BELOW_A"])
     assert execution_authority_status(zone) == "EXECUTION_ELIGIBLE"
     assert execution_grade_eligible(zone) is True
 
 
-def test_matrix_exports_permanent_exhaustion_contract():
-    contract = matrix_payload()["exhaustion_authority"]
-    assert contract["state"] == "MAP_ONLY_EXHAUSTED"
-    assert contract["original_direction_new_execution"] is False
-    assert contract["m1_reacquisition"] is False
-    assert contract["context_visibility"] is True
-    assert contract["flip_monitoring"] is True
-    assert "ACCEPTED_M15_INVALIDATION" in contract["flip_requires"]
+def test_legacy_exhaustion_note_cannot_override_current_immutable_grade_contract():
+    zone = _zone(Grade.B_PLUS, 0, ["grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"])
+    assert execution_authority_status(zone) == "EXECUTION_ELIGIBLE"
+    assert execution_grade_eligible(zone) is True
+
+
+def test_structural_bplus_retains_reduced_risk_execution_eligibility():
+    zone = _zone(Grade.B_PLUS, 20, ["grade_degrade_reason:STRUCTURAL_QUALITY_BELOW_A"])
+    assert execution_authority_status(zone) == "EXECUTION_ELIGIBLE"
+    assert execution_grade_eligible(zone) is True
+
+
+def test_matrix_exports_touch_telemetry_only_contract():
+    payload = matrix_payload()
+    assert payload["touch_authority"]["state"] == "TELEMETRY_ONLY"
+    assert payload["touch_authority"]["changes_grade"] is False
+    assert payload["touch_authority"]["changes_risk"] is False
+    assert payload["touch_authority"]["changes_ranking"] is False
+    assert payload["touch_authority"]["changes_execution_eligibility"] is False
+    assert payload["exhaustion_authority"]["state"] == "DISABLED_TOUCH_COUNT_NEVER_BLOCKS"
