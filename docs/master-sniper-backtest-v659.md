@@ -1,4 +1,4 @@
-# Master Sniper 6.5.90 / Sequence 3.42 Backtest Harness
+# Master Sniper 6.5.91 / Sequence 3.42 Backtest Harness
 
 Status: STAGING / DEMO-PAPER RESEARCH ONLY
 
