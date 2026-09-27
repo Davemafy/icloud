@@ -97,9 +97,9 @@ def confluence_history_audit(snapshot: MarketSnapshot | None) -> list[str]:
     if snapshot is None:
         return ["DXY_HISTORY_UNAVAILABLE"]
     checks = {
-        "DXY_D1_EXTENDED_LT_1Y": _span_days(snapshot.dxy_d1) >= D1_MIN_CALENDAR_DAYS,
-        "DXY_H4_EXTENDED_LT_4M": _span_days(snapshot.dxy_h4) >= H4_MIN_CALENDAR_DAYS,
-        "DXY_H1_EXTENDED_LT_4W": _span_days(snapshot.dxy_h1) >= H1_MIN_CALENDAR_DAYS,
+        "DXY_D1_EXTENDED_LT_1Y": _span_days(_series(snapshot, "DXY_D1")) >= D1_MIN_CALENDAR_DAYS,
+        "DXY_H4_EXTENDED_LT_4M": _span_days(_series(snapshot, "DXY_H4")) >= H4_MIN_CALENDAR_DAYS,
+        "DXY_H1_EXTENDED_LT_4W": _span_days(_series(snapshot, "DXY_H1")) >= H1_MIN_CALENDAR_DAYS,
     }
     return [name for name, ok in checks.items() if not ok]
 
