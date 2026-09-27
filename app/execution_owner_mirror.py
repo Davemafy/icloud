@@ -171,17 +171,39 @@ def recover_owner_from_sequence_heartbeat(h: Heartbeat) -> bool:
             restored = Zone.model_validate_json(
                 base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
             )
+            scalar_core_matches = bool(
+                abs(float(restored.core_low) - core_low) <= 1e-6
+                and abs(float(restored.core_high) - core_high) <= 1e-6
+            )
+            payload_geometry_valid = bool(
+                0 < float(restored.zone_low) < float(restored.zone_high)
+                and float(restored.zone_low) <= float(restored.core_low) <= float(restored.core_high) <= float(restored.zone_high)
+            )
+            source_matches = bool(
+                (not str(d.get("owner_mirror_source_tf") or "") or restored.source_tf == str(d.get("owner_mirror_source_tf") or ""))
+                and (
+                    _i(d.get("owner_mirror_source_ts")) <= 0
+                    or int(restored.source_ts or 0) == _i(d.get("owner_mirror_source_ts"))
+                )
+            )
             geometry_ok = bool(
                 restored.zone_id == zone_id
                 and restored.original_direction.value == direction
-                and abs(float(restored.core_low) - core_low) <= 1e-6
-                and abs(float(restored.core_high) - core_high) <= 1e-6
-                and abs(float(restored.zone_low) - zone_low) <= 1e-6
-                and abs(float(restored.zone_high) - zone_high) <= 1e-6
                 and restored.state == ZoneState.ACTIVE
+                and scalar_core_matches
+                and payload_geometry_valid
+                and source_matches
             )
             if geometry_ok:
                 zone = restored.model_copy(deep=True)
+                if (
+                    abs(float(restored.zone_low) - zone_low) > 1e-6
+                    or abs(float(restored.zone_high) - zone_high) > 1e-6
+                ):
+                    zone.notes = [
+                        "owner_mirror_exact_payload_restored_despite_legacy_envelope_scalar_drift",
+                        *list(zone.notes or []),
+                    ]
         except Exception:
             zone = None
 
