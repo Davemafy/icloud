@@ -71,9 +71,10 @@ def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
 
     Structural qualification happens before ranking. Once candidates are valid and
     on the correct side of price, PRIMARY/L1 is the nearest tactically reachable
-    institutional reaction area. Freshness and grade control execution authority;
-    they must not let a remote pristine source erase a nearer valid battlefield
-    zone. Remote independent A+/A sources remain candidates for reserve/L2.
+    institutional reaction area. Grade reflects structural analysis quality only.
+    Mitigation/touch telemetry has no ranking or execution authority and cannot let
+    a remote or repeatedly-touched source erase a nearer valid battlefield zone.
+    Remote independent A+/A sources remain candidates for reserve/L2.
     """
     side_rank = _side_rank(zone, snapshot)
     reach_bucket, distance_atr = _reachability(zone, snapshot)
@@ -88,7 +89,6 @@ def prompt_intraday_rank(zone: Zone, snapshot: MarketSnapshot) -> tuple:
         causal_rank,
         fvg_rank,
         volume_rank,
-        int(zone.touch_count),
         tf_rank,
         -float(zone.location_score),
         -int(zone.source_ts),
