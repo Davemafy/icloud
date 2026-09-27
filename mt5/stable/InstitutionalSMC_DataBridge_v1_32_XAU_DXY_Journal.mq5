@@ -95,7 +95,7 @@ void TZ_PrimeHistory(string sym,ENUM_TIMEFRAMES tf,int calendarDays)
    ArrayFree(preload);
 }
 
-bool TZ_BarsJsonReady(string sym,ENUM_TIMEFRAMES tf,int requested,double minSpanDays,int minTradingDays,int primeDays,string &json,string &metric)
+bool TZ_BarsJsonReady(string sym,ENUM_TIMEFRAMES tf,int requested,int minBars,double minSpanDays,int minTradingDays,int primeDays,string &json,string &metric)
 {
    int count=requested;
    if(tf==PERIOD_D1)count=MathMax(count,390);
@@ -107,7 +107,7 @@ bool TZ_BarsJsonReady(string sym,ENUM_TIMEFRAMES tf,int requested,double minSpan
    int n=CopyRates(sym,tf,1,count,r);
    double span=(n>=2?(double)(r[n-1].time-r[0].time)/86400.0:0.0);
    int tradingDays=(n>0?TZ_TradingDays(r,n):0);
-   bool ready=(n>0 && (minSpanDays<=0.0||span>=minSpanDays) && (minTradingDays<=0||tradingDays>=minTradingDays));
+   bool ready=(n>=minBars && (minSpanDays<=0.0||span>=minSpanDays) && (minTradingDays<=0||tradingDays>=minTradingDays));
 
    if(!ready)
    {
@@ -116,10 +116,10 @@ bool TZ_BarsJsonReady(string sym,ENUM_TIMEFRAMES tf,int requested,double minSpan
       n=CopyRates(sym,tf,1,count,r);
       span=(n>=2?(double)(r[n-1].time-r[0].time)/86400.0:0.0);
       tradingDays=(n>0?TZ_TradingDays(r,n):0);
-      ready=(n>0 && (minSpanDays<=0.0||span>=minSpanDays) && (minTradingDays<=0||tradingDays>=minTradingDays));
+      ready=(n>=minBars && (minSpanDays<=0.0||span>=minSpanDays) && (minTradingDays<=0||tradingDays>=minTradingDays));
    }
 
-   metric=StringFormat("%s:%s bars=%d span=%.2fd td=%d",sym,EnumToString(tf),n,span,tradingDays);
+   metric=StringFormat("%s:%s bars=%d/%d span=%.2fd td=%d",sym,EnumToString(tf),n,minBars,span,tradingDays);
    if(!ready){json="[]";return false;}
 
    json="[";
@@ -169,13 +169,13 @@ bool SendSnapshot(string reason)
    string failures="",metrics="";
    bool historyReady=true;
 
-   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_D1,BarsD1,350.0,0,400,xd1,metric)){historyReady=false;failures+="XAU_D1_1Y,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_H4,BarsH4,120.0,0,150,xh4,metric)){historyReady=false;failures+="XAU_H4_4M,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_H1,BarsH1,28.0,0,45,xh1,metric)){historyReady=false;failures+="XAU_H1_4W,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_M15,BarsM15,0.0,3,10,xm15,metric)){historyReady=false;failures+="XAU_M15_3TD,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_D1,BarsD1,350.0,0,400,dd1,metric)){historyReady=false;failures+="DXY_D1_1Y,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_H4,BarsH4,120.0,0,150,dh4,metric)){historyReady=false;failures+="DXY_H4_4M,";}metrics+=metric+" | ";
-   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_H1,BarsH1,28.0,0,45,dh1,metric)){historyReady=false;failures+="DXY_H1_4W,";}metrics+=metric;
+   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_D1,BarsD1,80,350.0,0,400,xd1,metric)){historyReady=false;failures+="XAU_D1_1Y,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_H4,BarsH4,120,120.0,0,150,xh4,metric)){historyReady=false;failures+="XAU_H4_4M,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_H1,BarsH1,160,28.0,0,45,xh1,metric)){historyReady=false;failures+="XAU_H1_4W,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(XauSymbol,PERIOD_M15,BarsM15,160,0.0,3,10,xm15,metric)){historyReady=false;failures+="XAU_M15_3TD,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_D1,BarsD1,60,0.0,0,90,dd1,metric)){historyReady=false;failures+="DXY_D1_MIN_BARS,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_H4,BarsH4,80,0.0,0,45,dh4,metric)){historyReady=false;failures+="DXY_H4_MIN_BARS,";}metrics+=metric+" | ";
+   if(!TZ_BarsJsonReady(DxySymbol,PERIOD_H1,BarsH1,100,0.0,0,14,dh1,metric)){historyReady=false;failures+="DXY_H1_MIN_BARS,";}metrics+=metric;
 
    if(StringLen(failures)>0)failures=StringSubstr(failures,0,StringLen(failures)-1);
    g_tzHistoryFailures=(failures==""?"NONE":failures);
