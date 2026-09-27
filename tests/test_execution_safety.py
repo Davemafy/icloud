@@ -245,7 +245,7 @@ def test_fresh_or_unconfirmed_bplus_zone_stays_watch_only():
     assert out["core_handoff_ready"] == "0"
 
 
-def test_confirmed_bplus_owner_stays_watch_only_even_with_ai_approval():
+def test_confirmed_bplus_owner_is_not_blocked_by_touch_count():
     zone = _buy_bplus_thesis_zone()
     analysis = _confirmed_buy_thesis_analysis(zone, ai_approved=True)
     snap = _snapshot(4270.70, spread_points=16.0)
@@ -259,9 +259,9 @@ def test_confirmed_bplus_owner_stays_watch_only_even_with_ai_approval():
 
     out = _kv(guard_plan_text(raw, analysis, snap))
 
-    assert out["ea_mode"] == "WATCH_ONLY"
-    assert out["thesis_continuation_bplus_override"] == "0"
-    assert out["core_handoff_ready"] == "0"
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["core_handoff_ready"] == "1"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
 
 
 def test_primary_observer_candidate_outside_core_is_context_false_and_wrong_targets_are_zeroed():
