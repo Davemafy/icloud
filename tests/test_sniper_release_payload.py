@@ -10,7 +10,7 @@ INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "38e9ff572d9ac5438c28b7ed42224239f0fc46cff7eb0a402160bf0e01c14e11",
+    SEQ: "df07eae6f98a9c79b91653a9d4dc29c7d3fcea13235511ad49d62838557ef66c",
     BRIDGE: "c0e9a8ec798569998034b117e26581aefd23a497e07213665b2b5284ba4adb76",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
 }
