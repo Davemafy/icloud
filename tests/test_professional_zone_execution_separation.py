@@ -3,8 +3,10 @@ from types import SimpleNamespace
 from app.models import Direction, Grade
 from app.professional_zone_execution_separation import (
     apply_execution_separation,
+    confluence_history_audit,
     conservative_runway,
     history_audit,
+    history_metrics,
     zone_layer,
 )
 
@@ -13,16 +15,25 @@ def _bars(start, end, step):
     return [SimpleNamespace(ts=t) for t in range(start, end + 1, step)]
 
 
-def _snapshot(full=True, dxy_h4_full=True):
+def _snapshot(full=True, dxy_h4_extended=True, dxy_h4_minimum=True):
     day = 86400
     end = 400 * day
+    if dxy_h4_extended:
+        dxy_h4 = _bars(0, end, 4 * 3600)
+    elif dxy_h4_minimum:
+        # Plenty of bars for prompt confirmation, but less than four months of
+        # extended DXY context. This is a warning only.
+        dxy_h4 = _bars(350 * day, end, 4 * 3600)
+    else:
+        # Fewer than the live prompt minimum 80 H4 bars: hard fail.
+        dxy_h4 = _bars(395 * day, end, 4 * 3600)
     return SimpleNamespace(
         xau_d1=_bars(0, end, day) if full else _bars(390 * day, end, day),
         xau_h4=_bars(0, end, 4 * 3600),
         xau_h1=_bars(0, end, 3600),
         xau_m15=_bars(390 * day, end, 900),
         dxy_d1=_bars(0, end, day),
-        dxy_h4=_bars(0, end, 4 * 3600) if dxy_h4_full else _bars(390 * day, end, 4 * 3600),
+        dxy_h4=dxy_h4,
         dxy_h1=_bars(0, end, 3600),
     )
 
@@ -53,10 +64,20 @@ def test_incomplete_d1_history_fails_closed_without_deleting_map_context():
     assert zone_layer(_zone(), ok, True) == "MAP_CONTEXT"
 
 
-def test_incomplete_dxy_h4_history_fails_closed_without_deleting_map_context():
-    ok, failures = history_audit(_snapshot(True, dxy_h4_full=False))
+def test_short_extended_dxy_h4_is_confluence_warning_not_xau_authority_veto():
+    snapshot = _snapshot(True, dxy_h4_extended=False, dxy_h4_minimum=True)
+    ok, failures = history_audit(snapshot)
+    assert ok
+    assert failures == []
+    assert "DXY_H4_EXTENDED_LT_4M" in confluence_history_audit(snapshot)
+    assert zone_layer(_zone(), ok, True) == "EXECUTION_CANDIDATE"
+
+
+def test_dxy_h4_below_prompt_minimum_still_fails_closed():
+    snapshot = _snapshot(True, dxy_h4_extended=False, dxy_h4_minimum=False)
+    ok, failures = history_audit(snapshot)
     assert not ok
-    assert "DXY_H4_4M" in failures
+    assert "DXY_H4_MIN_BARS" in failures
     assert zone_layer(_zone(), ok, True) == "MAP_CONTEXT"
 
 
@@ -126,3 +147,57 @@ def test_final_separation_uses_next_open_target_not_behind_activation_tp1(monkey
     assert out["required_runway"] == "10.00000"
     assert out["usable_runway_ok"] == "1"
     assert out["separation_guard"] == "PASS"
+
+
+def test_history_span_is_order_independent():
+    snapshot = _snapshot(True)
+    snapshot.xau_d1 = list(reversed(snapshot.xau_d1))
+    snapshot.xau_h4 = list(reversed(snapshot.xau_h4))
+    snapshot.xau_h1 = list(reversed(snapshot.xau_h1))
+    ok, failures = history_audit(snapshot)
+    assert ok
+    assert failures == []
+
+
+def test_history_metrics_expose_bar_counts_and_depth():
+    metrics = history_metrics(_snapshot(True))
+    assert metrics["XAU_D1_bars"] > 80
+    assert metrics["XAU_D1_span_days"] >= 350
+    assert metrics["XAU_M15_trading_days"] >= 3
+    assert metrics["DXY_H4_bars"] >= 80
+
+
+def test_final_plan_exports_exact_history_failures_warnings_and_metrics(monkeypatch):
+    zone = SimpleNamespace(
+        zone_id="Z1",
+        grade=Grade.A_PLUS,
+        touch_count=0,
+        original_direction=Direction.BUY,
+        core_low=100.0,
+        core_high=101.0,
+        original_target1=120.0,
+        countertrend=False,
+        setup_type="CONTINUATION",
+    )
+    analysis = SimpleNamespace(zones=[zone], generated_at=400 * 86400)
+    snapshot = _snapshot(True, dxy_h4_extended=False, dxy_h4_minimum=True)
+    snapshot.spread_points = 10.0
+    snapshot.sent_at = analysis.generated_at
+    snapshot.kind = "HISTORICAL_REPLAY"
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "zone_id=Z1\n"
+        "execution_authority=HTF_CORE_HANDOFF\n"
+        "next_open_target=120.0\n"
+    )
+    out = dict(
+        line.split("=", 1)
+        for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
+        if "=" in line
+    )
+    assert out["history_window_ok"] == "1"
+    assert out["history_window_failures"] == "NONE"
+    assert "DXY_H4_EXTENDED_LT_4M" in out["history_confluence_warnings"]
+    assert "XAU_D1:" in out["history_window_metrics"]
+    assert "DXY_H4:" in out["history_window_metrics"]
+    assert out["ea_mode"] == "DUAL_BRANCH"
