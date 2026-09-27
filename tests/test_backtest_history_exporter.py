@@ -44,4 +44,4 @@ def test_history_exporter_has_no_literal_source_escape_tokens():
     assert ";\\n" not in text
     assert ")\\n" not in text
     assert "ResetLastError();\\n" not in text
-    assert "Master Sniper 6.5.92" in text
+    assert "Master Sniper 6.5.93" in text
