@@ -153,3 +153,18 @@ def test_dashboard_checklist_names_all_execution_grades():
     from pathlib import Path
     html = Path("static/index.html").read_text(encoding="utf-8")
     assert "grade_executable:'A+ / A / B+ execution grade'" in html
+
+
+def test_dashboard_explains_finalized_cloud_plan_watch_only_hold():
+    cleaned = compact_dashboard_html('<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><h2>Live trading journal</h2></body>')
+    for needle in [
+        "CLOUD PLAN WATCH ONLY",
+        "cloud_ea_mode",
+        "cloud_separation_guard",
+        "cloud_usable_runway",
+        "cloud_required_runway",
+        "cloud_runway_target",
+        "Sequence matches the finalized Cloud plan",
+        "Finalized Cloud execution plan is intentionally non-executable",
+    ]:
+        assert needle in cleaned
