@@ -167,7 +167,6 @@ def install_master_sniper_zone_authority() -> None:
             grade_rank,
             distance,
             tf_rank,
-            int(zone.touch_count),
             0 if "HISTORICAL_DISPLACEMENT_FVG" in zone.confluences else 1,
             0 if "LIQUIDITY_SWEEP_REJECTION" in zone.confluences else 1,
             0 if "INSTITUTIONAL_DISPLACEMENT" in zone.confluences else 1,
