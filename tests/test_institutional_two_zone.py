@@ -146,7 +146,7 @@ def test_strong_zone_grade_is_unchanged_by_second_mitigation(monkeypatch):
     zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
 
     assert len(zones) == 1
-    assert zones[0].grade == Grade.A_PLUS
+    assert zones[0].grade == Grade.A
     assert zones[0].core_method.startswith("ARMED|")
     assert analysis.selected_zone_id == zones[0].zone_id
 
@@ -432,11 +432,11 @@ def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
         psy_confluence=True,
     )
 
-    assert ledger["events"][0]["grade_before"] == "A+"
-    assert ledger["events"][0]["grade_after"] == "A+"
+    assert ledger["events"][0]["grade_before"] == "A"
+    assert ledger["events"][0]["grade_after"] == "A"
     assert ledger["events"][0]["grade_changed"] is False
-    assert ledger["events"][1]["grade_before"] == "A+"
-    assert ledger["events"][1]["grade_after"] == "A+"
+    assert ledger["events"][1]["grade_before"] == "A"
+    assert ledger["events"][1]["grade_after"] == "A"
     assert ledger["events"][1]["grade_changed"] is False
 
 
@@ -470,13 +470,13 @@ def test_incomplete_m15_mitigation_history_is_telemetry_only(monkeypatch):
 
     assert len(zones) == 1
     zone = zones[0]
-    assert "structural_grade:A+" in zone.notes
-    assert zone.grade == Grade.A_PLUS
+    assert "structural_grade:A" in zone.notes
+    assert zone.grade == Grade.A
     assert zone.core_method.startswith("ARMED|")
     assert "grade_degrade_reason:NONE" in zone.notes
     public = analysis.execution_policy["public_zone_map"]["sell"]
     assert public["mitigation_history_complete"] is False
-    assert public["grade"] == "A+"
+    assert public["grade"] == "A"
 
 
 def test_source_ready_time_is_after_source_candle_close():
@@ -561,7 +561,7 @@ def test_trend_grade_audit_exposes_structural_score_and_touch_telemetry():
         psy_confluence=True,
     )
 
-    assert audit["grade"] == Grade.A_PLUS
+    assert audit["grade"] == Grade.A
     assert audit["model"] == "TREND_CONTINUATION"
     assert audit["mitigations"] == 2
     assert audit["mitigations_are_telemetry_only"] is True
