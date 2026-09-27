@@ -5,7 +5,7 @@ from typing import Iterable
 
 from .config import SETTINGS
 from .models import Direction, Grade, MarketSnapshot, Zone
-from .risk_matrix import execution_grade_eligible
+from .risk_matrix import execution_grade_eligible, zone_risk_context
 
 # User-approved Master Sniper analysis windows. These are minimum evidence windows;
 # retaining additional history for lifecycle/mitigation accounting is harmless and
@@ -48,14 +48,25 @@ def history_audit(snapshot: MarketSnapshot | None) -> tuple[bool, list[str]]:
     return not failed, failed
 
 
-def conservative_runway(zone: Zone) -> tuple[float, float, bool]:
-    """Measure usable target space from the least-favourable edge of the tactical core."""
-    target = float(zone.original_target1 or 0.0)
+def conservative_runway(zone: Zone, target_override: float | None = None) -> tuple[float, float, bool]:
+    """Measure usable target space from the least-favourable edge of the tactical core.
+
+    When a thesis already owns execution, TP1 can legitimately be behind the
+    ownership anchor. The final plan guard therefore passes the next still-open
+    objective as target_override; falling back to zone.original_target1 preserves
+    pre-activation behavior.
+    """
+    target = float(target_override if target_override and target_override > 0 else (zone.original_target1 or 0.0))
     if zone.original_direction == Direction.BUY:
         runway = target - float(zone.core_high) if target > 0 else 0.0
     else:
         runway = float(zone.core_low) - target if target > 0 else 0.0
-    need = float(SETTINGS.clear_run_countertrend if zone.countertrend else SETTINGS.clear_run_with_trend)
+    context = zone_risk_context(zone)
+    need = float(
+        SETTINGS.clear_run_countertrend
+        if context == "COUNTERTREND"
+        else SETTINGS.clear_run_with_trend
+    )
     runway = max(0.0, runway)
     return runway, need, runway >= need
 
@@ -96,7 +107,21 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
         return text
 
     history_ok, history_failures = history_audit(snapshot)
-    runway, runway_need, runway_ok = conservative_runway(zone)
+    runway_target = 0.0
+    runway_target_basis = "ZONE_ORIGINAL_TARGET1"
+    for key in ("next_open_target", "original_target1"):
+        try:
+            candidate = float(values.get(key, "0") or 0.0)
+        except (TypeError, ValueError):
+            candidate = 0.0
+        if candidate > 0:
+            runway_target = candidate
+            runway_target_basis = "FINAL_PLAN_" + key.upper()
+            break
+    runway, runway_need, runway_ok = conservative_runway(
+        zone,
+        target_override=runway_target if runway_target > 0 else None,
+    )
     spread = float(getattr(snapshot, "spread_points", 0.0) or 0.0) if snapshot is not None else 0.0
     spread_ok = snapshot is not None and spread <= float(SETTINGS.max_spread_points)
     if snapshot is None:
@@ -114,6 +139,8 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "usable_runway", f"{runway:.5f}")
     _replace_or_append(rows, "required_runway", f"{runway_need:.5f}")
     _replace_or_append(rows, "usable_runway_ok", "1" if runway_ok else "0")
+    _replace_or_append(rows, "usable_runway_target", f"{float(runway_target or zone.original_target1 or 0.0):.5f}")
+    _replace_or_append(rows, "usable_runway_target_basis", runway_target_basis)
     _replace_or_append(rows, "map_location_authority", "SOURCE_EXACT_PRESERVED")
     _replace_or_append(rows, "live_spread_points", f"{spread:.2f}")
     _replace_or_append(rows, "max_spread_points", f"{float(SETTINGS.max_spread_points):.2f}")
