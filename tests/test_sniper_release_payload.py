@@ -4,13 +4,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_44_OwnerFlipPriority_Demo.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "df07eae6f98a9c79b91653a9d4dc29c7d3fcea13235511ad49d62838557ef66c",
+    SEQ: "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9",
     BRIDGE: "c0e9a8ec798569998034b117e26581aefd23a497e07213665b2b5284ba4adb76",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
 }
@@ -25,8 +25,8 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.44"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.44"' in seq
+    assert '#property version   "3.45"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.45"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
@@ -38,10 +38,10 @@ def test_release_payload_versions_and_parity_wiring():
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.3.34"
-    assert manifest["ref"] == "c239cda51454cad4a2f5f1820604fbd4ab5a01c5"
+    assert manifest["release"] == "6.3.35"
+    assert manifest["ref"] == "fe5c203feac97f5233c5ae34f0d2842f3b8a5a7b"
     assert manifest["data_bridge_version"] == "1.52"
-    assert manifest["sequence_ea_version"] == "3.44"
+    assert manifest["sequence_ea_version"] == "3.45"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
