@@ -41,12 +41,12 @@ def test_directional_mitigation_audit_is_visible_and_read_only():
     cleaned = compact_dashboard_html('<tbody id="zones"></tbody><h2>Live trading journal</h2></body>')
     assert 'id="mitigationAudit"' in cleaned
     assert "Mitigation audit" in cleaned
-    assert "GRADE AUTHORITY" in cleaned
+    assert "OBSERVATION ONLY" in cleaned
     assert "SELL = below envelope" in cleaned
     assert "BUY = above envelope" in cleaned
     assert "Wrong-side contact never downgrades a zone" in cleaned
-    assert "FRESHNESS HISTORY INCOMPLETE" in cleaned
-    assert "New A+/A/B+ execution authority is blocked" in cleaned
+    assert "MITIGATION HISTORY INCOMPLETE" in cleaned
+    assert "zone grade and execution authority are unchanged" in cleaned
     assert "refreshMitigationAudit" in cleaned
     assert "WRONG_APPROACH_SIDE" not in cleaned
     assert "OrderSend" not in cleaned
@@ -66,8 +66,8 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
 def test_freshness_check_is_scoped_to_selected_zone():
     html = '<h2>Live trading journal</h2><script>function x(j){const z=j?.zone||{};const labels={fresh_zone:\'Fresh zone (0–1 touch)\'};}</script></body>'
     cleaned = compact_dashboard_html(html)
-    assert "z.zone_id+' touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)'" in cleaned
-    assert "Selected-zone touch eligibility (A+ ≤1 • A ≤2 • B+ ≤1 @ 0.25%)" in cleaned
+    assert "z.zone_id+' mitigation telemetry (no grade/risk authority)'" in cleaned
+    assert "Selected-zone mitigation telemetry (no grade/risk authority)" in cleaned
 
 
 def test_dashboard_transform_is_idempotent():
