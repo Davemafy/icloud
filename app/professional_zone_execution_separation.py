@@ -48,6 +48,25 @@ def history_audit(snapshot: MarketSnapshot | None) -> tuple[bool, list[str]]:
     return not failed, failed
 
 
+def history_window_metrics(snapshot: MarketSnapshot | None) -> str:
+    """Compact read-only coverage telemetry using the same evidence windows as history_audit."""
+    if snapshot is None:
+        return "SNAPSHOT_MISSING"
+    fields = (
+        ("XAU_D1_1Y", len(snapshot.xau_d1), _span_days(snapshot.xau_d1), D1_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_H4_4M", len(snapshot.xau_h4), _span_days(snapshot.xau_h4), H4_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_H1_4W", len(snapshot.xau_h1), _span_days(snapshot.xau_h1), H1_MIN_CALENDAR_DAYS, "d"),
+        ("XAU_M15_3TD", len(snapshot.xau_m15), float(_trading_days(snapshot.xau_m15)), float(M15_MIN_TRADING_DAYS), "td"),
+        ("DXY_D1_1Y", len(snapshot.dxy_d1), _span_days(snapshot.dxy_d1), D1_MIN_CALENDAR_DAYS, "d"),
+        ("DXY_H4_4M", len(snapshot.dxy_h4), _span_days(snapshot.dxy_h4), H4_MIN_CALENDAR_DAYS, "d"),
+        ("DXY_H1_4W", len(snapshot.dxy_h1), _span_days(snapshot.dxy_h1), H1_MIN_CALENDAR_DAYS, "d"),
+    )
+    return ";".join(
+        f"{name}:{count}bars:{actual:.2f}{unit}/{required:.2f}{unit}"
+        for name, count, actual, required, unit in fields
+    )
+
+
 def conservative_runway(zone: Zone, target_override: float | None = None) -> tuple[float, float, bool]:
     """Measure usable target space from the least-favourable edge of the tactical core.
 
@@ -107,6 +126,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
         return text
 
     history_ok, history_failures = history_audit(snapshot)
+    history_metrics = history_window_metrics(snapshot)
     runway_target = 0.0
     runway_target_basis = "ZONE_ORIGINAL_TARGET1"
     for key in ("next_open_target", "original_target1"):
@@ -136,6 +156,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "institutional_layer", layer)
     _replace_or_append(rows, "history_window_ok", "1" if history_ok else "0")
     _replace_or_append(rows, "history_window_failures", ",".join(history_failures) if history_failures else "NONE")
+    _replace_or_append(rows, "history_window_metrics", history_metrics)
     _replace_or_append(rows, "usable_runway", f"{runway:.5f}")
     _replace_or_append(rows, "required_runway", f"{runway_need:.5f}")
     _replace_or_append(rows, "usable_runway_ok", "1" if runway_ok else "0")
