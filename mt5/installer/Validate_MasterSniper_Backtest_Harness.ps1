@@ -77,7 +77,7 @@ try{
     (Join-Path $core 'InstitutionalSMC_SequenceEA_v3_21_Flip_Reentry_Backtest_Demo.mq5'),
     (Join-Path $core 'SniperContractParityV1.mqh')
   )
-  foreach($p in $required){if(!(Test-Path $p)){throw "Required 6.3.34 support file missing: $p"}}
+  foreach($p in $required){if(!(Test-Path $p)){throw "Required 6.3.35 support file missing: $p"}}
 
   $dest=Join-Path $t.MQL5 'Experts\TradeZoneValidation'
   New-Item -ItemType Directory -Force -Path $dest|Out-Null
