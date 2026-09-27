@@ -1,6 +1,6 @@
 #property strict
 #property version   "3.42"
-#property description "DEMO/PAPER XAU M1 BACKTEST HARNESS: Master Sniper 6.5.96 replay contract + Sequence 3.42 execution."
+#property description "DEMO/PAPER XAU M1 BACKTEST HARNESS: Master Sniper 6.5.97 replay contract + Sequence 3.42 execution."
 
 // Research wrapper around the validated v3.21 execution core.
 // DEMO/PAPER ONLY. Real accounts remain hard-blocked.
