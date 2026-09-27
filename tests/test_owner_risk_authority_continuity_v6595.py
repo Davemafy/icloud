@@ -118,7 +118,7 @@ def test_spread_hold_preserves_earned_authority_but_keeps_watch_only(monkeypatch
     )
     monkeypatch.setattr(
         "app.professional_zone_execution_separation.conservative_runway",
-        lambda _zone: (10.0, 5.0, True),
+        lambda _zone, *args, **kwargs: (10.0, 5.0, True),
     )
     text = (
         "ea_mode=DUAL_BRANCH\n"
