@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Master Sniper structural geometry correction (PAPER/DEMO only).
 
-Contract V6589: HTF source candles are provenance/guardrails; the published map
+Contract V6593: HTF source candles are provenance/guardrails; the published map
 is the tactical structural reaction band around genuine attached liquidity and
 native refinement. No manual price is hard-coded. If the volatility-scaled band
 naturally reaches a source edge within the configured sweep buffer, snap to that
@@ -13,7 +13,7 @@ from .config import SETTINGS
 from .engine import atr
 from .models import Direction
 
-CONTRACT = "MASTER_SNIPER_TACTICAL_MAP_V6589"
+CONTRACT = "MASTER_SNIPER_TACTICAL_MAP_V6593"
 
 
 def _safe_atr(snapshot, field: str, bars_field: str) -> float:
@@ -50,6 +50,8 @@ def _snap_source_edge(value: float, edge: float, tolerance: float) -> float:
 
 def _tactical_band(candidate, core_low: float, core_high: float, liquidity_price: float, snapshot):
     source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+    source_low = min(source_low, float(core_low))
+    source_high = max(source_high, float(core_high))
     depth = _tactical_depth(snapshot)
     sweep = _sweep_buffer(snapshot)
     price = float(liquidity_price)
@@ -60,14 +62,18 @@ def _tactical_band(candidate, core_low: float, core_high: float, liquidity_price
         high = max(core_high, price + sweep, min(source_high, price + depth))
         high = min(high, source_high + _candidate_atr_limit(candidate, snapshot))
         low = _snap_source_edge(low, source_low, sweep)
-        high = _snap_source_edge(high, source_high, sweep)
+        snapped_high = _snap_source_edge(high, source_high, sweep)
+        if snapped_high - price + 1e-9 >= sweep:
+            high = snapped_high
     else:
         if price > core_high:
             return None
         low = min(core_low, price - sweep, max(source_low, price - depth))
         low = max(low, source_low - _candidate_atr_limit(candidate, snapshot))
         high = min(source_high, max(core_high, price + depth))
-        low = _snap_source_edge(low, source_low, sweep)
+        snapped_low = _snap_source_edge(low, source_low, sweep)
+        if price - snapped_low + 1e-9 >= sweep:
+            low = snapped_low
         high = _snap_source_edge(high, source_high, sweep)
     if high <= low:
         return None
@@ -85,6 +91,8 @@ def _install_engine_geometry() -> None:
     def select_liquidity(candidate, core_low, core_high, liq, snapshot):
         required = zoning._required_liquidity(candidate.direction)
         source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+        source_low = min(source_low, float(core_low))
+        source_high = max(source_high, float(core_high))
         reach = _candidate_atr_limit(candidate, snapshot)
         tf_rank = {"D1": 0, "H4": 1, "H1": 2}
         options = []
@@ -115,9 +123,9 @@ def _install_engine_geometry() -> None:
 
     def build_geometry(candidate, core_low, core_high, level, snapshot):
         source_low, source_high = sorted((float(candidate.zone_low), float(candidate.zone_high)))
+        source_low = min(source_low, float(core_low))
+        source_high = max(source_high, float(core_high))
         price = float(level.price)
-        if core_low < source_low - 1e-9 or core_high > source_high + 1e-9:
-            return None
         reach = _candidate_atr_limit(candidate, snapshot)
         attachment = max(0.0, price - source_high) if candidate.direction == Direction.SELL else max(0.0, source_low - price)
         if attachment > reach + 1e-9:
@@ -184,6 +192,8 @@ def install_master_sniper_adaptive_geometry() -> None:
             "hardcoded_manual_prices": False,
             "m15_atr_is_band_depth_not_location_source": True,
             "source_edge_snap_within_sweep_buffer": True,
+            "source_edge_snap_preserves_distal_sweep_room": True,
+            "h1_refinement_can_extend_parent_provenance": True,
         })
         policy["public_zone_map"] = zone_map
         policy["zone_geometry"] = {
@@ -195,9 +205,11 @@ def install_master_sniper_adaptive_geometry() -> None:
             "hardcoded_prices": False,
             "remote_liquidity_expansion": False,
             "source_edge_snap_within_sweep_buffer": True,
+            "source_edge_snap_preserves_distal_sweep_room": True,
+            "h1_refinement_can_extend_parent_provenance": True,
         }
         analysis.execution_policy = policy
-        analysis.trader_brief = str(analysis.trader_brief or "") + " MASTER SNIPER V6589: H4/H1 source candles are provenance, not published alert zones. Published BUY/SELL zones are volatility-scaled tactical reaction bands around genuine attached SSL/BSL plus native refinement; a band that naturally reaches a source edge within the structural sweep buffer publishes the exact edge rather than floating-point near-edge noise. No manual price is hard-coded."
+        analysis.trader_brief = str(analysis.trader_brief or "") + " MASTER SNIPER V6593: H4/H1 source candles are provenance, not published alert zones. Published BUY/SELL zones are tactical reaction bands around genuine attached SSL/BSL plus native H1 refinement. H1 refinement may extend the parent provenance near an edge, and source-edge snapping can never erase required distal sweep room. No manual price is hard-coded."
         return analysis
 
     runtime.install_zone_geometry_policy = install_geometry
