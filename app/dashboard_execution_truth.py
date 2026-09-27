@@ -15,7 +15,7 @@ _INSTALLED = False
 _SCRIPT = r'''
 <script id="master-sniper-execution-truth-script">
 (function(){
-  const COLS=['Context','Execution authority','Base risk','Authority reason'];
+  const COLS=['Context','Grade authority','Base risk','Authority reason'];
 
   function text(v){return String(v===undefined||v===null||v===''?'—':v);}
   function esc(v){return text(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -29,11 +29,16 @@ _SCRIPT = r'''
   function zones(){
     try{return Array.isArray(window.tradeZoneAnalysisZones)?window.tradeZoneAnalysisZones:[];}catch(e){return [];}
   }
+  function eligible(z,pm){
+    if(z?.execution_grade_eligible===true || pm?.execution_grade_eligible===true)return true;
+    if(z?.execution_grade_eligible===false || pm?.execution_grade_eligible===false)return false;
+    return ['A+','A','B+'].includes(String(pm?.grade||z?.grade||'').toUpperCase());
+  }
   function reasonFor(z,pm){
-    if(z?.execution_grade_eligible===true)return 'ELIGIBLE';
-    if(z?.execution_grade_eligible===false)return 'GRADE / AUTHORITY BLOCK';
-    if(pm?.publication_execution_status)return text(pm.publication_execution_status).replaceAll('_',' ');
-    return 'UNKNOWN';
+    if(!eligible(z,pm))return 'GRADE / AUTHORITY BLOCK';
+    const pub=text(pm?.publication_execution_status||'').replaceAll('_',' ');
+    if(pub && pub!=='—')return pub+' • AWAITING M1 HANDOFF';
+    return 'GRADE ELIGIBLE • AWAITING M1 HANDOFF';
   }
   function refresh(){
     const body=document.getElementById('zones');
@@ -61,10 +66,11 @@ _SCRIPT = r'''
       const z=zs.find(x=>String(x?.zone_id||'')===zid);
       if(!z)return;
       const pm=map?.[String(z.original_direction||'').toLowerCase()]||{};
+      const ok=eligible(z,pm);
       const values=[
         text(z.risk_context||pm.risk_context).replaceAll('_',' '),
-        z.execution_grade_eligible===true?'EXECUTABLE':(z.execution_grade_eligible===false?'BLOCKED':'UNKNOWN'),
-        risk(z.base_risk_pct),
+        ok?'ELIGIBLE':'BLOCKED',
+        risk(z.base_risk_pct??pm.base_risk_pct),
         reasonFor(z,pm),
       ];
       let truth=Array.from(row.querySelectorAll('td[data-sniper-truth="1"]'));
@@ -76,7 +82,7 @@ _SCRIPT = r'''
       }
       truth.forEach((td,i)=>{
         const v=values[i];
-        td.innerHTML=(i===1?'<b class="'+(v==='EXECUTABLE'?'ok':v==='BLOCKED'?'warn':'muted')+'">'+esc(v)+'</b>':esc(v));
+        td.innerHTML=(i===1?'<b class="'+(v==='ELIGIBLE'?'ok':v==='BLOCKED'?'warn':'muted')+'">'+esc(v)+'</b>':esc(v));
       });
     });
   }
