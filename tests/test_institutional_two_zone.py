@@ -136,7 +136,7 @@ def test_distance_does_not_delete_a_valid_prompt_zone(monkeypatch):
     assert analysis.execution_policy["public_zone_map"]["distance_is_not_a_hard_zone_filter"] is True
 
 
-def test_strong_second_mitigation_can_remain_a_grade_at_reduced_risk(monkeypatch):
+def test_strong_zone_grade_is_unchanged_by_second_mitigation(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate, touches=2)
     analysis = _analysis([
@@ -146,7 +146,7 @@ def test_strong_second_mitigation_can_remain_a_grade_at_reduced_risk(monkeypatch
     zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
 
     assert len(zones) == 1
-    assert zones[0].grade == Grade.A
+    assert zones[0].grade == Grade.A_PLUS
     assert zones[0].core_method.startswith("ARMED|")
     assert analysis.selected_zone_id == zones[0].zone_id
 
@@ -292,7 +292,7 @@ def test_countertrend_uses_dedicated_reversal_model_and_can_be_a_plus(monkeypatc
     assert any(x == "grade_context:COUNTERTREND_REVERSAL" for x in zone.notes)
 
 
-def test_countertrend_second_qualified_mitigation_is_a_not_forced_bplus(monkeypatch):
+def test_countertrend_second_qualified_mitigation_does_not_change_grade(monkeypatch):
     candidate = _buy_reversal_candidate()
     _patch_common(monkeypatch, candidate, touches=2)
     analysis = _analysis([
@@ -303,7 +303,7 @@ def test_countertrend_second_qualified_mitigation_is_a_not_forced_bplus(monkeypa
     zones = policy.apply_two_zone_institutional_map(analysis, _snapshot(mid=100.0))
 
     assert len(zones) == 1
-    assert zones[0].grade == Grade.A
+    assert zones[0].grade == Grade.A_PLUS
     assert zones[0].touch_count == 2
 
 
@@ -367,7 +367,7 @@ def test_buy_mitigation_requires_above_core_above_complete_cycle():
     assert event["qualified_at"] == 400
 
 
-def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_execution_grade(monkeypatch):
+def test_high_touch_countertrend_keeps_immutable_structural_grade(monkeypatch):
     candidate = _buy_reversal_candidate()
     _patch_common(monkeypatch, candidate, touches=8)
     analysis = _analysis([
@@ -379,16 +379,16 @@ def test_exhausted_countertrend_keeps_structural_grade_separate_from_current_exe
 
     assert len(zones) == 1
     zone = zones[0]
-    assert zone.grade == Grade.B_PLUS
+    assert zone.grade == Grade.A_PLUS
     assert zone.touch_count == 8
     assert "structural_grade:A+" in zone.notes
-    assert "current_execution_grade:B+" in zone.notes
-    assert "grade_degrade_reason:EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS" in zone.notes
+    assert "current_execution_grade:A+" in zone.notes
+    assert "grade_degrade_reason:NONE" in zone.notes
     public = analysis.execution_policy["public_zone_map"]["buy"]
     assert public["structural_grade"] == "A+"
-    assert public["grade"] == "B+"
+    assert public["grade"] == "A+"
     assert public["qualified_mitigations"] == 8
-    assert public["grade_degrade_reason"] == "EXHAUSTED_3PLUS_QUALIFIED_MITIGATIONS"
+    assert public["grade_degrade_reason"] == "NONE"
 
 
 def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
@@ -436,11 +436,11 @@ def test_mitigation_ledger_records_grade_transition_only_when_cycle_completes():
     assert ledger["events"][0]["grade_after"] == "A+"
     assert ledger["events"][0]["grade_changed"] is False
     assert ledger["events"][1]["grade_before"] == "A+"
-    assert ledger["events"][1]["grade_after"] == "A"
-    assert ledger["events"][1]["grade_changed"] is True
+    assert ledger["events"][1]["grade_after"] == "A+"
+    assert ledger["events"][1]["grade_changed"] is False
 
 
-def test_incomplete_m15_freshness_history_forces_structural_a_plus_to_watch_only(monkeypatch):
+def test_incomplete_m15_mitigation_history_is_telemetry_only(monkeypatch):
     candidate = _sell_candidate()
     _patch_common(monkeypatch, candidate, touches=0)
     monkeypatch.setattr(
@@ -471,12 +471,12 @@ def test_incomplete_m15_freshness_history_forces_structural_a_plus_to_watch_only
     assert len(zones) == 1
     zone = zones[0]
     assert "structural_grade:A+" in zone.notes
-    assert zone.grade == Grade.B_PLUS
-    assert zone.core_method.startswith("WATCH|")
-    assert "grade_degrade_reason:FRESHNESS_HISTORY_INCOMPLETE" in zone.notes
+    assert zone.grade == Grade.A_PLUS
+    assert zone.core_method.startswith("ARMED|")
+    assert "grade_degrade_reason:NONE" in zone.notes
     public = analysis.execution_policy["public_zone_map"]["sell"]
     assert public["mitigation_history_complete"] is False
-    assert public["grade"] == "B+"
+    assert public["grade"] == "A+"
 
 
 def test_source_ready_time_is_after_source_candle_close():
@@ -549,7 +549,7 @@ def test_countertrend_grade_audit_explains_why_structural_zone_is_a_not_a_plus()
     assert audit["model"] == "COUNTERTREND_REVERSAL"
 
 
-def test_trend_grade_audit_exposes_score_and_freshness_gap():
+def test_trend_grade_audit_exposes_structural_score_and_touch_telemetry():
     candidate = _sell_candidate()
 
     audit = policy._grade_audit(
@@ -561,7 +561,8 @@ def test_trend_grade_audit_exposes_score_and_freshness_gap():
         psy_confluence=True,
     )
 
-    assert audit["grade"] in {Grade.A, Grade.B_PLUS}
+    assert audit["grade"] == Grade.A_PLUS
     assert audit["model"] == "TREND_CONTINUATION"
-    assert "mitigations_le_1" in audit["aplus_missing"]
+    assert audit["mitigations"] == 2
+    assert audit["mitigations_are_telemetry_only"] is True
     assert "score" in audit
