@@ -566,3 +566,46 @@ def test_trend_grade_audit_exposes_structural_score_and_touch_telemetry():
     assert audit["mitigations"] == 2
     assert audit["mitigations_are_telemetry_only"] is True
     assert "score" in audit
+
+
+def test_h4_h1_candidate_provenance_includes_native_h1_refinement(monkeypatch):
+    parent = policy.PromptSource(
+        direction=Direction.BUY,
+        tf="H4",
+        source_ts=100,
+        core_low=105.0,
+        core_high=106.0,
+        zone_low=105.0,
+        zone_high=110.0,
+        strength=2.0,
+        fvg=False,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+        ready_ts=200,
+    )
+    child = policy.PromptSource(
+        direction=Direction.BUY,
+        tf="H1",
+        source_ts=150,
+        core_low=103.5,
+        core_high=104.5,
+        zone_low=103.0,
+        zone_high=106.0,
+        strength=2.1,
+        fvg=True,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=False,
+        ready_ts=210,
+    )
+    monkeypatch.setattr(
+        policy,
+        "_sources",
+        lambda bars, tf: [parent] if tf == "H4" else [child],
+    )
+    snap = _snapshot(mid=100.0, atr_h1=10.0)
+    candidates = policy._build_candidates(snap)
+    merged = next(x for x in candidates if x.source_tf == "H4>H1")
+    assert merged.core_low == child.core_low
+    assert merged.core_high == child.core_high
+    assert merged.zone_low == min(parent.zone_low, child.zone_low)
+    assert merged.zone_high == max(parent.zone_high, child.zone_high)
