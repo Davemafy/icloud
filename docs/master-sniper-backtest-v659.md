@@ -162,4 +162,4 @@ lab does not forcibly close or relaunch it. The generated desktop tester launche
 refuses no safety rules: use it only after the normal terminal is closed, or simply
 open Strategy Tester manually in the existing terminal and use the prepared files.
 
-The live stable payload is 6.3.33 / DataBridge 1.52 / Sequence 3.43; the isolated tester still executes the frozen Sequence 3.42 backtest contract.
+The live stable payload is 6.3.34 / DataBridge 1.52 / Sequence 3.44; the isolated tester still executes the frozen Sequence 3.42 backtest contract.
