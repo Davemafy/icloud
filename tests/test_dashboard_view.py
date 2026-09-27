@@ -44,7 +44,7 @@ def test_directional_mitigation_audit_is_visible_and_read_only():
     assert "OBSERVATION ONLY" in cleaned
     assert "SELL = below envelope" in cleaned
     assert "BUY = above envelope" in cleaned
-    assert "Wrong-side contact never downgrades a zone" in cleaned
+    assert "Touch/mitigation count never changes zone grade, risk, ranking or execution eligibility" in cleaned
     assert "MITIGATION HISTORY INCOMPLETE" in cleaned
     assert "zone grade and execution authority are unchanged" in cleaned
     assert "refreshMitigationAudit" in cleaned
