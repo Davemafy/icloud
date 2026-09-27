@@ -36,7 +36,7 @@ def test_core_132_uses_calendar_safe_effective_minimums_and_refuses_partial_snap
         'g_tzHistoryFailures',
         'if(!historyReady)',
         'return false;',
-        '\"protocol\":7',
+        '\\\"protocol\\\":7',
     ):
         assert needle in text, needle
 
