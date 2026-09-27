@@ -231,7 +231,7 @@ def test_replay_cli_smoke_uses_disposable_db_and_produces_both_mt5_files(tmp_pat
     meta = json.loads(metadata.read_text(encoding="utf-8"))
     assert meta["contract"] == backtest.REPLAY_CONTRACT
     assert meta["no_lookahead"] is True
-    assert meta["cloud_version"] == "6.5.95"
+    assert meta["cloud_version"] == "6.5.96"
     assert meta["sequence_contract"] == "3.42"
     progress = json.loads((tmp_path / "progress.json").read_text(encoding="utf-8"))
     assert progress["phase"] == "COMPLETED"
