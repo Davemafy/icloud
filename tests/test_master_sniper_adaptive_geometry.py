@@ -58,3 +58,37 @@ def test_core_remains_exact_source_refinement():
     s = _snapshot()
     c = _candidate(Direction.BUY)
     assert engine._normalize_core(c, s) == (100.0, 102.0)
+
+
+def test_sell_liquidity_on_source_edge_keeps_distal_sweep_room():
+    _install_engine_geometry()
+    s = _snapshot()
+    c = _candidate(Direction.SELL)
+    c.core_low = 101.0
+    c.core_high = 103.0
+    c.zone_low = 99.0
+    c.zone_high = 103.0
+    liq = [LiquidityLevel(label="H4_BSL", price=103.0, side="HIGH", source_tf="H4", distance=0.0)]
+    core = engine._normalize_core(c, s)
+    level = engine._select_liquidity(c, *core, liq, s)
+    assert level is not None
+    low, high, room = engine._build_geometry(c, *core, level, s)
+    assert high > level.price
+    assert room == pytest.approx(_sweep_buffer(s), abs=2e-9)
+
+
+def test_buy_liquidity_on_source_edge_keeps_distal_sweep_room():
+    _install_engine_geometry()
+    s = _snapshot()
+    c = _candidate(Direction.BUY)
+    c.core_low = 99.0
+    c.core_high = 101.0
+    c.zone_low = 99.0
+    c.zone_high = 103.0
+    liq = [LiquidityLevel(label="H4_SSL", price=99.0, side="LOW", source_tf="H4", distance=0.0)]
+    core = engine._normalize_core(c, s)
+    level = engine._select_liquidity(c, *core, liq, s)
+    assert level is not None
+    low, high, room = engine._build_geometry(c, *core, level, s)
+    assert low < level.price
+    assert room == pytest.approx(_sweep_buffer(s), abs=2e-9)
