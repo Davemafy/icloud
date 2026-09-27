@@ -162,7 +162,6 @@ def _context_zone(analysis: Analysis, direction: Direction):
             {Grade.A_PLUS: 0, Grade.A: 1}.get(z.grade, 9),
             0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2,
             -float(z.location_score),
-            int(z.touch_count),
         )
     )
     return candidates[0]
