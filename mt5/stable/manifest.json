@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.32",
+  "release": "6.3.33",
   "repository": "Davemafy/icloud",
-  "ref": "bced82261e5067141fe01c7beebfd1ba61108f6d",
-  "data_bridge_version": "1.51",
-  "sequence_ea_version": "3.42",
+  "ref": "3aded8bd767a43b86690d6c642c1f5fecec1d645",
+  "data_bridge_version": "1.52",
+  "sequence_ea_version": "3.43",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -94,7 +94,7 @@
     "paper_ai_no_provider_fallback",
     "execution_pipeline_integration_gate",
     "current_sequence_full_ci",
-    "safety_block_preserves_owner_mirror",
+    "safety_block_preserves_owner_mirror_and_plan_parity",
     "spread_guard_suspends_orders_not_thesis",
     "safety_hold_dashboard_semantics",
     "owner_mirror_updates_before_live_block",
@@ -137,8 +137,8 @@
     "journal_immediate_resync_on_cloud_version_change",
     "journal_periodic_continuity_resync",
     "context_grade_risk_matrix",
-    "bplus_watch_only_no_new_entry_budget",
-    "a_second_touch_reduced_risk_eligibility",
+    "bplus_reduced_risk_execution_authority",
+    "touch_mitigation_telemetry_only",
     "fixed_10000_research_risk_anchor",
     "trend_countertrend_risk_scaling",
     "non_compounding_validation_capital_anchor",
@@ -166,24 +166,28 @@
     "qualified_mitigation_truth",
     "fail_closed_sniper_contract_gate",
     "sequence_342_parity_runtime",
-    "databridge_151_sequence_342_truth"
+    "databridge_151_sequence_342_truth",
+    "safety_block_suspends_orders_not_plan_sync",
+    "cloud_live_block_keeps_execution_authority_visible",
+    "secondary_zone_thin_edge_overlap",
+    "nearest_qualified_secondary_battlefield"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_51_SniperContractParity.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
       "requires_reload": true,
-      "sha256": "d05c0cd1e7a04b2524c272840d770179a05488b42d0e512b12f553256e74522e"
+      "sha256": "c0e9a8ec798569998034b117e26581aefd23a497e07213665b2b5284ba4adb76"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_42_SniperContractParity_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_43_SafetyPlanSync_Demo.mq5",
       "requires_reload": true,
-      "sha256": "a5062ddad59a5ad43f035954832022c2f0815f203b86a714d446fa7b9d6c2583"
+      "sha256": "38e9ff572d9ac5438c28b7ed42224239f0fc46cff7eb0a402160bf0e01c14e11"
     }
   ],
   "support_files": [
