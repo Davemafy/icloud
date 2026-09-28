@@ -609,3 +609,27 @@ def test_h4_h1_candidate_provenance_includes_native_h1_refinement(monkeypatch):
     assert merged.core_high == child.core_high
     assert merged.zone_low == min(parent.zone_low, child.zone_low)
     assert merged.zone_high == max(parent.zone_high, child.zone_high)
+
+
+def test_zone_id_is_stable_for_same_source_not_candidate_list_index():
+    candidate = _sell_candidate()
+    first = policy._stable_zone_id(candidate)
+    second = policy._stable_zone_id(candidate)
+    assert first == second
+    assert first == f"PZ_H4_SELL_{candidate.source_ts}"
+
+
+def test_unclosed_h1_h4_evidence_cannot_publish_zone(monkeypatch):
+    candidate = _sell_candidate()
+    candidate.source_ready_ts = 1_800_000_000 + 3600
+    _patch_common(monkeypatch, candidate)
+    analysis = _analysis([
+        LiquidityLevel(label="H4_BSL", price=108.0, side="ABOVE", source_tf="H4", distance=13.0)
+    ])
+
+    zones = policy.apply_two_zone_institutional_map(analysis, _snapshot())
+
+    assert zones == []
+    diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
+    assert diag["rejection_code"] == "SOURCE_EVIDENCE_NOT_CLOSED"
+    assert "causally closed" in diag["rejection_reason"]

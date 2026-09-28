@@ -449,10 +449,11 @@ async def generate_v659(
     from .timezones import safe_zoneinfo
     from .zone_reaction_lifecycle import update_zone_reactions
 
-    # Cloud 6.5.100 is a presentation-only map/readiness truth release. The
-    # deterministic replay contract itself remains frozen at 6.5.99.
-    backtest_contract_cloud = "6.5.99"
-    compatible_runtime_clouds = {"6.5.99", "6.5.100", "6.5.101", "6.5.102"}
+    # Source-exact continuation and closed-HTF causality change zoning outcomes,
+    # so replay truth advances with the current Cloud instead of masquerading as
+    # the older 6.5.99 analysis contract.
+    backtest_contract_cloud = "6.5.103"
+    compatible_runtime_clouds = {"6.5.103"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "

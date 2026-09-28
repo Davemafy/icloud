@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.102"
+    app_version: str = "6.5.103"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -47,6 +47,8 @@ class Settings:
     # tactically remote as price continues away. This refreshes the map; it
     # never authorizes an entry by itself.
     market_drift_reanalysis_h1_atr: float = _f("MARKET_DRIFT_REANALYSIS_H1_ATR", 2.00)
+    # Legacy compatibility only. Structural drift refresh cadence is now one
+    # pass per newly closed H1 bar, not repeated intra-H1 distance buckets.
     market_drift_reanalysis_step_h1_atr: float = _f("MARKET_DRIFT_REANALYSIS_STEP_H1_ATR", 0.50)
     market_drift_reanalysis_min_age_minutes: int = _i("MARKET_DRIFT_REANALYSIS_MIN_AGE_MINUTES", 10)
 

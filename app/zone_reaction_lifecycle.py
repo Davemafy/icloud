@@ -133,13 +133,12 @@ def apply_publication_truth(analysis: Analysis) -> Analysis:
     return analysis
 
 
-def register_analysis_zones(analysis: Analysis) -> None:
-    """Persist source lifecycle plus an exact-geometry publication ledger.
+def register_analysis_zones(analysis: Analysis, *, publish_exact_geometry: bool = True) -> None:
+    """Persist source lifecycle and, only for the final map, publication truth.
 
-    Source lifecycle can survive re-selection. Execution truth cannot: each exact
-    user-facing geometry gets a new publication timestamp and baseline touch count.
-    Contacts that happened before that timestamp remain research/freshness evidence
-    only and can never manufacture a live M1 handoff.
+    The pre-reanking map may be recorded as source/lifecycle context without being
+    counted as a user-facing publication. Exact publication timestamps are created
+    only after all Master Sniper re-ranking has produced the final visible map.
     """
     if not SETTINGS.paper_only:
         return
@@ -154,34 +153,35 @@ def register_analysis_zones(analysis: Analysis) -> None:
             publication_key = _publication_key(zone)
             signature = _geometry_signature(zone)
 
-            db.execute(
-                """
-                INSERT OR IGNORE INTO zone_publications(
-                    publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
-                    zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
-                    first_published_at,last_seen_at,publication_qualified_mitigations,
-                    publication_raw_core_contacts,status
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    publication_key,key,signature,analysis.analysis_id,analysis.analysis_id,
-                    zone.zone_id,zone.original_direction.value,zone.source_tf,int(zone.source_ts or 0),
-                    float(zone.core_low),float(zone.core_high),float(zone.zone_low),float(zone.zone_high),
-                    int(analysis.generated_at),int(analysis.generated_at),int(zone.touch_count),
-                    int(raw_contacts),"PUBLISHED",
-                ),
-            )
-            db.execute(
-                """
-                UPDATE zone_publications SET
-                    latest_analysis_id=?,last_seen_at=?,status=CASE
-                        WHEN live_core_touched_at>0 THEN 'LIVE_CONTACT_CONFIRMED'
-                        ELSE 'PUBLISHED'
-                    END
-                WHERE publication_key=?
-                """,
-                (analysis.analysis_id,int(analysis.generated_at),publication_key),
-            )
+            if publish_exact_geometry:
+                db.execute(
+                    """
+                    INSERT OR IGNORE INTO zone_publications(
+                        publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                        zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                        first_published_at,last_seen_at,publication_qualified_mitigations,
+                        publication_raw_core_contacts,status
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        publication_key,key,signature,analysis.analysis_id,analysis.analysis_id,
+                        zone.zone_id,zone.original_direction.value,zone.source_tf,int(zone.source_ts or 0),
+                        float(zone.core_low),float(zone.core_high),float(zone.zone_low),float(zone.zone_high),
+                        int(analysis.generated_at),int(analysis.generated_at),int(zone.touch_count),
+                        int(raw_contacts),"PUBLISHED",
+                    ),
+                )
+                db.execute(
+                    """
+                    UPDATE zone_publications SET
+                        latest_analysis_id=?,last_seen_at=?,status=CASE
+                            WHEN live_core_touched_at>0 THEN 'LIVE_CONTACT_CONFIRMED'
+                            ELSE 'PUBLISHED'
+                        END
+                    WHERE publication_key=?
+                    """,
+                    (analysis.analysis_id,int(analysis.generated_at),publication_key),
+                )
 
             db.execute(
                 """
@@ -199,7 +199,7 @@ def register_analysis_zones(analysis: Analysis) -> None:
                     float(zone.original_target1 or 0),float(zone.original_target2 or 0),
                     float(zone.original_target3 or 0),float(zone.original_runner or 0),
                     float(zone.core_low if zone.original_direction == Direction.SELL else zone.core_high),
-                    0.0,"ZONE_PUBLISHED",
+                    0.0,"ZONE_PUBLISHED" if publish_exact_geometry else "ZONE_QUALIFIED_CONTEXT",
                 ),
             )
             db.execute(
@@ -216,14 +216,16 @@ def register_analysis_zones(analysis: Analysis) -> None:
                     target1=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target1 END,
                     target2=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target2 END,
                     target3=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE target3 END,
-                    runner=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE runner END
+                    runner=CASE WHEN core_touched_at=0 AND ownership_acquired_at=0 THEN ? ELSE runner END,
+                    last_reason=CASE WHEN ownership_acquired_at=0 THEN ? ELSE last_reason END
                 WHERE reaction_key=?
                 """,
                 (
                     analysis.analysis_id,zone.zone_id,int(analysis.generated_at),zone.grade.value,
                     float(zone.core_low),float(zone.core_high),float(zone.zone_low),float(zone.zone_high),
                     float(zone.original_target1 or 0),float(zone.original_target2 or 0),
-                    float(zone.original_target3 or 0),float(zone.original_runner or 0),key,
+                    float(zone.original_target3 or 0),float(zone.original_runner or 0),
+                    "ZONE_PUBLISHED" if publish_exact_geometry else "ZONE_QUALIFIED_CONTEXT",key,
                 ),
             )
 

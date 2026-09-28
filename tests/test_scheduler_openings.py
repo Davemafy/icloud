@@ -109,18 +109,24 @@ def _drift_analysis(*, generated_at=1_000, readiness="ARMED", direction="SELL"):
     )
 
 
+def _drift_snap(mid=4_215.0, sent_at=7_300, closed_h1_ts=3_600):
+    bar = SimpleNamespace(ts=closed_h1_ts)
+    return SimpleNamespace(mid=mid, atr_h1=40.0, xau_h1=[bar], sent_at=sent_at)
+
+
 def test_market_drift_requests_early_reanalysis_for_remote_unowned_armed_map(monkeypatch):
     monkeypatch.setattr(scheduler, "SETTINGS", _drift_settings())
     monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: _drift_analysis())
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
 
-    snap = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[])
-    out = scheduler._market_drift_refresh(snap, now_utc=1_900)
+    snap = _drift_snap()
+    out = scheduler._market_drift_refresh(snap, now_utc=7_300)
 
     assert out["zone_id"] == "PZ_REMOTE"
     assert out["direction"] == "SELL"
     assert out["distance_h1_atr"] > 2.0
-    assert out["signature"].startswith("PZ_REMOTE|SELL|B")
+    assert out["signature"] == "PZ_REMOTE|SELL|H1:3600"
+    assert out["cadence"] == "NEW_CLOSED_H1_ONLY"
 
 
 def test_market_drift_does_not_reanalyse_too_soon(monkeypatch):
@@ -128,7 +134,7 @@ def test_market_drift_does_not_reanalyse_too_soon(monkeypatch):
     monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: _drift_analysis(generated_at=1_500))
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
 
-    snap = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[])
+    snap = _drift_snap()
     assert scheduler._market_drift_refresh(snap, now_utc=1_900) == {}
 
 
@@ -137,8 +143,8 @@ def test_market_drift_never_overrides_active_thesis_owner(monkeypatch):
     monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: _drift_analysis())
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: {"reaction_key": "OWNER"})
 
-    snap = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[])
-    assert scheduler._market_drift_refresh(snap, now_utc=1_900) == {}
+    snap = _drift_snap()
+    assert scheduler._market_drift_refresh(snap, now_utc=7_300) == {}
 
 
 def test_market_drift_requires_uncontacted_map_state(monkeypatch):
@@ -150,21 +156,34 @@ def test_market_drift_requires_uncontacted_map_state(monkeypatch):
     )
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
 
-    snap = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[])
-    assert scheduler._market_drift_refresh(snap, now_utc=1_900) == {}
+    snap = _drift_snap()
+    assert scheduler._market_drift_refresh(snap, now_utc=7_300) == {}
 
 
-def test_market_drift_signature_steps_only_after_material_further_travel(monkeypatch):
+def test_market_drift_signature_waits_for_new_closed_h1_not_more_ticks(monkeypatch):
     monkeypatch.setattr(scheduler, "SETTINGS", _drift_settings())
     monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: _drift_analysis())
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
 
-    near = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[])
-    farther = SimpleNamespace(mid=4_190.0, atr_h1=40.0, xau_h1=[])
-    a = scheduler._market_drift_refresh(near, now_utc=1_900)
-    b = scheduler._market_drift_refresh(farther, now_utc=1_900)
+    near = _drift_snap(mid=4_215.0, sent_at=7_300, closed_h1_ts=3_600)
+    farther_same_h1 = _drift_snap(mid=4_190.0, sent_at=7_500, closed_h1_ts=3_600)
+    next_h1 = _drift_snap(mid=4_190.0, sent_at=10_900, closed_h1_ts=7_200)
 
-    assert a["signature"] != b["signature"]
+    a = scheduler._market_drift_refresh(near, now_utc=7_300)
+    b = scheduler._market_drift_refresh(farther_same_h1, now_utc=7_500)
+    c = scheduler._market_drift_refresh(next_h1, now_utc=10_900)
+
+    assert a["signature"] == b["signature"]
+    assert c["signature"] != a["signature"]
+
+
+def test_market_drift_requires_a_causally_closed_h1_bar(monkeypatch):
+    monkeypatch.setattr(scheduler, "SETTINGS", _drift_settings())
+    monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: _drift_analysis())
+    monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
+
+    forming = SimpleNamespace(mid=4_215.0, atr_h1=40.0, xau_h1=[SimpleNamespace(ts=7_200)], sent_at=7_300)
+    assert scheduler._market_drift_refresh(forming, now_utc=7_300) == {}
 
 
 def test_market_drift_does_not_replace_wrong_side_lifecycle_logic(monkeypatch):
@@ -173,5 +192,5 @@ def test_market_drift_does_not_replace_wrong_side_lifecycle_logic(monkeypatch):
     monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: None)
 
     # SELL map is no longer above price; that belongs to invalidation/flip logic.
-    snap = SimpleNamespace(mid=4_320.0, atr_h1=40.0, xau_h1=[])
-    assert scheduler._market_drift_refresh(snap, now_utc=1_900) == {}
+    snap = _drift_snap(mid=4_320.0)
+    assert scheduler._market_drift_refresh(snap, now_utc=7_300) == {}

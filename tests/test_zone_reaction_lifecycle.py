@@ -58,6 +58,38 @@ def _snapshot(ts: int, bid: float, bars: list[Bar], atr_m15: float = 4.0) -> Mar
     )
 
 
+
+
+
+def test_preranking_registration_is_lifecycle_only_not_publication(tmp_path, monkeypatch):
+    path = tmp_path / "context_only.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+    analysis = _analysis([_zone()])
+
+    register_analysis_zones(analysis, publish_exact_geometry=False)
+
+    with db.connect() as conn:
+        publications = conn.execute("SELECT COUNT(*) FROM zone_publications").fetchone()[0]
+        reaction = conn.execute(
+            "SELECT last_reason FROM zone_reactions WHERE reaction_key=?",
+            ("SELL|H4>H1|1000",),
+        ).fetchone()
+
+    assert publications == 0
+    assert reaction["last_reason"] == "ZONE_QUALIFIED_CONTEXT"
+
+    register_analysis_zones(analysis)
+    with db.connect() as conn:
+        publications = conn.execute("SELECT COUNT(*) FROM zone_publications").fetchone()[0]
+        reason = conn.execute(
+            "SELECT last_reason FROM zone_reactions WHERE reaction_key=?",
+            ("SELL|H4>H1|1000",),
+        ).fetchone()["last_reason"]
+
+    assert publications == 1
+    assert reason == "ZONE_PUBLISHED"
+
 def test_confirmed_reaction_survives_later_primary_reselection(tmp_path, monkeypatch):
     path = tmp_path / "reaction.db"
     monkeypatch.setattr(db, "_path", lambda: str(path))
