@@ -7,12 +7,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
+RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
     SEQ: "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9",
     BRIDGE: "f2e8139b769d52865703f895e53bbf51aeaebf7de51c7ddeb6d146d71883b4cc",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
+    RENDERER: "559c3385efdb67e2decbd330f91a140a54a0293569519df706d4cda9167167a2",
 }
 
 
@@ -47,4 +49,5 @@ def test_release_manifest_promotes_exact_parity_payload():
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
     supports = {item["role"]: item for item in manifest["support_files"]}
     assert supports["sniper_contract_parity"]["sha256"] == EXPECTED[INCLUDE]
+    assert supports["zone_renderer"]["sha256"] == EXPECTED[RENDERER]
     assert supports["sniper_contract_parity"]["target"] == "Include\\TradeZoneCore"
