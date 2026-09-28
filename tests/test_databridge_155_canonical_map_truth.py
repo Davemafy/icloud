@@ -20,8 +20,7 @@ def test_bridge_155_uses_canonical_primary_renderer_map_truth():
         assert needle in text, needle
     body = text.split("void TZ_ReadTwoZoneMap()", 1)[1].split("string TZ_SequenceExecutionDisplay()", 1)[0]
     assert 'Get("/analysis"' not in body
-    assert 'StringFind(text,"\"zone_id\""'
-    not in body
+    assert 'StringFind(text,"\"zone_id\""' not in body
 
 
 def test_bridge_155_chart_status_matches_final_watch_only_plan():
