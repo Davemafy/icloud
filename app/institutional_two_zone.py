@@ -129,6 +129,148 @@ def _median_range(bars: list[Bar], n: int = 20) -> float:
     return statistics.median(values) if values else 0.0
 
 
+def _leg_fvg(bars: list[Bar], start: int, end: int, direction: Direction) -> bool:
+    """Return true when any closed bar inside a displacement leg leaves a 3-bar FVG."""
+    lo = max(1, int(start))
+    hi = min(int(end), len(bars) - 2)
+    for i in range(lo, hi + 1):
+        if direction == Direction.BUY:
+            if float(bars[i + 1].low) > float(bars[i - 1].high):
+                return True
+        else:
+            if float(bars[i + 1].high) < float(bars[i - 1].low):
+                return True
+    return False
+
+
+def _multi_bar_displacement_sources(
+    bars: list[Bar],
+    tf: str,
+    max_items: int = 18,
+) -> list[PromptSource]:
+    """Find institutional BOS delivered across a 2-4 candle impulse.
+
+    The original single-candle detector remains intact. This companion recognises
+    the common case where no individual H1/H4 candle is exceptional enough on its
+    own, but the closed sequence forms a decisive one-directional displacement
+    through prior structure. The source is still the actual pre-impulse H1/H4
+    candle; M15 never manufactures location.
+    """
+    if len(bars) < 30:
+        return []
+
+    out: list[PromptSource] = []
+    first_end = max(SWEEP_LOOKBACK + 1, len(bars) - 180)
+    last_closed_index = len(bars) - 2  # newest array element may still be forming
+
+    for end in range(first_end, last_closed_index + 1):
+        best: PromptSource | None = None
+        for length in (2, 3, 4):
+            start = end - length + 1
+            if start <= SWEEP_LOOKBACK:
+                continue
+
+            leg = bars[start:end + 1]
+            prior = bars[max(0, start - SWEEP_LOOKBACK):start]
+            if len(prior) < 4:
+                continue
+
+            recent_noise_window = bars[max(0, start - 20):start]
+            noise = max(_median_range(recent_noise_window, 20), atr(recent_noise_window), 1e-9)
+            total_range = sum(max(0.0, float(b.high) - float(b.low)) for b in leg)
+            total_body = sum(abs(float(b.close) - float(b.open)) for b in leg)
+            if total_range <= 0.0 or total_body / total_range < 0.52:
+                continue
+
+            first_open = float(leg[0].open)
+            final_close = float(leg[-1].close)
+            net = final_close - first_open
+            if abs(net) < 1.80 * noise:
+                continue
+
+            direction = Direction.BUY if net > 0.0 else Direction.SELL
+            aligned_bodies = sum(
+                max(0.0, float(b.close) - float(b.open))
+                if direction == Direction.BUY
+                else max(0.0, float(b.open) - float(b.close))
+                for b in leg
+            )
+            opposing_bodies = sum(
+                max(0.0, float(b.open) - float(b.close))
+                if direction == Direction.BUY
+                else max(0.0, float(b.close) - float(b.open))
+                for b in leg
+            )
+            if aligned_bodies <= 0.0 or opposing_bodies > 0.35 * aligned_bodies:
+                continue
+
+            prior_high = max(float(b.high) for b in prior)
+            prior_low = min(float(b.low) for b in prior)
+            bos = final_close > prior_high if direction == Direction.BUY else final_close < prior_low
+            if not bos:
+                continue
+
+            source_index = None
+            for j in range(start - 1, max(-1, start - 7), -1):
+                bar = bars[j]
+                opposite = (
+                    direction == Direction.BUY and float(bar.close) < float(bar.open)
+                ) or (
+                    direction == Direction.SELL and float(bar.close) > float(bar.open)
+                )
+                if opposite:
+                    source_index = j
+                    break
+            if source_index is None:
+                source_index = start - 1
+            if source_index < 0:
+                continue
+
+            source = bars[source_index]
+            body_low, body_high = sorted((float(source.open), float(source.close)))
+            if body_high <= body_low:
+                body_low, body_high = float(source.low), float(source.high)
+
+            strength = round(abs(net) / noise, 3)
+            volume_expansion = any(
+                _volume_expansion(bars, int(bar.ts))
+                for bar in leg
+            )
+            ready_ts = int(leg[-1].ts) + _tf_seconds(tf)
+            candidate = PromptSource(
+                direction=direction,
+                tf=str(tf),
+                source_ts=int(source.ts),
+                core_low=float(body_low),
+                core_high=float(body_high),
+                zone_low=float(source.low),
+                zone_high=float(source.high),
+                strength=float(strength),
+                fvg=_leg_fvg(bars, start, end, direction),
+                source_kind="MULTI_BAR_DISPLACEMENT_BOS_SOURCE",
+                volume_expansion=bool(volume_expansion),
+                ready_ts=int(ready_ts),
+            )
+            if best is None or candidate.strength > best.strength:
+                best = candidate
+
+        if best is not None:
+            out.append(best)
+
+    deduped: list[PromptSource] = []
+    for source in reversed(out):
+        if any(
+            source.direction == x.direction
+            and not (source.zone_high < x.zone_low or x.zone_high < source.zone_low)
+            for x in deduped
+        ):
+            continue
+        deduped.append(source)
+        if len(deduped) >= max_items:
+            break
+    return list(reversed(deduped))
+
+
 def _sweep_rejection_sources(bars: list[Bar], tf: str, max_items: int = 18) -> list[PromptSource]:
     if len(bars) < 30:
         return []
@@ -194,6 +336,7 @@ def _sources(bars: list[Bar], tf: str) -> list[PromptSource]:
         source = _source_from_displacement(origin, bars)
         if source is not None:
             items.append(source)
+    items.extend(_multi_bar_displacement_sources(bars, tf, max_items=24))
     items.extend(_sweep_rejection_sources(bars, tf, max_items=24))
     items.sort(key=lambda x: (x.source_ts, x.strength))
     deduped: list[PromptSource] = []
