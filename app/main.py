@@ -19,6 +19,7 @@ from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
 from .risk_matrix import execution_grade_eligible, execution_touch_limit, original_risk_pct, zone_risk_context
+from .professional_zone_execution_separation import history_audit, history_metrics
 from .mt5_zone_render import mt5_zone_render_text
 from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
@@ -269,7 +270,8 @@ def health():
         "version": SETTINGS.app_version,
         "protocol": SETTINGS.protocol_version,
         "paper_only": SETTINGS.paper_only,
-        "snapshot_ready": bool(s and s.complete()),
+        "snapshot_ready": bool(s and history_audit(s)[0]),
+        "snapshot_history_failures": history_audit(s)[1] if s else ["SNAPSHOT_MISSING"],
         "latest_snapshot": s.sent_at if s else None,
         "active_analysis": a.analysis_id if a else None,
         "scheduler": scheduler_status(),
@@ -282,8 +284,26 @@ def health():
 
 @app.post("/market/snapshot", dependencies=[Depends(require_api_key)])
 def market_snapshot(s: MarketSnapshot):
+    history_ok, failures = history_audit(s)
+    if not history_ok:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "MASTER_SNIPER_HISTORY_WINDOW_INCOMPLETE",
+                "failures": failures,
+                "metrics": history_metrics(s),
+                "sent_at": s.sent_at,
+            },
+        )
     save_snapshot(s)
-    return {"ok": True, "complete": s.complete(), "sent_at": s.sent_at}
+    return {
+        "ok": True,
+        "complete": s.complete(),
+        "history_window_ok": True,
+        "history_window_failures": [],
+        "history_window_metrics": history_metrics(s),
+        "sent_at": s.sent_at,
+    }
 
 
 @app.post("/mt5/heartbeat", dependencies=[Depends(require_api_key)])
