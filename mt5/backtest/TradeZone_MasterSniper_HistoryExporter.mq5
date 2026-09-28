@@ -1,6 +1,6 @@
 #property strict
 #property script_show_inputs
-#property description "Trade Zone Master Sniper 6.5.98 historical data exporter. NO TRADING."
+#property description "Trade Zone Master Sniper 6.5.99 historical data exporter. NO TRADING."
 
 input string XauSymbol="XAUUSD";
 input string DxySymbol="DXYUSD";
@@ -191,7 +191,7 @@ void WriteManifest(ExportStat &stats[],int newsRows)
 
 void OnStart()
 {
-   Print("HISTORY_EXPORT START | NO TRADING | Master Sniper 6.5.98 replay input");
+   Print("HISTORY_EXPORT START | NO TRADING | Master Sniper 6.5.99 replay input");
    if(!ValidRange())return;
 
    FolderCreate("TradeZoneBacktest",FILE_COMMON);
