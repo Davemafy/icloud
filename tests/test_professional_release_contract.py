@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.37"
-    assert manifest["data_bridge_version"] == "1.54"
+    assert manifest["release"] == "6.3.38"
+    assert manifest["data_bridge_version"] == "1.55"
     assert manifest["sequence_ea_version"] == "3.45"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -36,6 +36,8 @@ def test_professional_release_contract_is_self_consistent():
     renderer_text = renderer_source.read_text(encoding="utf-8")
     assert "THESIS OWNER" in renderer_text
     assert "M1 HANDOFF | SEQUENCE GATE REQUIRED" in renderer_text
+    assert "MAP VALID / RETEST PENDING" in renderer_text
+    assert "TZR_DisplayState" in renderer_text
 
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
@@ -153,5 +155,8 @@ def test_professional_release_contract_is_self_consistent():
         "dxy_extended_depth_confluence_only",
         "map_validity_execution_readiness_separation",
         "invalidated_zone_flip_context_chart_comment",
+        "canonical_primary_map_count",
+        "mt5_watch_only_reason_parity",
+        "human_readable_zone_lifecycle_labels",
     }
     assert required.issubset(set(manifest["channel_features"]))
