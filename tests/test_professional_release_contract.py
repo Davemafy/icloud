@@ -28,6 +28,15 @@ def test_professional_release_contract_is_self_consistent():
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
     assert bridge_digest == bridge["sha256"]
 
+    renderer = next(item for item in manifest["support_files"] if item["role"] == "zone_renderer")
+    renderer_source = ROOT / renderer["path"]
+    assert renderer_source.exists()
+    renderer_digest = hashlib.sha256(renderer_source.read_bytes()).hexdigest()
+    assert renderer_digest == renderer["sha256"]
+    renderer_text = renderer_source.read_text(encoding="utf-8")
+    assert "THESIS OWNER" in renderer_text
+    assert "M1 HANDOFF | SEQUENCE GATE REQUIRED" in renderer_text
+
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
     assert bridge_core_source.exists()
