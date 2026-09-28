@@ -2,9 +2,9 @@
 #define TRADEZONE_ZONE_RENDERER_V1_0_MQH
 
 // Visual-only chart renderer. It never sends orders, changes positions, or alters risk.
-// V661 presentation: muted Primary shading, outline-only Reserve context, and explicit
-// read-only map / M1-handoff / thesis-ownership labels so a visible zone cannot be mistaken
-// for immediate order authority.
+// V662 presentation: muted Primary shading, outline-only Reserve context, human-readable
+// map lifecycle labels, and explicit M1-handoff / thesis-ownership truth so raw internal
+// states such as ARMED cannot be mistaken for immediate order authority.
 #define TZR_PREFIX "AITS_ZONE_"
 #define TZR_MAX_ZONES 4
 
@@ -203,6 +203,17 @@ bool TZR_Rect(long chart,string name,datetime left,datetime right,double low,dou
    return true;
 }
 
+string TZR_DisplayState(string state)
+{
+   if(state=="ARMED")return "MAP VALID / RETEST PENDING";
+   if(state=="INTERACTING")return "CONTACTED / M1 PENDING";
+   if(state=="M1_READY")return "M1 HANDOFF ACTIVE";
+   if(state=="WATCH")return "MAP WATCH";
+   if(state=="FLIP_CONTEXT")return "FLIP CONTEXT";
+   if(state=="RESERVE")return "RESERVE MAP";
+   return state;
+}
+
 bool TZR_Label(long chart,string name,datetime when,double price,string text,color c)
 {
    if(!RenderZoneLabels || text=="" || price<=0)return false;
@@ -254,7 +265,8 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
 
    string label=z.direction+" "+z.role;
    if(z.grade!="")label+=" | "+z.grade;
-   if(z.state!="")label+=" | "+z.state;
+   string display_state=TZR_DisplayState(z.state);
+   if(display_state!="")label+=" | "+display_state;
    label+=" | T"+IntegerToString(z.touches);
    if(z.active_thesis)
       label+=" | THESIS OWNER";
