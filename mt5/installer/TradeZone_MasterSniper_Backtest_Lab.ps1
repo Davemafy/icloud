@@ -94,7 +94,7 @@ function CopyWithRetry([string]$Source,[string]$Destination,[int]$Attempts=20){
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ' Trade Zone - MASTER SNIPER BACKTEST LAB' -ForegroundColor Cyan
 Write-Host ' One guided workflow: compile -> export -> replay -> tester package' -ForegroundColor Cyan
-Write-Host ' LIVE 6.3.35 EAs ARE NOT REPLACED OR ATTACHED.' -ForegroundColor Yellow
+Write-Host ' LIVE 6.3.36 EAs ARE NOT REPLACED OR ATTACHED.' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
 Write-Host ''
 
@@ -237,7 +237,7 @@ try{
   $resultZip=Join-Path $tmp 'master_sniper_backtest_package.zip'
 
   Write-Host ''
-  Write-Host 'Starting Master Sniper 6.5.97 isolated Cloud replay job...' -ForegroundColor Cyan
+  Write-Host 'Starting Master Sniper 6.5.98 isolated Cloud replay job...' -ForegroundColor Cyan
   $startResponse=Invoke-RestMethod -Method POST -Uri $startUri -Headers @{'X-API-Key'=$apiKey} -ContentType 'application/zip' -InFile $upload -TimeoutSec 120
   $jobId=[string]$startResponse.job_id
   if([string]::IsNullOrWhiteSpace($jobId)){throw 'Cloud did not return a backtest job ID.'}
@@ -374,7 +374,7 @@ try{
   Write-Host 'Backtest EA is already compiled under Experts > TradeZoneValidation.' -ForegroundColor Cyan
   Write-Host 'A real-tick tester launcher, NEXT instructions, and result collector were placed on the Desktop.' -ForegroundColor Cyan
   Write-Host ''
-  Write-Host 'Live DataBridge 1.52 / Sequence 3.45 were never replaced or detached.' -ForegroundColor Yellow
+  Write-Host 'Live DataBridge 1.53 / Sequence 3.45 were never replaced or detached.' -ForegroundColor Yellow
   PauseExit 0
 }catch{
   Write-Host ''
