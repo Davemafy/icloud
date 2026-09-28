@@ -32,6 +32,7 @@ struct TZR_Zone
    double core_low;
    double core_high;
    bool execution_authority;
+   bool m1_handoff;
    bool active_thesis;
 };
 
@@ -81,6 +82,7 @@ void TZR_ResetOne(int idx)
    g_tzrZones[idx].core_low=0;
    g_tzrZones[idx].core_high=0;
    g_tzrZones[idx].execution_authority=false;
+   g_tzrZones[idx].m1_handoff=false;
    g_tzrZones[idx].active_thesis=false;
 }
 
@@ -141,6 +143,7 @@ bool TZR_ReadFeed()
       z.core_low=StringToDouble(TZR_KV(text,p+"core_low"));
       z.core_high=StringToDouble(TZR_KV(text,p+"core_high"));
       z.execution_authority=(TZR_KV(text,p+"execution_authority")=="1");
+      z.m1_handoff=(TZR_KV(text,p+"m1_handoff")=="1");
       z.active_thesis=(TZR_KV(text,p+"active_thesis")=="1");
 
       if(z.id=="" || z.zone_low<=0 || z.zone_high<=z.zone_low || z.core_low<=0 || z.core_high<=z.core_low)
@@ -259,7 +262,7 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
       label+=" | CONTEXT ONLY";
    else if(g_tzrThesisLocked)
       label+=" | WATCH ONLY | NO M1 AUTHORITY";
-   else if(z.execution_authority)
+   else if(z.m1_handoff)
       label+=" | M1 HANDOFF | SEQUENCE GATE REQUIRED";
    else
       label+=" | MAP CONTEXT";
