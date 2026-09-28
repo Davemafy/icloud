@@ -39,7 +39,7 @@ def test_core_132_enforces_master_sniper_xau_windows_without_dxy_extended_veto()
         'g_tzHistoryFailures',
         'if(!historyReady)',
         'return false;',
-        '{\"protocol\":6',
+        r'{\"protocol\":6',
     ):
         assert needle in text, needle
     assert 'DXY_D1_1Y,' not in text
