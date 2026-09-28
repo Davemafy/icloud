@@ -14,7 +14,7 @@ EXPECTED = {
     SEQ: "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9",
     BRIDGE: "f89e60666aa7b18e6fbceeb2a36563f269990f048fee7f03a6ce6fe059e4acc4",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
-    RENDERER: "559c3385efdb67e2decbd330f91a140a54a0293569519df706d4cda9167167a2",
+    RENDERER: "4a1ba6794ff3f94544915dbab94b63b70d8786c6b97a7b5cbceb8cc81ca3e57d",
 }
 
 
@@ -41,7 +41,7 @@ def test_release_payload_versions_and_parity_wiring():
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["release"] == "6.3.37"
-    assert manifest["ref"] == "7c5663e7cdd654d28b9f15337abfc2bcc3fcec4c"
+    assert manifest["ref"] == "cee0a6ab001dcfc3ff7449223989821405db47c9"
     assert manifest["data_bridge_version"] == "1.54"
     assert manifest["sequence_ea_version"] == "3.45"
     files = {item["role"]: item for item in manifest["files"]}
