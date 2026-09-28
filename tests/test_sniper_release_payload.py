@@ -12,7 +12,7 @@ MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
     SEQ: "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9",
-    BRIDGE: "f2e8139b769d52865703f895e53bbf51aeaebf7de51c7ddeb6d146d71883b4cc",
+    BRIDGE: "f89e60666aa7b18e6fbceeb2a36563f269990f048fee7f03a6ce6fe059e4acc4",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "559c3385efdb67e2decbd330f91a140a54a0293569519df706d4cda9167167a2",
 }
@@ -41,7 +41,7 @@ def test_release_payload_versions_and_parity_wiring():
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["release"] == "6.3.37"
-    assert manifest["ref"] == "b6562a4b60d5d21830333c6544b86f9e20a44326"
+    assert manifest["ref"] == "7c5663e7cdd654d28b9f15337abfc2bcc3fcec4c"
     assert manifest["data_bridge_version"] == "1.54"
     assert manifest["sequence_ea_version"] == "3.45"
     files = {item["role"]: item for item in manifest["files"]}
