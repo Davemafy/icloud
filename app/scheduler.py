@@ -7,6 +7,7 @@ from typing import Awaitable, Callable
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
 from .institutional_two_zone import primary_zone_approaching
+from .engine import atr
 from .liquidity_reversal_handoff import detect_liquidity_reversal_handoff
 from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
@@ -27,6 +28,7 @@ _last_snapshot_seen: int = 0
 _thesis_state_latch: str = ""
 _liquidity_reversal_latch: str = ""
 _wrong_side_context_latch: set[str] = set()
+_market_drift_latch: str = ""
 
 
 def _parse_hhmm(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
@@ -86,6 +88,9 @@ def scheduler_status() -> dict:
         "thesis_state_latch": _thesis_state_latch or None,
         "liquidity_reversal_latch": _liquidity_reversal_latch or None,
         "wrong_side_context_latch_count": len(_wrong_side_context_latch),
+        "market_drift_latch": _market_drift_latch or None,
+        "market_drift_reanalysis_h1_atr": float(getattr(SETTINGS, "market_drift_reanalysis_h1_atr", 2.0)),
+        "market_drift_reanalysis_min_age_minutes": int(getattr(SETTINGS, "market_drift_reanalysis_min_age_minutes", 10)),
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
@@ -191,6 +196,82 @@ def _wrong_side_context_ids(snap) -> set[str]:
     return out
 
 
+def _market_drift_refresh(snap, now_utc: int) -> dict:
+    """Detect when an unowned selected map has become tactically remote.
+
+    This is a map-refresh trigger only. It never invalidates the existing zone,
+    acquires thesis ownership, promotes M1 authority, or sends an order. A fresh
+    analysis may keep the same zone if no better qualified battlefield exists.
+    """
+    if not bool(getattr(SETTINGS, "paper_only", False)):
+        return {}
+    analysis = latest_analysis(ai_required=False)
+    if analysis is None:
+        return {}
+    if active_owner_snapshot(int(now_utc)) is not None:
+        return {}
+
+    selected_id = str(getattr(analysis, "selected_zone_id", "") or "")
+    if not selected_id:
+        return {}
+    zone = next((z for z in list(getattr(analysis, "zones", []) or []) if str(getattr(z, "zone_id", "")) == selected_id), None)
+    if zone is None:
+        return {}
+
+    readiness = str(getattr(zone, "core_method", "") or "").split("|", 1)[0].upper()
+    if readiness not in {"ARMED", "WATCH"}:
+        return {}
+
+    generated_at = int(getattr(analysis, "generated_at", 0) or 0)
+    min_age = max(1, int(getattr(SETTINGS, "market_drift_reanalysis_min_age_minutes", 10))) * 60
+    if generated_at <= 0 or max(0, int(now_utc) - generated_at) < min_age:
+        return {}
+
+    try:
+        mid = float(snap.mid)
+        low = min(float(getattr(zone, "zone_low")), float(getattr(zone, "zone_high")))
+        high = max(float(getattr(zone, "zone_low")), float(getattr(zone, "zone_high")))
+    except (TypeError, ValueError, AttributeError):
+        return {}
+
+    direction = str(getattr(getattr(zone, "original_direction", None), "value", getattr(zone, "original_direction", ""))).upper()
+    # Only refresh when price is still on the valid approach side and has moved
+    # farther away in the original thesis direction. Wrong-side/invalidated
+    # structures are handled by the dedicated lifecycle/flip logic.
+    if direction == "SELL":
+        if mid >= low:
+            return {}
+        distance = low - mid
+    elif direction == "BUY":
+        if mid <= high:
+            return {}
+        distance = mid - high
+    else:
+        return {}
+
+    explicit_h1 = float(getattr(snap, "atr_h1", 0.0) or 0.0)
+    h1_atr = explicit_h1 if explicit_h1 > 0.0 else float(atr(list(getattr(snap, "xau_h1", []) or [])) or 0.0)
+    if h1_atr <= 0.0:
+        return {}
+
+    distance_atr = distance / h1_atr
+    threshold = max(0.25, float(getattr(SETTINGS, "market_drift_reanalysis_h1_atr", 2.0)))
+    if distance_atr < threshold:
+        return {}
+
+    step = max(0.25, float(getattr(SETTINGS, "market_drift_reanalysis_step_h1_atr", 0.5)))
+    bucket = int((distance_atr - threshold) // step)
+    return {
+        "signature": f"{selected_id}|{direction}|B{bucket}",
+        "zone_id": selected_id,
+        "direction": direction,
+        "distance_h1_atr": round(distance_atr, 3),
+        "analysis_age_seconds": max(0, int(now_utc) - generated_at),
+        "threshold_h1_atr": threshold,
+        "bucket": bucket,
+    }
+
+
 def _m1_handoff_ids(snap) -> set[str]:
     if not SETTINGS.paper_only:
         return set()
@@ -225,7 +306,7 @@ def _liquidity_reversal_signature(snap) -> str:
 
 
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
-    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch, _wrong_side_context_latch
+    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch, _wrong_side_context_latch, _market_drift_latch
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     startup_analysis_pending = True
     while True:
@@ -284,6 +365,12 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                 _wrong_side_context_latch.clear()
                 _wrong_side_context_latch.update(wrong_side_ids)
 
+                drift = _market_drift_refresh(snap, now_utc)
+                drift_sig = str(drift.get("signature") or "")
+                drift_changed = bool(drift_sig and drift_sig != _market_drift_latch)
+                if not drift_sig:
+                    _market_drift_latch = ""
+
                 refresh_reason = ""
                 if hard_released:
                     refresh_reason = "STALE_THESIS_HARD_RELEASE"
@@ -297,11 +384,19 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                     refresh_reason = f"ACTIVE_THESIS_M1_HANDOFF:{','.join(sorted(new_m1_ids)[:2])}"
                 elif new_ids:
                     refresh_reason = f"PRIMARY_ZONE_REFRESH:{','.join(sorted(new_ids)[:2])}"
+                elif drift_changed:
+                    refresh_reason = (
+                        f"MARKET_DRIFT_REANALYSIS:{drift.get('zone_id','')}:"
+                        f"{float(drift.get('distance_h1_atr') or 0.0):.2f}H1ATR"
+                    )
 
                 if refresh_reason and not ran_analysis:
                     audit(now_utc, "scheduler.execution_refresh", f"snapshot={snap.sent_at} reason={refresh_reason}")
                     await run_analysis(refresh_reason)
                     ran_analysis = True
+
+                if drift_sig and (drift_changed or ran_analysis):
+                    _market_drift_latch = drift_sig
 
             if len(_last_keys) > 300:
                 cutoff = (now.date() - timedelta(days=7)).isoformat()
