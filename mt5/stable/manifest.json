@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.36",
+  "release": "6.3.37",
   "repository": "Davemafy/icloud",
-  "ref": "d1ff83b09292a057ef7ce0d7c5ed882644630b69",
-  "data_bridge_version": "1.53",
+  "ref": "a93820faff4e24eb14ea563adae8ed0d3c85b449",
+  "data_bridge_version": "1.54",
   "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -177,16 +177,18 @@
     "active_owner_priority_before_flip_authority_mutation",
     "verified_master_sniper_history_window_sync",
     "calendar_span_history_guard",
-    "dxy_extended_depth_confluence_only"
+    "dxy_extended_depth_confluence_only",
+    "map_validity_execution_readiness_separation",
+    "invalidated_zone_flip_context_chart_comment"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
       "requires_reload": true,
-      "sha256": "8f110f72afbf143069ba9213b8110d09c03dc59a6b4805ce711d0757e174ea39"
+      "sha256": "f2e8139b769d52865703f895e53bbf51aeaebf7de51c7ddeb6d146d71883b4cc"
     },
     {
       "role": "sequence_ea",
