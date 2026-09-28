@@ -384,7 +384,7 @@ int OnInit()
    TZ_RenderTwoZoneMap();
    TZ_WriteBridgeState();
    TZ_SendHeartbeatV150();
-   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: verified Master Sniper calendar history + journal continuity + execution-truth overlay + V659 zones + ownership visualization.");
+   Print("AITS DataBridge runtime v",TZ_BRIDGE_VERSION," active: verified Master Sniper calendar history + journal continuity + map/execution truth overlay + V661 renderer + ownership visualization.");
    return INIT_SUCCEEDED;
 }
 
