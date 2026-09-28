@@ -122,12 +122,14 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis(monkeypatc
     assert d["zone1_zone_low"] == "4323.34000"
     assert d["zone1_core_low"] == "4327.52000"
     assert d["zone1_execution_authority"] == "0"
+    assert d["zone1_m1_handoff"] == "0"
     assert d["zone1_published_at"] == "300"
 
     assert d["zone2_id"] == "BUY_1"
     assert d["zone2_state"] == "WATCH"
     assert d["zone2_active_thesis"] == "1"
     assert d["zone2_execution_authority"] == "1"
+    assert d["zone2_m1_handoff"] == "0"
 
     assert d["zone3_role"] == "RESERVE"
     assert d["zone3_direction"] == "SELL"
@@ -222,7 +224,29 @@ def test_render_feed_uses_exact_geometry_publication_not_source_time():
     d = _kv(mt5_zone_render_text(a))
     assert d["zone1_source_ts"] == "1790190000"
     assert d["zone1_published_at"] == "1790210000"
+    assert d["zone1_execution_authority"] == "0"
+    assert d["zone1_m1_handoff"] == "0"
     assert int(d["zone1_published_at"]) > int(d["zone1_source_ts"])
+
+
+def test_selected_m1_ready_zone_gets_visual_handoff_authority_without_thesis_lock():
+    sell = _zone(
+        "SELL_READY", "SELL",
+        4308.19, 4316.87, 4310.97, 4315.74,
+        "M1_READY|PROMPT", "A", "H4>H1", 200, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_READY",
+        generated_at=300,
+        selected_zone_id="SELL_READY",
+        zones=[sell],
+        execution_policy={"active_thesis": {"locked": False}},
+    )
+    d = _kv(mt5_zone_render_text(a, current_mid=4312.00))
+    assert d["zone1_state"] == "M1_READY"
+    assert d["zone1_execution_authority"] == "0"
+    assert d["zone1_m1_handoff"] == "1"
+    assert d["zone1_active_thesis"] == "0"
 
 
 def test_live_renderer_hides_context_buy_once_price_is_below_zone():
@@ -250,6 +274,8 @@ def test_live_renderer_hides_context_buy_once_price_is_below_zone():
     assert d["wrong_side_hidden_ids"] == "PZ_H1_BUY_7"
     assert d["zone_count"] == "1"
     assert d["zone1_id"] == "PZ_H1_SELL_16"
+    assert d["zone1_execution_authority"] == "0"
+    assert d["zone1_m1_handoff"] == "0"
 
 
 def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_zone(monkeypatch):
@@ -354,6 +380,7 @@ def test_invalidated_buy_remains_visible_as_sell_flip_context():
     assert d["zone2_core_low"] == "4254.41000"
     assert d["zone2_core_high"] == "4275.79000"
     assert d["zone2_execution_authority"] == "0"
+    assert d["zone2_m1_handoff"] == "0"
     assert d["zone2_active_thesis"] == "0"
     assert d["wrong_side_hidden_count"] == "0"
 

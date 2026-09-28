@@ -55,7 +55,7 @@ def test_directional_mitigation_audit_is_visible_and_read_only():
 def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     html = '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><div id="checks"></div><h2>Live trading journal</h2></body>'
     cleaned = compact_dashboard_html(html)
-    for needle in ["HTF setup quality", 'id="htfScore"', "Execution readiness", 'id="executionMeta"', "WAITING FOR M1 CONFIRMATION", "M1 HANDOFF ACTIVE", "WAITING FOR VALUE / RETRACE", "Entry permission: NO", "Macro checks ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ", "order permission is suspended", "This is not a location failure.", "HTF location/source quality only", "Do not chase the existing move", "there is no current M1 location handoff or new-entry authority", "Current M1 location handoff ", "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner", "This is not entry authorization", "live Sequence EA must still complete sweep", "CLOSED M1 same-direction rejection/micro-break", "Every entry model must pass this final confirmation", "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor"]:
+    for needle in ["HTF setup quality", 'id="htfScore"', "Selected map state", 'id="mapState"', "Structural map lifecycle only", "A valid SELL/BUY map is not execution readiness", "MAP VALID • NO ENTRY AUTHORITY", "Execution readiness", 'id="executionMeta"', "WAITING FOR M1 CONFIRMATION", "M1 HANDOFF ACTIVE", "WAITING FOR VALUE / RETRACE", "Entry permission: NO", "Macro checks ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ", "order permission is suspended", "This is not a location failure.", "HTF location/source quality only", "Do not chase the existing move", "there is no current M1 location handoff or new-entry authority", "Current M1 location handoff ", "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner", "This is not entry authorization", "live Sequence EA must still complete sweep", "CLOSED M1 same-direction rejection/micro-break", "Every entry model must pass this final confirmation", "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor"]:
         assert needle in cleaned
     assert "M1 HANDOFF READY" not in cleaned
     assert "Checklist " not in cleaned
@@ -73,7 +73,7 @@ def test_freshness_check_is_scoped_to_selected_zone():
 def test_dashboard_transform_is_idempotent():
     html = '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><h2>Live trading journal</h2></body>'
     once = compact_dashboard_html(html); twice = compact_dashboard_html(once)
-    for needle in ['id="mitigationAudit"','id="journalContext"','id="ownershipState"','id="journal-context-readonly-script"','id="htfScore"','id="executionMeta"']:
+    for needle in ['id="mitigationAudit"','id="journalContext"','id="ownershipState"','id="journal-context-readonly-script"','id="htfScore"','id="mapState"','id="executionMeta"']:
         assert twice.count(needle) == 1
 
 

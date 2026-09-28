@@ -17,16 +17,25 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.36"
-    assert manifest["data_bridge_version"] == "1.53"
+    assert manifest["release"] == "6.3.37"
+    assert manifest["data_bridge_version"] == "1.54"
     assert manifest["sequence_ea_version"] == "3.45"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
     assert bridge_digest == bridge["sha256"]
+
+    renderer = next(item for item in manifest["support_files"] if item["role"] == "zone_renderer")
+    renderer_source = ROOT / renderer["path"]
+    assert renderer_source.exists()
+    renderer_digest = hashlib.sha256(renderer_source.read_bytes()).hexdigest()
+    assert renderer_digest == renderer["sha256"]
+    renderer_text = renderer_source.read_text(encoding="utf-8")
+    assert "THESIS OWNER" in renderer_text
+    assert "M1 HANDOFF | SEQUENCE GATE REQUIRED" in renderer_text
 
     bridge_core = next(item for item in manifest["support_files"] if item["role"] == "data_bridge_core")
     bridge_core_source = ROOT / bridge_core["path"]
@@ -142,5 +151,7 @@ def test_professional_release_contract_is_self_consistent():
         "verified_master_sniper_history_window_sync",
         "calendar_span_history_guard",
         "dxy_extended_depth_confluence_only",
+        "map_validity_execution_readiness_separation",
+        "invalidated_zone_flip_context_chart_comment",
     }
     assert required.issubset(set(manifest["channel_features"]))

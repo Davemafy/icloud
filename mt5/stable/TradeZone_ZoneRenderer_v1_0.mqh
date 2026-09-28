@@ -2,8 +2,9 @@
 #define TRADEZONE_ZONE_RENDERER_V1_0_MQH
 
 // Visual-only chart renderer. It never sends orders, changes positions, or alters risk.
-// V659 presentation: muted Primary shading, outline-only Reserve context, and explicit
-// read-only execution-ownership labels so a visible zone cannot be mistaken for authority.
+// V661 presentation: muted Primary shading, outline-only Reserve context, and explicit
+// read-only map / M1-handoff / thesis-ownership labels so a visible zone cannot be mistaken
+// for immediate order authority.
 #define TZR_PREFIX "AITS_ZONE_"
 #define TZR_MAX_ZONES 4
 
@@ -31,6 +32,7 @@ struct TZR_Zone
    double core_low;
    double core_high;
    bool execution_authority;
+   bool m1_handoff;
    bool active_thesis;
 };
 
@@ -80,6 +82,7 @@ void TZR_ResetOne(int idx)
    g_tzrZones[idx].core_low=0;
    g_tzrZones[idx].core_high=0;
    g_tzrZones[idx].execution_authority=false;
+   g_tzrZones[idx].m1_handoff=false;
    g_tzrZones[idx].active_thesis=false;
 }
 
@@ -140,6 +143,7 @@ bool TZR_ReadFeed()
       z.core_low=StringToDouble(TZR_KV(text,p+"core_low"));
       z.core_high=StringToDouble(TZR_KV(text,p+"core_high"));
       z.execution_authority=(TZR_KV(text,p+"execution_authority")=="1");
+      z.m1_handoff=(TZR_KV(text,p+"m1_handoff")=="1");
       z.active_thesis=(TZR_KV(text,p+"active_thesis")=="1");
 
       if(z.id=="" || z.zone_low<=0 || z.zone_high<=z.zone_low || z.core_low<=0 || z.core_high<=z.core_low)
@@ -253,13 +257,13 @@ void TZR_DrawZone(long chart,TZR_Zone &z,int idx)
    if(z.state!="")label+=" | "+z.state;
    label+=" | T"+IntegerToString(z.touches);
    if(z.active_thesis)
-      label+=" | EXECUTION OWNER";
+      label+=" | THESIS OWNER";
    else if(reserve)
       label+=" | CONTEXT ONLY";
    else if(g_tzrThesisLocked)
       label+=" | WATCH ONLY | NO M1 AUTHORITY";
-   else if(z.execution_authority)
-      label+=" | EXECUTION";
+   else if(z.m1_handoff)
+      label+=" | M1 HANDOFF | SEQUENCE GATE REQUIRED";
    else
       label+=" | MAP CONTEXT";
    TZR_Label(chart,base+"LBL",left,z.zone_high,label,z.active_thesis?clrGold:core_color);
