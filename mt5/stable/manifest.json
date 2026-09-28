@@ -3,7 +3,7 @@
   "channel": "stable",
   "release": "6.3.37",
   "repository": "Davemafy/icloud",
-  "ref": "b6562a4b60d5d21830333c6544b86f9e20a44326",
+  "ref": "7c5663e7cdd654d28b9f15337abfc2bcc3fcec4c",
   "data_bridge_version": "1.54",
   "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
@@ -188,7 +188,7 @@
       "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
       "target_name": "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
       "requires_reload": true,
-      "sha256": "f2e8139b769d52865703f895e53bbf51aeaebf7de51c7ddeb6d146d71883b4cc"
+      "sha256": "f89e60666aa7b18e6fbceeb2a36563f269990f048fee7f03a6ce6fe059e4acc4"
     },
     {
       "role": "sequence_ea",
