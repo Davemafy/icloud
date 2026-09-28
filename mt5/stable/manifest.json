@@ -3,7 +3,7 @@
   "channel": "stable",
   "release": "6.3.37",
   "repository": "Davemafy/icloud",
-  "ref": "7c5663e7cdd654d28b9f15337abfc2bcc3fcec4c",
+  "ref": "cee0a6ab001dcfc3ff7449223989821405db47c9",
   "data_bridge_version": "1.54",
   "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
@@ -214,7 +214,7 @@
       "path": "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh",
       "target": "Include\\TradeZoneCore",
       "target_name": "TradeZone_ZoneRenderer_v1_0.mqh",
-      "sha256": "559c3385efdb67e2decbd330f91a140a54a0293569519df706d4cda9167167a2"
+      "sha256": "4a1ba6794ff3f94544915dbab94b63b70d8786c6b97a7b5cbceb8cc81ca3e57d"
     },
     {
       "role": "sequence_core",
