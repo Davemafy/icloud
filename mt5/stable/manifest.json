@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.37",
+  "release": "6.3.38",
   "repository": "Davemafy/icloud",
-  "ref": "cee0a6ab001dcfc3ff7449223989821405db47c9",
-  "data_bridge_version": "1.54",
+  "ref": "99e64835e44b92640230df22a0285fa6295df7a7",
+  "data_bridge_version": "1.55",
   "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -179,16 +179,19 @@
     "calendar_span_history_guard",
     "dxy_extended_depth_confluence_only",
     "map_validity_execution_readiness_separation",
-    "invalidated_zone_flip_context_chart_comment"
+    "invalidated_zone_flip_context_chart_comment",
+    "canonical_primary_map_count",
+    "mt5_watch_only_reason_parity",
+    "human_readable_zone_lifecycle_labels"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_54_MapExecutionTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
       "requires_reload": true,
-      "sha256": "f89e60666aa7b18e6fbceeb2a36563f269990f048fee7f03a6ce6fe059e4acc4"
+      "sha256": "ea394ae2e2e482ccfb848ac440ad6a7d8a86c0954332331bd58eb736c8b2c1a9"
     },
     {
       "role": "sequence_ea",
@@ -214,7 +217,7 @@
       "path": "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh",
       "target": "Include\\TradeZoneCore",
       "target_name": "TradeZone_ZoneRenderer_v1_0.mqh",
-      "sha256": "4a1ba6794ff3f94544915dbab94b63b70d8786c6b97a7b5cbceb8cc81ca3e57d"
+      "sha256": "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442"
     },
     {
       "role": "sequence_core",
