@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.101"
+    app_version: str = "6.5.102"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -43,6 +43,12 @@ class Settings:
     week_open_time: str = os.getenv("WEEK_OPEN_TIME", "23:11")
     scheduler_poll_seconds: int = _i("SCHEDULER_POLL_SECONDS", 20)
     plan_refresh_minutes: int = _i("PLAN_REFRESH_MINUTES", 180)
+    # Event-driven early re-analysis when the selected unowned map has become
+    # tactically remote as price continues away. This refreshes the map; it
+    # never authorizes an entry by itself.
+    market_drift_reanalysis_h1_atr: float = _f("MARKET_DRIFT_REANALYSIS_H1_ATR", 2.00)
+    market_drift_reanalysis_step_h1_atr: float = _f("MARKET_DRIFT_REANALYSIS_STEP_H1_ATR", 0.50)
+    market_drift_reanalysis_min_age_minutes: int = _i("MARKET_DRIFT_REANALYSIS_MIN_AGE_MINUTES", 10)
 
     ai_enabled: bool = _b("AI_ENABLED", True)
     require_ai_for_execution: bool = _b("REQUIRE_AI_FOR_EXECUTION", True)
