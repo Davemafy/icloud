@@ -405,7 +405,10 @@ def _sync_public_map(analysis: Analysis) -> None:
             "mitigation_expected_approach_side": str((zone.mitigation_audit or {}).get("expected_approach_side") or ""),
             "mitigation_counting_stopped": bool((zone.mitigation_audit or {}).get("counting_stopped")),
             "source_ts": zone.source_ts,
-            "dynamic_continuation": "DYNAMIC_CONTINUATION_REZONE" in set(zone.confluences),
+            "dynamic_continuation": bool(
+                {"DYNAMIC_CONTINUATION_REZONE", "DYNAMIC_CONTINUATION_SOURCE_EXACT"}
+                & set(zone.confluences)
+            ),
         }
     zone_map["map_count"] = len(analysis.zones)
     policy["public_zone_map"] = zone_map
@@ -451,12 +454,12 @@ def _continuation_context(analysis: Analysis, snapshot: MarketSnapshot) -> tuple
 def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
     """Re-rank fresh trend-continuation locations after a strong displacement leg.
 
-    Historical countertrend demand/supply remains lifecycle truth, but only an exhausted
-    three-plus-touch countertrend zone is removed from the *execution map* during a
-    confirmed same-direction expansion. A nearer continuation FVG can replace a
-    remote primary only when it comes from a recent BOS displacement and has nearby
-    structural BSL/SSL inside a V659 liquidity-centered core. This function never
-    sends orders and never bypasses M1 confirmation.
+    A recent BOS/FVG event may cause the map to inspect its actual H1/H4 source
+    candle. A nearer continuation may replace a remote same-direction primary only
+    when that real source candle independently passes the normal Master Sniper
+    source/liquidity/M15 qualification. FVG is confluence only; no synthetic
+    liquidity-centred geometry is permitted. This function never sends orders and
+    never bypasses M1 confirmation.
     """
     if analysis is None or not SETTINGS.paper_only:
         return analysis
