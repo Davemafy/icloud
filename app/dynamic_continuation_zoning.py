@@ -19,7 +19,7 @@ from .prompt_contract import prompt_dxy_direction
 from .thesis_ownership_policy import active_owner_snapshot
 from .zone_runtime_policy import MIN_SWEEP_ROOM_POINTS, XAU_POINTS_PER_PIP, _geometry_points
 
-DYNAMIC_CONTINUATION_CONTRACT = "DYNAMIC_CONTINUATION_REZONE_V6521"
+DYNAMIC_CONTINUATION_CONTRACT = "MASTER_SNIPER_SOURCE_EXACT_CONTINUATION_V6594"
 MAX_H1_EVENT_AGE_BARS = 8
 MAX_H4_EVENT_AGE_BARS = 3
 REPLACE_ADVANTAGE_H1_ATR = 0.35
@@ -202,126 +202,79 @@ def _dxy_support(direction: Direction, snapshot: MarketSnapshot) -> str:
     return "CONFLICT"
 
 
+def _source_bar(event: ContinuationEvent, snapshot: MarketSnapshot) -> Bar | None:
+    bars = snapshot.xau_h1 if event.source_tf == "H1" else snapshot.xau_h4 if event.source_tf == "H4" else []
+    return next((bar for bar in bars if int(bar.ts) == int(event.source_ts)), None)
+
+
 def _build_dynamic_zone(event: ContinuationEvent, analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
-    attached = _select_liquidity(event, analysis, snapshot)
-    if attached is None:
-        return None
-    liquidity_price = float(attached.price)
-    geometry = _liquidity_centered_geometry(event, liquidity_price, snapshot)
-    if geometry is None:
-        return None
-    core_low, core_high, zone_low, zone_high = geometry
-    mitigation_start_ts = _event_ready_ts(event)
-    raw_touch_episodes = _touches(core_low, core_high, mitigation_start_ts, snapshot.xau_m15)
-    mitigation_audit = audit_directional_mitigations(
-        event.direction,
-        core_low,
-        core_high,
-        zone_low,
-        zone_high,
-        mitigation_start_ts,
-        snapshot.xau_m15,
-    )
-    if int(mitigation_audit.get("invalidated_at") or 0) > 0:
-        return None
-    touches = int(mitigation_audit.get("qualified_mitigations") or 0)
+    """Build a fresh continuation zone from the *actual* H1/H4 source candle.
 
-    core_mid = (core_low + core_high) / 2.0
-    loc = _location_score(event.direction, core_mid, snapshot, analysis.liquidity_map)
-    h1_aligned = structure_bias(snapshot.xau_h1) == event.direction
-    h4_aligned = structure_bias(snapshot.xau_h4) == event.direction
-    grade = Grade.A_PLUS if event.source_tf == "H4" and h1_aligned and event.strength >= 2.0 else Grade.A
-    required = _required_liquidity(event.direction)
-    confluences = {
-        "DYNAMIC_CONTINUATION_REZONE",
-        "INSTITUTIONAL_DISPLACEMENT",
-        "HISTORICAL_DISPLACEMENT_FVG",
-        "FRESH_DISPLACEMENT_RETEST",
-        "LIQUIDITY_IN_MARKED_ZONE",
-        f"{required}_IN_MARKED_ZONE",
-        "LIQUIDITY_CENTERED_CORE",
-        "BALANCED_CORE_BUFFER",
-        "PROFESSIONAL_SOURCE_TF_CORE_WIDTH",
-        "PROFESSIONAL_SOURCE_TF_ENVELOPE_WIDTH",
-        "MINIMUM_50_PIP_DISTAL_SWEEP_ROOM",
-        "SWEEP_ROOM_RESERVED",
-    }
-    if h1_aligned:
-        confluences.add("H1_TREND_ALIGNED")
-    if h4_aligned:
-        confluences.add("H4_TREND_ALIGNED")
-    if loc >= 7.0:
-        confluences.add("PREMIUM_DISCOUNT_EXTREMITY")
+    The old FVG-centred synthetic geometry is intentionally not used. The recent
+    BOS/FVG event is only a discovery trigger. Final qualification is delegated
+    back to the installed Master Sniper source-exact candidate path, which still
+    requires genuine BSL/SSL inside the source envelope, closed evidence,
+    directional mitigation health and normal grade rules.
+    """
+    from . import institutional_two_zone as zoning
 
-    original = _targets(event.direction, core_mid, analysis.liquidity_map)
-    flip = event.direction.opposite()
-    flip_ref = zone_high if flip == Direction.BUY else zone_low
-    flipped = _targets(flip, flip_ref, analysis.liquidity_map)
-    vals = original + [0.0] * (4 - len(original))
-    fvals = flipped + [0.0] * (4 - len(flipped))
-    clear_run = abs(float(vals[0]) - core_mid) if vals and vals[0] else 0.0
-    point = _point(snapshot)
-    sweep_points = (
-        (zone_high - liquidity_price) / point
-        if event.direction == Direction.SELL
-        else (liquidity_price - zone_low) / point
-    )
+    source = _source_bar(event, snapshot)
+    if source is None:
+        return None
+    body_low, body_high = sorted((float(source.open), float(source.close)))
+    if body_high <= body_low:
+        body_low, body_high = float(source.low), float(source.high)
 
-    zone = Zone(
-        zone_id=f"DC_{event.source_tf}_{event.direction.value}_{event.displacement_ts}",
-        original_direction=event.direction,
-        flip_direction=flip,
-        setup_type="CONTINUATION",
+    candidate = zoning.PromptCandidate(
+        direction=event.direction,
         source_tf=event.source_tf,
-        grade=grade,
-        state=ZoneState.ACTIVE,
-        core_low=round(core_low, 5),
-        core_high=round(core_high, 5),
-        core_method="ARMED|DYNAMIC_CONTINUATION_REZONE|FVG_BOS_LIQUIDITY_CENTERED",
-        location_score=round(loc, 4),
-        zone_low=round(zone_low, 5),
-        zone_high=round(zone_high, 5),
-        touch_count=int(touches),
-        mitigation_audit=mitigation_audit,
-        confluences=sorted(confluences),
-        independent_confluence_count=len(confluences),
-        requires_sweep=True,
-        source_ts=int(event.displacement_ts),
-        invalidation_level=round(zone_high if event.direction == Direction.SELL else zone_low, 5),
-        invalidation_rule="Closed M15 body acceptance beyond the dynamic continuation outer envelope invalidates the retest. Wick-only liquidity raids do not invalidate.",
-        original_target1=float(vals[0]),
-        original_target2=float(vals[1]),
-        original_target3=float(vals[2]),
-        original_runner=float(vals[3]),
-        flip_target1=float(fvals[0]),
-        flip_target2=float(fvals[1]),
-        flip_target3=float(fvals[2]),
-        flip_runner=float(fvals[3]),
-        clear_run=round(clear_run, 5),
-        countertrend=False,
-        dxy_support=_dxy_support(event.direction, snapshot),
-        notes=[
-            "readiness:ARMED",
-            f"dynamic_continuation_contract:{DYNAMIC_CONTINUATION_CONTRACT}",
-            f"displacement_source:{event.source_tf}:{event.displacement_ts}",
-            f"source_ready_ts:{mitigation_start_ts}",
-            f"parent_ob_source_ts:{event.source_ts}",
-            f"fvg:{event.fvg_low:.5f}-{event.fvg_high:.5f}",
-            f"attached_liquidity:{required}:{attached.label}@{liquidity_price:.5f}",
-            f"core_width_points:{(core_high-core_low)/point:.1f}",
-            f"envelope_width_points:{(zone_high-zone_low)/point:.1f}",
-            f"sweep_room_points:{sweep_points:.1f}",
-            f"mitigations:{touches}",
-            f"raw_core_touch_episodes:{raw_touch_episodes}",
-            "Mitigation freshness is directional: SELL below->core->below; BUY above->core->above. Wrong-side contacts do not count.",
-            "The FVG is not a standalone zone. A recent BOS displacement plus nearby structural liquidity is mandatory.",
-            "The structural liquidity sits inside a balanced tactical core with buffer on both sides; M1 confirmation remains mandatory.",
-        ],
+        source_ts=int(event.source_ts),
+        core_low=float(body_low),
+        core_high=float(body_high),
+        zone_low=float(source.low),
+        zone_high=float(source.high),
+        strength=float(event.strength),
+        fvg=True,
+        source_kind="DISPLACEMENT_BOS_SOURCE",
+        volume_expansion=bool(zoning._volume_expansion(
+            snapshot.xau_h1 if event.source_tf == "H1" else snapshot.xau_h4,
+            int(event.source_ts),
+        )),
+        method="PROMPT_H1_TACTICAL_SOURCE" if event.source_tf == "H1" else "PROMPT_H4_SOURCE_CANDLE",
+        source_ready_ts=_event_ready_ts(event),
     )
-    if evaluate_zone_state(zone, snapshot.xau_m15, snapshot.atr_m15) != ZoneState.ACTIVE:
+    zone, _diag = zoning._candidate_zone(
+        candidate,
+        snapshot,
+        analysis.liquidity_map,
+        analysis.overall_bias,
+        0,
+    )
+    if zone is None:
         return None
-    return zone
 
+    readiness = str(zone.core_method or "").split("|", 1)[0]
+    tail = str(zone.core_method or "").split("|", 1)[1] if "|" in str(zone.core_method or "") else ""
+    zone.core_method = (
+        f"{readiness}|MASTER_SNIPER_SOURCE_EXACT_CONTINUATION|{tail}"
+        if tail else
+        f"{readiness}|MASTER_SNIPER_SOURCE_EXACT_CONTINUATION"
+    )
+    conf = set(zone.confluences or [])
+    conf.update({
+        "DYNAMIC_CONTINUATION_SOURCE_EXACT",
+        "FRESH_DISPLACEMENT_RETEST",
+        "NO_SYNTHETIC_ZONE_EXPANSION",
+    })
+    zone.confluences = sorted(conf)
+    zone.independent_confluence_count = len(zone.confluences)
+    zone.notes = list(zone.notes or []) + [
+        f"dynamic_continuation_contract:{DYNAMIC_CONTINUATION_CONTRACT}",
+        f"displacement_source:{event.source_tf}:{event.displacement_ts}",
+        f"fvg:{event.fvg_low:.5f}-{event.fvg_high:.5f}",
+        "Fresh continuation discovery used the recent BOS/FVG only as evidence. The published core/envelope remain the actual H1/H4 source candle with attached structural liquidity.",
+    ]
+    return zone
 
 def _expansion_state(snapshot: MarketSnapshot, context: Direction, events: list[ContinuationEvent]) -> dict[str, Any]:
     h1 = structure_bias(snapshot.xau_h1)
@@ -459,6 +412,42 @@ def _sync_public_map(analysis: Analysis) -> None:
     analysis.execution_policy = policy
 
 
+def _continuation_context(analysis: Analysis, snapshot: MarketSnapshot) -> tuple[Direction, list[ContinuationEvent], dict[str, Any]]:
+    """Resolve continuation direction without letting neutral D1 suppress H1/H4 delivery."""
+    d1_context = analysis.overall_bias
+    directions = (
+        [d1_context]
+        if d1_context in {Direction.BUY, Direction.SELL}
+        else [Direction.SELL, Direction.BUY]
+    )
+    qualified: list[tuple[Direction, list[ContinuationEvent], dict[str, Any]]] = []
+    for direction in directions:
+        events = _recent_events(snapshot, direction)
+        expansion = _expansion_state(snapshot, direction, events)
+        if expansion.get("aligned"):
+            qualified.append((direction, events, expansion))
+    if not qualified:
+        return Direction.NEUTRAL, [], {
+            "aligned": False,
+            "d1": d1_context.value,
+            "h1": structure_bias(snapshot.xau_h1).value,
+            "h4": structure_bias(snapshot.xau_h4).value,
+            "recent_event_count": 0,
+            "strong_recent_h1_displacement": False,
+        }
+    qualified.sort(
+        key=lambda item: (
+            -max((int(e.displacement_ts) for e in item[1]), default=0),
+            -max((float(e.strength) for e in item[1]), default=0.0),
+            0 if structure_bias(snapshot.xau_h1) == item[0] else 1,
+            0 if structure_bias(snapshot.xau_h4) == item[0] else 1,
+        )
+    )
+    direction, events, expansion = qualified[0]
+    expansion = {**expansion, "d1": d1_context.value, "continuation_direction": direction.value}
+    return direction, events, expansion
+
+
 def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapshot) -> Analysis:
     """Re-rank fresh trend-continuation locations after a strong displacement leg.
 
@@ -471,13 +460,8 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     """
     if analysis is None or not SETTINGS.paper_only:
         return analysis
-    context = analysis.overall_bias
-    if context not in {Direction.BUY, Direction.SELL}:
-        return analysis
-
+    context, events, expansion = _continuation_context(analysis, snapshot)
     owner = active_owner_snapshot(int(snapshot.sent_at))
-    events = _recent_events(snapshot, context)
-    expansion = _expansion_state(snapshot, context, events)
     policy = dict(analysis.execution_policy or {})
     audit_meta: dict[str, Any] = {
         "contract": DYNAMIC_CONTINUATION_CONTRACT,
@@ -486,9 +470,10 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         "owner_protected": bool(owner),
         "fvg_alone_can_create_zone": False,
         "structural_liquidity_required": True,
-        "liquidity_centered_core": True,
-        "professional_v659_geometry": True,
-        "minimum_distal_sweep_room_pips": MIN_SWEEP_ROOM_POINTS / XAU_POINTS_PER_PIP,
+        "source_exact_geometry": True,
+        "synthetic_fvg_centered_geometry": False,
+        "d1_neutral_can_use_confirmed_h1_h4_expansion": True,
+        "continuation_direction": context.value,
         "m1_confirmation_required": True,
         "demoted_context_zones": [],
         "replaced_primary": None,
@@ -500,7 +485,7 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
     if owner is not None:
         analysis.trader_brief += " Dynamic continuation re-zoning held because an already-acquired thesis owns execution."
         return analysis
-    if not expansion["aligned"]:
+    if context not in {Direction.BUY, Direction.SELL} or not expansion["aligned"]:
         return analysis
 
     # Immutable-grade contract: mitigation/touch history is telemetry only.
@@ -575,7 +560,7 @@ def apply_dynamic_continuation_rezone(analysis: Analysis, snapshot: MarketSnapsh
         analysis.trader_brief += (
             f" Dynamic continuation re-zone={z['direction']} {z['low']:.2f}-{z['high']:.2f} "
             f"(core={z['core_low']:.2f}-{z['core_high']:.2f},{z['source_tf']},{z['grade']}). "
-            "It is a fresh displacement/FVG retest with structural liquidity centered in the core; FVG alone has no zone authority."
+            "It is a fresh source-exact H1/H4 displacement retest with genuine attached structural liquidity; FVG is confluence only and cannot manufacture geometry."
         )
 
     active_map = "; ".join(
