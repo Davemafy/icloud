@@ -633,3 +633,72 @@ def test_unclosed_h1_h4_evidence_cannot_publish_zone(monkeypatch):
     diag = analysis.execution_policy["public_zone_map"]["rejected_diagnostics"]["sell"]["strongest_rejected"]
     assert diag["rejection_code"] == "SOURCE_EVIDENCE_NOT_CLOSED"
     assert "causally closed" in diag["rejection_reason"]
+
+
+
+def _multibar_sell_history() -> list[policy.Bar]:
+    bars = []
+    step = 3600
+    for i in range(30):
+        center = 100.0 + (0.05 if i % 2 else 0.0)
+        bars.append(
+            policy.Bar(
+                ts=i * step,
+                open=center,
+                high=center + 0.5,
+                low=center - 0.5,
+                close=center + (0.05 if i % 2 == 0 else -0.05),
+                tick_volume=100,
+            )
+        )
+    # Actual H1 source candle immediately before a three-bar bearish impulse.
+    bars.append(policy.Bar(ts=30*step, open=100.0, high=100.6, low=99.8, close=100.4, tick_volume=105))
+    # Each impulse candle is deliberately below the legacy 1.55x single-bar
+    # displacement threshold; together they decisively break the prior range.
+    bars.append(policy.Bar(ts=31*step, open=100.4, high=100.5, low=99.4, close=99.6, tick_volume=130))
+    bars.append(policy.Bar(ts=32*step, open=99.6, high=99.7, low=98.7, close=98.9, tick_volume=135))
+    bars.append(policy.Bar(ts=33*step, open=98.9, high=99.0, low=97.8, close=98.0, tick_volume=140))
+    # Newest element may be forming and must not be used as closed HTF evidence.
+    bars.append(policy.Bar(ts=34*step, open=98.0, high=98.2, low=97.6, close=97.9, tick_volume=80))
+    return bars
+
+
+def test_multibar_h1_displacement_detects_actual_preimpulse_source():
+    bars = _multibar_sell_history()
+
+    sources = policy._multi_bar_displacement_sources(bars, "H1", max_items=10)
+
+    source = next(x for x in sources if x.direction == Direction.SELL and x.source_ts == 30*3600)
+    assert source.source_kind == "MULTI_BAR_DISPLACEMENT_BOS_SOURCE"
+    assert source.core_low == 100.0
+    assert source.core_high == 100.4
+    assert source.zone_low == 99.8
+    assert source.zone_high == 100.6
+    assert source.strength >= 1.8
+    assert source.fvg is True
+    assert source.ready_ts == 34*3600
+
+
+def test_multibar_displacement_is_merged_into_master_sniper_source_pool():
+    bars = _multibar_sell_history()
+
+    sources = policy._sources(bars, "H1")
+
+    assert any(
+        x.direction == Direction.SELL
+        and x.source_ts == 30*3600
+        and "MULTI_BAR_DISPLACEMENT_BOS_SOURCE" in x.source_kind
+        for x in sources
+    )
+
+
+def test_multibar_detector_never_uses_newest_forming_h1_bar():
+    bars = _multibar_sell_history()
+    # Remove the closed third impulse candle and place the BOS only in the newest
+    # element. The detector must not use it before its H1 close.
+    bars[33] = policy.Bar(ts=33*3600, open=98.9, high=99.1, low=98.8, close=99.0, tick_volume=100)
+    bars[34] = policy.Bar(ts=34*3600, open=99.0, high=99.1, low=97.2, close=97.4, tick_volume=160)
+
+    sources = policy._multi_bar_displacement_sources(bars, "H1", max_items=10)
+
+    assert not any(x.source_ts == 30*3600 and x.direction == Direction.SELL for x in sources)
