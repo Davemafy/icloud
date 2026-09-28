@@ -37,6 +37,7 @@ def test_bridge_154_keeps_invalidated_zone_as_zero_authority_flip_context_messag
 def test_v661_renderer_uses_non_misleading_lifecycle_labels():
     text = RENDERER.read_text(encoding="utf-8")
     assert 'label+=" | THESIS OWNER";' in text
+    assert 'z.m1_handoff=(TZR_KV(text,p+"m1_handoff")=="1");' in text
     assert 'label+=" | M1 HANDOFF | SEQUENCE GATE REQUIRED";' in text
     assert 'label+=" | MAP CONTEXT";' in text
     assert 'label+=" | EXECUTION";' not in text
