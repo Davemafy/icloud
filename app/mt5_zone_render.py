@@ -207,13 +207,22 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
     for z in list(getattr(a, "zones", []) or []):
         zid = _value(getattr(z, "zone_id", ""))
         active_thesis = bool(thesis_locked and owner_zone_id and zid == owner_zone_id)
-        authority = active_thesis or (not thesis_locked and bool(selected_zone_id) and zid == selected_zone_id)
+        readiness = _readiness(getattr(z, "core_method", ""), getattr(z, "state", ""))
+        # A selected HTF map is only a plan. Visual execution authority exists
+        # only after the selected zone reaches the current M1 handoff state.
+        # Acquired thesis ownership remains a separate lifecycle truth.
+        authority = active_thesis or (
+            not thesis_locked
+            and bool(selected_zone_id)
+            and zid == selected_zone_id
+            and readiness == "M1_READY"
+        )
         out.append(
             {
                 "id": zid,
                 "role": "PRIMARY",
                 "direction": _value(getattr(z, "original_direction", "")),
-                "state": _readiness(getattr(z, "core_method", ""), getattr(z, "state", "")),
+                "state": readiness,
                 "grade": _value(getattr(z, "grade", "")),
                 "source_tf": _value(getattr(z, "source_tf", "")),
                 "source_ts": int(getattr(z, "source_ts", 0) or 0),
