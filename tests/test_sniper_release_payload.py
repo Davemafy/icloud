@@ -39,7 +39,7 @@ def test_release_payload_versions_and_parity_wiring():
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["release"] == "6.3.37"
-    assert manifest["ref"] == "a93820faff4e24eb14ea563adae8ed0d3c85b449"
+    assert manifest["ref"] == "b6562a4b60d5d21830333c6544b86f9e20a44326"
     assert manifest["data_bridge_version"] == "1.54"
     assert manifest["sequence_ea_version"] == "3.45"
     files = {item["role"]: item for item in manifest["files"]}
