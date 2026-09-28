@@ -304,3 +304,92 @@ def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_
     assert d["zone_count"] == "1"
     assert d["zone1_id"] == "BUY_OWNER"
     assert d["zone1_active_thesis"] == "1"
+
+
+def test_invalidated_buy_remains_visible_as_sell_flip_context():
+    sell = _zone(
+        "PZ_H4H1_SELL_13", "SELL",
+        4308.199, 4316.871, 4310.97, 4315.74,
+        "ARMED|PROMPT", "A", "H4>H1", 200, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_FLIPCTX",
+        generated_at=1_790_556_313,
+        selected_zone_id="PZ_H4H1_SELL_13",
+        zones=[sell],
+        execution_policy={
+            "active_thesis": {"locked": False},
+            "public_zone_map": {
+                "rejected_diagnostics": {
+                    "buy": {
+                        "strongest_rejected": {
+                            "direction": "BUY",
+                            "source_tf": "H4>H1",
+                            "source_ts": 1_790_000_000,
+                            "core_low": 4254.41,
+                            "core_high": 4275.79,
+                            "zone_low": 4253.279,
+                            "zone_high": 4275.79,
+                            "touches": 0,
+                            "structural_grade": "A+",
+                            "current_execution_grade": "A+",
+                            "mitigation_invalidated_at": 1_790_555_000,
+                            "rejection_code": "HISTORICAL_M15_ACCEPTED_INVALIDATION",
+                        }
+                    }
+                }
+            },
+        },
+    )
+
+    d = _kv(mt5_zone_render_text(a, current_mid=4235.18))
+
+    assert d["zone_count"] == "2"
+    assert d["zone2_role"] == "RESERVE"
+    assert d["zone2_direction"] == "SELL"
+    assert d["zone2_state"] == "FLIP_CONTEXT"
+    assert d["zone2_grade"] == "A+"
+    assert d["zone2_zone_low"] == "4253.27900"
+    assert d["zone2_zone_high"] == "4275.79000"
+    assert d["zone2_core_low"] == "4254.41000"
+    assert d["zone2_core_high"] == "4275.79000"
+    assert d["zone2_execution_authority"] == "0"
+    assert d["zone2_active_thesis"] == "0"
+    assert d["wrong_side_hidden_count"] == "0"
+
+
+def test_non_invalidation_rejection_does_not_create_flip_context():
+    sell = _zone(
+        "PZ_H4H1_SELL_13", "SELL",
+        4308.199, 4316.871, 4310.97, 4315.74,
+        "ARMED|PROMPT", "A", "H4>H1", 200, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_NO_FLIPCTX",
+        generated_at=300,
+        selected_zone_id="PZ_H4H1_SELL_13",
+        zones=[sell],
+        execution_policy={
+            "active_thesis": {"locked": False},
+            "public_zone_map": {
+                "rejected_diagnostics": {
+                    "buy": {
+                        "strongest_rejected": {
+                            "direction": "BUY",
+                            "source_tf": "H4>H1",
+                            "source_ts": 100,
+                            "core_low": 4254.41,
+                            "core_high": 4275.79,
+                            "zone_low": 4253.279,
+                            "zone_high": 4275.79,
+                            "rejection_code": "TACTICAL_MAP_GEOMETRY_INVALID",
+                        }
+                    }
+                }
+            },
+        },
+    )
+
+    d = _kv(mt5_zone_render_text(a, current_mid=4235.18))
+    assert d["zone_count"] == "1"
+    assert d["zone1_id"] == "PZ_H4H1_SELL_13"
