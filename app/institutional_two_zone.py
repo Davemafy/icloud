@@ -542,22 +542,56 @@ def _dxy_support(direction: Direction, snapshot: MarketSnapshot) -> str:
     return "CONFLICT"
 
 
+def _stable_zone_id(candidate: PromptCandidate) -> str:
+    """Stable source identity for the same institutional source across reanalysis.
+
+    Candidate list indexes are analysis-local and can change as new historical
+    candidates appear. They must never manufacture a new publication identity for
+    an unchanged H4/H1 source.
+    """
+    tf = str(candidate.source_tf or "HTF").replace(">", "")
+    return f"PZ_{tf}_{candidate.direction.value}_{int(candidate.source_ts)}"
+
+
 def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, context: Direction, index: int) -> tuple[Zone | None, dict]:
     core_low, core_high = _normalize_core(candidate, snapshot)
     required = _required_liquidity(candidate.direction)
     attached = _select_liquidity(candidate, core_low, core_high, liq, snapshot)
+    source_ready_ts = int(candidate.source_ready_ts or candidate.source_ts)
     base_diag = {
         "direction": candidate.direction.value,
         "source_tf": candidate.source_tf,
         "source_method": candidate.method,
         "source_kind": candidate.source_kind,
         "source_ts": candidate.source_ts,
-        "source_ready_ts": int(candidate.source_ready_ts or candidate.source_ts),
+        "source_ready_ts": source_ready_ts,
         "core_low": round(core_low, 5),
         "core_high": round(core_high, 5),
         "core_width_points": round(_to_points(core_high - core_low, snapshot), 1),
         "required_liquidity": required,
     }
+
+    # Pre-analysis zoning is CLOSED H4/H1 evidence only. A displacement/FVG
+    # candidate whose confirming bar has not yet closed is visible research
+    # context at most; it cannot be published as today's execution map.
+    if source_ready_ts > int(snapshot.sent_at):
+        return None, {
+            **base_diag,
+            "zone_low": round(candidate.zone_low, 5),
+            "zone_high": round(candidate.zone_high, 5),
+            "touches": 0,
+            "attached_liquidity": "",
+            "distance_h1_atr": round(
+                _distance(snapshot.mid, candidate.zone_low, candidate.zone_high)
+                / max(float(snapshot.atr_h1 or atr(snapshot.xau_h1)), 1e-9),
+                3,
+            ),
+            "rejection_code": "SOURCE_EVIDENCE_NOT_CLOSED",
+            "rejection_reason": (
+                "The H4/H1 displacement evidence is not causally closed yet. "
+                "Master Sniper zones may only use completed HTF source evidence."
+            ),
+        }
 
     if attached is None:
         return None, {
@@ -665,7 +699,7 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     readiness = "ARMED" if grade in {Grade.A_PLUS, Grade.A, Grade.B_PLUS} else "WATCH"
 
     zone = Zone(
-        zone_id=f"PZ_{candidate.source_tf.replace('>','')}_{candidate.direction.value}_{index}",
+        zone_id=_stable_zone_id(candidate),
         original_direction=candidate.direction,
         flip_direction=flip,
         setup_type="REVERSAL" if countertrend else "CONTINUATION",
