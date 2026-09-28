@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.35"
-    assert manifest["data_bridge_version"] == "1.52"
+    assert manifest["release"] == "6.3.36"
+    assert manifest["data_bridge_version"] == "1.53"
     assert manifest["sequence_ea_version"] == "3.45"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -139,5 +139,8 @@ def test_professional_release_contract_is_self_consistent():
         "fail_closed_sniper_contract_gate",
         "sequence_342_parity_runtime",
         "databridge_151_sequence_342_truth",
+        "verified_master_sniper_history_window_sync",
+        "calendar_span_history_guard",
+        "dxy_extended_depth_confluence_only",
     }
     assert required.issubset(set(manifest["channel_features"]))
