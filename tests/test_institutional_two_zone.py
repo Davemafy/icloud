@@ -679,8 +679,12 @@ def test_multibar_h1_displacement_detects_actual_preimpulse_source():
     assert source.ready_ts == 34*3600
 
 
-def test_multibar_displacement_is_merged_into_master_sniper_source_pool():
+def test_multibar_displacement_is_merged_into_master_sniper_source_pool(monkeypatch):
     bars = _multibar_sell_history()
+    # Isolate the new path so overlap de-duplication with an equivalent legacy
+    # single-candle/sweep source cannot hide the integration assertion.
+    monkeypatch.setattr(policy, "displacement_origins", lambda *args, **kwargs: [])
+    monkeypatch.setattr(policy, "_sweep_rejection_sources", lambda *args, **kwargs: [])
 
     sources = policy._sources(bars, "H1")
 
