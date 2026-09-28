@@ -819,6 +819,8 @@ def _candidate_zone(candidate: PromptCandidate, snapshot: MarketSnapshot, liq, c
     conf = {"LIQUIDITY_IN_MARKED_ZONE", f"{required}_IN_MARKED_ZONE", "SOURCE_CANDLE_ANCHORED", "CORE_100_150_POINTS", "ENVELOPE_200_300_POINTS", "SWEEP_ROOM_RESERVED"}
     if "DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
         conf.add("INSTITUTIONAL_DISPLACEMENT")
+    if "MULTI_BAR_DISPLACEMENT_BOS_SOURCE" in candidate.source_kind:
+        conf.add("MULTI_BAR_HTF_DISPLACEMENT")
     if "LIQUIDITY_SWEEP_REJECTION" in candidate.source_kind:
         conf.add("LIQUIDITY_SWEEP_REJECTION")
     if candidate.source_tf == "H4>H1":
