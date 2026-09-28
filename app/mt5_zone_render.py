@@ -131,6 +131,76 @@ def _wrong_side_for_live_price(rec: dict[str, Any], current_mid: float | None) -
     return False
 
 
+def _flip_context_records(policy: dict[str, Any], generated_at: int) -> list[dict[str, Any]]:
+    """Render accepted-invalidated geometry as opposite-side context only.
+
+    The original zone has no execution authority after accepted M15 invalidation.
+    Its exact geometry is still useful as breaker/flip context, so expose it to
+    MT5 as an outline-only RESERVE record in the *flip* direction. This is visual
+    lifecycle truth only and can never restore original-zone authority.
+    """
+    public = policy.get("public_zone_map", {}) if isinstance(policy, dict) else {}
+    rejected = public.get("rejected_diagnostics", {}) if isinstance(public, dict) else {}
+    if not isinstance(rejected, dict):
+        return []
+
+    out: list[dict[str, Any]] = []
+    accepted_codes = {"M15_ACCEPTED_INVALIDATION", "HISTORICAL_M15_ACCEPTED_INVALIDATION"}
+    for side in ("sell", "buy"):
+        block = rejected.get(side, {})
+        if not isinstance(block, dict):
+            continue
+        diag = block.get("strongest_rejected")
+        if not isinstance(diag, dict):
+            continue
+        code = _value(diag.get("rejection_code")).upper()
+        if code not in accepted_codes:
+            continue
+
+        original = _value(diag.get("direction") or side).upper()
+        if original not in {"BUY", "SELL"}:
+            continue
+        flip = "SELL" if original == "BUY" else "BUY"
+
+        try:
+            zone_low = float(diag.get("zone_low") or 0.0)
+            zone_high = float(diag.get("zone_high") or 0.0)
+            core_low = float(diag.get("core_low") or 0.0)
+            core_high = float(diag.get("core_high") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if zone_low <= 0 or zone_high <= zone_low or core_low <= 0 or core_high <= core_low:
+            continue
+
+        source_tf = _value(diag.get("source_tf"))
+        source_ts = _int(diag.get("source_ts"))
+        invalidated_at = _int(diag.get("mitigation_invalidated_at"))
+        grade = _value(diag.get("current_execution_grade") or diag.get("structural_grade") or diag.get("grade"))
+        touches = _int(diag.get("touches"))
+        safe_tf = source_tf.replace(">", "")
+        zid = f"FLIPCTX_{safe_tf}_{original}_{source_ts or generated_at}"
+        out.append(
+            {
+                "id": zid,
+                "role": "RESERVE",
+                "direction": flip,
+                "state": "FLIP_CONTEXT",
+                "grade": grade,
+                "source_tf": source_tf,
+                "source_ts": source_ts,
+                "published_at": invalidated_at or generated_at,
+                "touches": touches,
+                "zone_low": zone_low,
+                "zone_high": zone_high,
+                "core_low": core_low,
+                "core_high": core_high,
+                "execution_authority": False,
+                "active_thesis": False,
+            }
+        )
+    return out
+
+
 def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     selected_zone_id = _value(getattr(a, "selected_zone_id", ""))
@@ -202,6 +272,12 @@ def mt5_zone_render_text(a: Any, current_mid: float | None = None) -> str:
 
     records = _primary_records(a, owner_zone_id, thesis_locked)
     generated_at = int(getattr(a, "generated_at", 0) or 0)
+
+    # Preserve accepted-invalidated geometry as breaker/flip context. It is
+    # deliberately inserted before normal reserves so a useful flip reference
+    # is not clipped by the four-zone visual cap.
+    records.extend(_flip_context_records(policy, generated_at))
+
     primary_ids = {r["id"] for r in records}
     for reserve in _secondary_records(policy):
         if int(reserve.get("published_at") or 0) <= 0:
