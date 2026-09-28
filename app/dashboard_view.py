@@ -141,6 +141,8 @@ _READINESS_CARD = (
 _READINESS_SPLIT = (
     '<div class="card"><h3>HTF setup quality</h3><div class="kpi" id="htfScore">0/6</div>'
     '<div class="muted" id="htfMeta">Location quality only — not entry readiness.</div></div>'
+    '<div class="card"><h3>Selected map state</h3><div class="kpi" id="mapState">NO ACTIVE MAP</div>'
+    '<div class="muted" id="mapStateMeta">Structural map lifecycle only. It never authorizes an entry.</div></div>'
     '<div class="card"><h3>Execution readiness</h3><div class="kpi" id="jScore">WAITING</div>'
     '<div class="muted" id="executionMeta">Thesis ownership is a directional lock; current M1 handoff plus the live Sequence micro-gate control new-entry timing.</div></div>'
     '<div class="card"><h3>Sequence execution gate <span class="pill paper">LIVE DEBUG</span></h3>'
@@ -425,6 +427,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
   function refreshReadinessSplit(){
     const htf=document.getElementById('htfScore');
     const htfMeta=document.getElementById('htfMeta');
+    const mapState=document.getElementById('mapState');
+    const mapStateMeta=document.getElementById('mapStateMeta');
     const exec=document.getElementById('jScore');
     const execMeta=document.getElementById('executionMeta');
     const seqGate=document.getElementById('sequenceGate');
@@ -450,6 +454,24 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       ? 'HTF location/source quality only. It does not authorize an entry.'
       : 'No execution zone is currently selected. Published HTF map zones may still remain visible above.';
 
+    if(mapState && mapStateMeta){
+      const rawReadiness=String(z.readiness||'');
+      const fallback=!hasZone
+        ? 'NO ACTIVE MAP'
+        : (rawReadiness==='ARMED'
+            ? String(z.direction||'')+' MAP VALID • RETEST PENDING'
+            : (rawReadiness==='INTERACTING'
+                ? String(z.direction||'')+' MAP CONTACTED • M1 CONFIRMATION PENDING'
+                : (rawReadiness==='M1_READY'
+                    ? String(z.direction||'')+' MAP CONTACTED • M1 HANDOFF ACTIVE'
+                    : String(z.direction||'')+' MAP '+(rawReadiness||'PLANNED'))));
+      mapState.textContent=String(j?.map_display_state||fallback).trim();
+      mapState.className='kpi '+(!hasZone?'warn':(rawReadiness==='M1_READY'||rawReadiness==='INTERACTING'?'blue':''));
+      mapStateMeta.textContent=hasZone
+        ? 'Structural map lifecycle only. A valid SELL/BUY map is not execution readiness; M1 handoff and the Sequence order gate remain separate.'
+        : 'No selected active map. Invalidated geometry may still remain visible as FLIP CONTEXT with zero original-direction authority.';
+    }
+
     const allKeys=Object.keys(checks);
     const allPassed=allKeys.reduce((n,k)=>n+(checks[k]===true?1:0),0);
     const checklist=allKeys.length ? ('Macro checks '+allPassed+'/'+allKeys.length+'. ') : '';
@@ -474,7 +496,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           : 'Live spread/snapshot safety is blocking execution before any M1 entry can be used.'
       );
     }else if(!m1){
-      state='WAITING FOR M1 CONFIRMATION';
+      state=String(z.readiness||'')==='ARMED' ? 'MAP VALID • NO ENTRY AUTHORITY' : 'WAITING FOR M1 CONFIRMATION';
       cls='warn';
       meta=checklist+(
         ownerMatch
