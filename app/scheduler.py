@@ -91,6 +91,7 @@ def scheduler_status() -> dict:
         "market_drift_latch": _market_drift_latch or None,
         "market_drift_reanalysis_h1_atr": float(getattr(SETTINGS, "market_drift_reanalysis_h1_atr", 2.0)),
         "market_drift_reanalysis_min_age_minutes": int(getattr(SETTINGS, "market_drift_reanalysis_min_age_minutes", 10)),
+        "market_drift_structural_cadence": "NEW_CLOSED_H1_ONLY",
         "last_snapshot_seen": _last_snapshot_seen or None,
     }
 
@@ -196,6 +197,18 @@ def _wrong_side_context_ids(snap) -> set[str]:
     return out
 
 
+def _latest_closed_h1_ts(snap) -> int:
+    """Latest causally closed H1 bar in the snapshot."""
+    sent_at = int(getattr(snap, "sent_at", 0) or 0)
+    closed = [
+        int(getattr(bar, "ts", 0) or 0)
+        for bar in list(getattr(snap, "xau_h1", []) or [])
+        if int(getattr(bar, "ts", 0) or 0) > 0
+        and int(getattr(bar, "ts", 0) or 0) + 3600 <= sent_at
+    ]
+    return max(closed, default=0)
+
+
 def _market_drift_refresh(snap, now_utc: int) -> dict:
     """Detect when an unowned selected map has become tactically remote.
 
@@ -259,16 +272,22 @@ def _market_drift_refresh(snap, now_utc: int) -> dict:
     if distance_atr < threshold:
         return {}
 
-    step = max(0.25, float(getattr(SETTINGS, "market_drift_reanalysis_step_h1_atr", 0.5)))
-    bucket = int((distance_atr - threshold) // step)
+    # H4/H1 zoning cannot legitimately change on every tick. Once remote, rerun
+    # the structural map at most once per newly closed H1 bar. M15/M1 execution
+    # monitoring remains continuous and independent.
+    closed_h1_ts = _latest_closed_h1_ts(snap)
+    if closed_h1_ts <= 0:
+        return {}
+
     return {
-        "signature": f"{selected_id}|{direction}|B{bucket}",
+        "signature": f"{selected_id}|{direction}|H1:{closed_h1_ts}",
         "zone_id": selected_id,
         "direction": direction,
         "distance_h1_atr": round(distance_atr, 3),
         "analysis_age_seconds": max(0, int(now_utc) - generated_at),
         "threshold_h1_atr": threshold,
-        "bucket": bucket,
+        "closed_h1_ts": closed_h1_ts,
+        "cadence": "NEW_CLOSED_H1_ONLY",
     }
 
 
