@@ -36,7 +36,7 @@ def test_watch_zone_is_not_promoted_when_no_actionable_selection():
     assert _event_status([], "", "") == "WAITING"
 
 
-def test_selected_armed_zone_reports_armed_not_planned():
+def test_selected_armed_zone_reports_map_valid_retest_pending():
     z = _zone()
     z.core_method = "ARMED|H1_INDEPENDENT_TACTICAL"
     a = Analysis(
@@ -49,18 +49,18 @@ def test_selected_armed_zone_reports_armed_not_planned():
     selected = _selected_zone(a)
     assert selected.zone_id == "Z1"
     assert _readiness_prefix(selected) == "ARMED"
-    assert _event_status([], selected.state.value, "ARMED") == "ARMED"
+    assert _event_status([], selected.state.value, "ARMED") == "MAP VALID • RETEST PENDING"
 
 
 def test_m1_ready_status_is_explicit():
     z = _zone()
     z.core_method = "M1_READY|H4H1_PRIMARY"
-    assert _event_status([], z.state.value, "M1_READY") == "M1 READY"
+    assert _event_status([], z.state.value, "M1_READY") == "M1 HANDOFF ACTIVE"
 
 
 def test_sequence_value_gate_overrides_macro_m1_ready_label():
     status = _sequence_reconciled_status(
-        "M1 READY",
+        "M1 HANDOFF ACTIVE",
         {
             "online": True,
             "authority": "LIQUIDITY_REVERSAL_HANDOFF",
