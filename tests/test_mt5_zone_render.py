@@ -226,6 +226,25 @@ def test_render_feed_uses_exact_geometry_publication_not_source_time():
     assert int(d["zone1_published_at"]) > int(d["zone1_source_ts"])
 
 
+def test_selected_m1_ready_zone_gets_visual_handoff_authority_without_thesis_lock():
+    sell = _zone(
+        "SELL_READY", "SELL",
+        4308.19, 4316.87, 4310.97, 4315.74,
+        "M1_READY|PROMPT", "A", "H4>H1", 200, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_READY",
+        generated_at=300,
+        selected_zone_id="SELL_READY",
+        zones=[sell],
+        execution_policy={"active_thesis": {"locked": False}},
+    )
+    d = _kv(mt5_zone_render_text(a, current_mid=4312.00))
+    assert d["zone1_state"] == "M1_READY"
+    assert d["zone1_execution_authority"] == "1"
+    assert d["zone1_active_thesis"] == "0"
+
+
 def test_live_renderer_hides_context_buy_once_price_is_below_zone():
     sell = _zone(
         "PZ_H1_SELL_16", "SELL",
