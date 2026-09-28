@@ -372,7 +372,7 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     # execution-relevance re-ranking. Since v6.5.20, registration/interaction alone
     # cannot acquire thesis ownership, so this cannot create an execution lock.
     if SETTINGS.paper_only:
-        register_analysis_zones(a)
+        register_analysis_zones(a, publish_exact_geometry=False)
     # PAPER/DEMO ONLY: after a confirmed directional expansion, a genuinely fresh
     # structural continuation source may replace a remote same-direction primary.
     # Touch/mitigation count is telemetry only and can never demote/delete a zone.
