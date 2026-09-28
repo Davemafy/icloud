@@ -208,15 +208,16 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
         zid = _value(getattr(z, "zone_id", ""))
         active_thesis = bool(thesis_locked and owner_zone_id and zid == owner_zone_id)
         readiness = _readiness(getattr(z, "core_method", ""), getattr(z, "state", ""))
-        # A selected HTF map is only a plan. Visual execution authority exists
-        # only after the selected zone reaches the current M1 handoff state.
-        # Acquired thesis ownership remains a separate lifecycle truth.
-        authority = active_thesis or (
+        # Keep three independent presentation truths separate:
+        # map selection, current M1 handoff, and acquired thesis ownership.
+        # Selection or M1 readiness alone must never masquerade as ownership.
+        m1_handoff = bool(
             not thesis_locked
             and bool(selected_zone_id)
             and zid == selected_zone_id
             and readiness == "M1_READY"
         )
+        authority = active_thesis
         out.append(
             {
                 "id": zid,
@@ -237,6 +238,7 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
                 "core_low": getattr(z, "core_low", 0.0),
                 "core_high": getattr(z, "core_high", 0.0),
                 "execution_authority": authority,
+                "m1_handoff": m1_handoff,
                 "active_thesis": active_thesis,
             }
         )
@@ -348,6 +350,7 @@ def mt5_zone_render_text(a: Any, current_mid: float | None = None) -> str:
                 f"{p}core_low={_num(rec.get('core_low'))}",
                 f"{p}core_high={_num(rec.get('core_high'))}",
                 f"{p}execution_authority={_bool01(rec.get('execution_authority'))}",
+                f"{p}m1_handoff={_bool01(rec.get('m1_handoff'))}",
                 f"{p}active_thesis={_bool01(rec.get('active_thesis'))}",
             ]
         )
