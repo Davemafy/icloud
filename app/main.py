@@ -586,14 +586,31 @@ def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     if any(any(k in n for k in ("MSS", "BOS", "DISPLACEMENT", "SWEEP")) for n in names):
         return "M1 CONFIRMING"
     if readiness == "M1_READY":
-        return "M1 READY"
+        return "M1 HANDOFF ACTIVE"
     if readiness == "INTERACTING":
-        return "INTERACTING"
+        return "ZONE CONTACT • M1 CONFIRMATION PENDING"
     if readiness == "ARMED":
-        return "ARMED"
+        return "MAP VALID • RETEST PENDING"
     if not zone_state:
         return "WAITING"
     return "PLANNED"
+
+
+def _map_display_state(z, readiness: str) -> str:
+    """Human-only map lifecycle label; never grants execution authority."""
+    if z is None:
+        return "NO ACTIVE MAP"
+    direction = str(getattr(getattr(z, "original_direction", None), "value", "") or "").upper()
+    prefix = f"{direction} " if direction else ""
+    if readiness == "M1_READY":
+        return f"{prefix}MAP CONTACTED • M1 HANDOFF ACTIVE"
+    if readiness == "INTERACTING":
+        return f"{prefix}MAP CONTACTED • M1 CONFIRMATION PENDING"
+    if readiness == "ARMED":
+        return f"{prefix}MAP VALID • RETEST PENDING"
+    if readiness == "WATCH":
+        return f"{prefix}MAP WATCH • NO ENTRY AUTHORITY"
+    return f"{prefix}MAP {readiness or 'PLANNED'}"
 
 
 def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
@@ -606,6 +623,7 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     status = str(base_status or "WAITING")
     seq = sequence_debug or {}
     online = bool(seq.get("online"))
+    macro_handoff_status = status in {"M1 READY", "M1 HANDOFF ACTIVE"}
     open_positions = int(seq.get("open_positions") or 0)
 
     # Fresh Sequence truth is authoritative for an actively managed campaign.
@@ -619,13 +637,13 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return status
 
     if not online:
-        return "SEQUENCE OFFLINE" if status == "M1 READY" else status
+        return "SEQUENCE OFFLINE" if macro_handoff_status else status
 
     parity = dict(seq.get("sniper_contract_parity") or {})
     parity_status = str(parity.get("status") or "")
     if status not in terminal and parity_status == "MISMATCH":
         return "ENTRY BLOCKED: SNIPER CONTRACT MISMATCH"
-    if status not in terminal and status == "M1 READY" and parity_status in {"UNVERIFIED", "OFFLINE"}:
+    if status not in terminal and macro_handoff_status and parity_status in {"UNVERIFIED", "OFFLINE"}:
         return "ENTRY BLOCKED: SNIPER CONTRACT UNVERIFIED"
 
     authority = str(seq.get("authority") or "NONE")
@@ -633,7 +651,7 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     reason = str(seq.get("gate_reason") or "").upper()
 
     if authority == "NONE":
-        return "WAITING FOR SEQUENCE AUTHORITY" if status == "M1 READY" else status
+        return "WAITING FOR SEQUENCE AUTHORITY" if macro_handoff_status else status
     if stage == "ORDER_SENT":
         return "ORDER SENT"
     if stage in {"ENTRY_CONFIRMATION", "REENTRY_CONFIRMATION", "HANDOFF_CONFIRMATION", "FLIP_CONFIRMATION"}:
@@ -1008,6 +1026,7 @@ def _journal_snapshot():
         } if s else None,
         "checks": checks,
         "readiness_score": f"{score}/{len(checks)}",
+        "map_display_state": _map_display_state(z, readiness),
         "macro_status": macro_status,
         "status": reconciled_status,
         "events": current_events,
