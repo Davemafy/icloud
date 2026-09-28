@@ -222,6 +222,7 @@ def test_render_feed_uses_exact_geometry_publication_not_source_time():
     d = _kv(mt5_zone_render_text(a))
     assert d["zone1_source_ts"] == "1790190000"
     assert d["zone1_published_at"] == "1790210000"
+    assert d["zone1_execution_authority"] == "0"
     assert int(d["zone1_published_at"]) > int(d["zone1_source_ts"])
 
 
@@ -250,6 +251,7 @@ def test_live_renderer_hides_context_buy_once_price_is_below_zone():
     assert d["wrong_side_hidden_ids"] == "PZ_H1_BUY_7"
     assert d["zone_count"] == "1"
     assert d["zone1_id"] == "PZ_H1_SELL_16"
+    assert d["zone1_execution_authority"] == "0"
 
 
 def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_zone(monkeypatch):
