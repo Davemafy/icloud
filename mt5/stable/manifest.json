@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.35",
+  "release": "6.3.36",
   "repository": "Davemafy/icloud",
-  "ref": "fe5c203feac97f5233c5ae34f0d2842f3b8a5a7b",
-  "data_bridge_version": "1.52",
+  "ref": "79a85cac59db290c1681cc506cc1c5250ea5f681",
+  "data_bridge_version": "1.53",
   "sequence_ea_version": "3.45",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -174,16 +174,20 @@
     "active_owner_supersedes_dormant_accepted_flip",
     "next_open_owner_objective_runway_guard",
     "finalized_mt5_plan_dashboard_truth",
-    "active_owner_priority_before_flip_authority_mutation"
+    "active_owner_priority_before_flip_authority_mutation",
+    "master_sniper_xau_history_contract",
+    "dxy_extended_history_confluence_only",
+    "history_window_ingress_fail_closed",
+    "databridge_history_preflight_and_prime"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_52_SafetyPlanSync.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_53_HistoryWindowSync.mq5",
       "requires_reload": true,
-      "sha256": "c0e9a8ec798569998034b117e26581aefd23a497e07213665b2b5284ba4adb76"
+      "sha256": "0328d0034996374c2c2a68a1c57c840baa439a084bf0eddf8741908f0d3bb4e3"
     },
     {
       "role": "sequence_ea",
@@ -197,11 +201,11 @@
   "support_files": [
     {
       "role": "data_bridge_core",
-      "name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "target": "Include\\TradeZoneCore",
-      "target_name": "InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5",
-      "sha256": "990cc537380baa9df89551a882a31a124a3177693d694be367ff521526a8d8e9"
+      "name": "InstitutionalSMC_DataBridge_v1_32_XAU_DXY_Journal.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_32_XAU_DXY_Journal.mq5",
+      "target": "Include\\\\TradeZoneCore",
+      "target_name": "InstitutionalSMC_DataBridge_v1_32_XAU_DXY_Journal.mq5",
+      "sha256": "94dbd3131ff8c3b77f8175c7b9ed5607f344f1fd0b1d1fab7aeb304593b56bb8"
     },
     {
       "role": "zone_renderer",
