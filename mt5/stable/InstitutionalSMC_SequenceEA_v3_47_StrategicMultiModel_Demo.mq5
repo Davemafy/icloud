@@ -1449,6 +1449,10 @@ bool TZ47_TryAlternativeReentry(MqlRates &r[],double a,bool buy,string localRegi
 
 string TZ47_SetupName(string tag)
 {
+   if(tag=="P0")return "PRIMARY";
+   if(tag=="F0")return "ZONE_FLIP";
+   if(tag=="FR1")return "FLIP_REENTRY_1";
+   if(tag=="FR2")return "FLIP_REENTRY_2";
    if(tag=="MP0")return "MOMENTUM_PULLBACK";
    if(tag=="VW0")return "VWAP_PROXY_RECLAIM";
    if(tag=="OR0")return "OPENING_RANGE_RETEST";
