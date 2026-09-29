@@ -15,6 +15,39 @@ OWNER_MIRROR_CONTRACT = "MT5_EXECUTION_OWNER_MIRROR_V1"
 OWNER_MIRROR_TTL_SECONDS = 24 * 3600
 
 
+def _effective_mirror_targets(owner: dict[str, Any]) -> tuple[list[float], list[int]]:
+    """Project a lifecycle cap into existing MT5 target fields without changing the frozen payload."""
+    direction = str(owner.get("direction") or "")
+    cap = float(owner.get("ownership_objective_cap") or 0.0)
+    cap_hit = int(owner.get("ownership_objective_cap_reached_at") or 0)
+    frozen = [
+        (float(owner.get("target1") or 0.0), int(owner.get("target1_hit_at") or 0)),
+        (float(owner.get("target2") or 0.0), int(owner.get("target2_hit_at") or 0)),
+        (float(owner.get("target3") or 0.0), int(owner.get("target3_hit_at") or 0)),
+    ]
+    if cap <= 0:
+        return [x[0] for x in frozen], [x[1] for x in frozen]
+
+    effective: list[tuple[float, int]] = []
+    for price, hit_at in frozen:
+        if price <= 0:
+            continue
+        if direction == "BUY" and price > cap + 1e-9:
+            continue
+        if direction == "SELL" and price < cap - 1e-9:
+            continue
+        effective.append((price, hit_at))
+
+    if not any(abs(price - cap) <= 1e-9 for price, _ in effective):
+        effective.append((cap, cap_hit))
+    anchor_price = float(owner.get("ownership_anchor_price") or 0.0)
+    effective.sort(key=lambda item: abs(item[0] - anchor_price) if anchor_price > 0 else item[0])
+    effective = effective[:3]
+    values = [x[0] for x in effective] + [0.0] * 3
+    hits = [x[1] for x in effective] + [0] * 3
+    return values[:3], hits[:3]
+
+
 def owner_plan_text(now: int) -> str:
     """Expose the active owner's frozen lifecycle to MT5 so MT5 can mirror it locally."""
     owner = active_owner_snapshot(now)
@@ -23,6 +56,9 @@ def owner_plan_text(now: int) -> str:
             "owner_mirror_contract=" + OWNER_MIRROR_CONTRACT + "\n"
             "owner_mirror_active=0\n"
         )
+
+    effective_targets, effective_hits = _effective_mirror_targets(owner)
+    cap_active = bool(float(owner.get("ownership_objective_cap") or 0.0) > 0)
 
     fields = {
         "owner_mirror_contract": OWNER_MIRROR_CONTRACT,
@@ -41,14 +77,20 @@ def owner_plan_text(now: int) -> str:
         "owner_mirror_core_high": str(float(owner.get("core_high") or 0.0)),
         "owner_mirror_zone_low": str(float(owner.get("zone_low") or 0.0)),
         "owner_mirror_zone_high": str(float(owner.get("zone_high") or 0.0)),
-        "owner_mirror_target1": str(float(owner.get("target1") or 0.0)),
-        "owner_mirror_target2": str(float(owner.get("target2") or 0.0)),
-        "owner_mirror_target3": str(float(owner.get("target3") or 0.0)),
-        "owner_mirror_target1_hit_at": str(int(owner.get("target1_hit_at") or 0)),
-        "owner_mirror_target2_hit_at": str(int(owner.get("target2_hit_at") or 0)),
-        "owner_mirror_target3_hit_at": str(int(owner.get("target3_hit_at") or 0)),
+        "owner_mirror_target1": str(float(effective_targets[0])),
+        "owner_mirror_target2": str(float(effective_targets[1])),
+        "owner_mirror_target3": str(float(effective_targets[2])),
+        "owner_mirror_target1_hit_at": str(int(effective_hits[0])),
+        "owner_mirror_target2_hit_at": str(int(effective_hits[1])),
+        "owner_mirror_target3_hit_at": str(int(effective_hits[2])),
         "owner_mirror_reaction_confirmed_at": str(int(owner.get("reaction_confirmed_at") or 0)),
-        "owner_mirror_best_price": str(float(owner.get("best_price") or 0.0)),
+        # A cap may be established after an earlier favourable excursion. Do not
+        # let that pre-cap best price make MT5 mirror recovery falsely conclude
+        # that the newly-created cap had already been reached.
+        "owner_mirror_best_price": str(
+            0.0 if cap_active and not int(owner.get("ownership_objective_cap_reached_at") or 0)
+            else float(owner.get("best_price") or 0.0)
+        ),
         "owner_mirror_zone_payload_b64": base64.urlsafe_b64encode(
             str(owner.get("ownership_zone_payload") or "").encode("utf-8")
         ).decode("ascii").rstrip("="),
