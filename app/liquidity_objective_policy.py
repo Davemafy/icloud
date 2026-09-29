@@ -145,6 +145,20 @@ def _opposing_cap(zone: Zone, analysis: Analysis, snapshot: MarketSnapshot) -> t
     }
 
 
+def opposing_zone_front_run_cap(
+    zone: Zone,
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+) -> tuple[float | None, dict[str, Any] | None]:
+    """Public read-only wrapper for owner-target reconciliation.
+
+    The ordinary objective builder and an already-acquired thesis must use the
+    exact same opposing-zone front-run geometry. This function never changes a
+    zone, target, lifecycle row, or execution authority.
+    """
+    return _opposing_cap(zone, analysis, snapshot)
+
+
 def _append_distinct(values: list[dict[str, Any]], item: dict[str, Any], snapshot: MarketSnapshot) -> None:
     tolerance = max(_point(snapshot) * 10.0, 0.10)
     price = float(item["price"])
