@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.38"
-    assert manifest["data_bridge_version"] == "1.55"
-    assert manifest["sequence_ea_version"] == "3.45"
+    assert manifest["release"] == "6.3.39"
+    assert manifest["data_bridge_version"] == "1.56"
+    assert manifest["sequence_ea_version"] == "3.46"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_46_ZoneDistalStop_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -158,5 +158,8 @@ def test_professional_release_contract_is_self_consistent():
         "canonical_primary_map_count",
         "mt5_watch_only_reason_parity",
         "human_readable_zone_lifecycle_labels",
+        "first_entry_zone_distal_stop_floor",
+        "zone_stop_spread_atr_broker_buffer",
+        "zone_stop_min_rr_fail_closed",
     }
     assert required.issubset(set(manifest["channel_features"]))
