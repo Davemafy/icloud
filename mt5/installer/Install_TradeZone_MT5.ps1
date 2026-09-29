@@ -120,17 +120,19 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
 
   $p=Start-Process -FilePath $Meta -ArgumentList @("/compile:$Src","/log:$log") -PassThru
   $p.WaitForExit()
-  Start-Sleep -Milliseconds 1200
 
+  # A running MetaEditor can delegate the command and release the launcher
+  # process before compilation/log flushing has actually finished. Poll the
+  # unique temp log for a real compile summary instead of racing the file handle.
   $txt=''
-  if(Test-Path $log){
-    # MetaEditor can release the process handle a fraction before the log file
-    # becomes readable. Retry briefly instead of treating that as install failure.
-    for($try=0;$try-lt10;$try++){
-      try{$txt=Get-Content $log -Raw -ErrorAction Stop;break}
-      catch{Start-Sleep -Milliseconds 300}
+  $deadline=(Get-Date).AddSeconds(20)
+  do{
+    if(Test-Path $log){
+      try{$txt=Get-Content $log -Raw -ErrorAction Stop}catch{$txt=''}
     }
-  }
+    if((Test-Path $ex5) -and $txt -match '\d+ errors,\s*\d+ warnings'){break}
+    Start-Sleep -Milliseconds 300
+  }while((Get-Date)-lt$deadline)
 
   if(!(Test-Path $ex5)){
     if($txt){
@@ -140,7 +142,10 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
     }
     throw "Compilation failed for $(Split-Path $Src -Leaf)."
   }
-  if($txt -and $txt -notmatch '0 errors,\s*0 warnings'){
+  if([string]::IsNullOrWhiteSpace($txt)){
+    throw "MetaEditor compile log was unavailable for $(Split-Path $Src -Leaf)."
+  }
+  if($txt -notmatch '0 errors,\s*0 warnings'){
     Write-Host ''
     Write-Host 'MetaEditor compile log:' -ForegroundColor Yellow
     Write-Host $txt -ForegroundColor DarkYellow
@@ -166,11 +171,12 @@ function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
       $name -like 'InstitutionalSMC_SequenceEA_*.ex5' -or
       $name -like '*_compile.log'
     )
-    if(!$managed -or $keep.ContainsKey($low)){return}
-    try{
-      Remove-Item $_.FullName -Force -ErrorAction Stop
-    }catch{
-      Write-Host "  Cleanup deferred (file in use): $name" -ForegroundColor DarkYellow
+    if($managed -and !$keep.ContainsKey($low)){
+      try{
+        Remove-Item $_.FullName -Force -ErrorAction Stop
+      }catch{
+        Write-Host "  Cleanup deferred (file in use): $name" -ForegroundColor DarkYellow
+      }
     }
   }
 }
