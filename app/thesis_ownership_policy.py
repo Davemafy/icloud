@@ -7,6 +7,7 @@ from .db import audit, connect, latest_heartbeats
 from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 from .liquidity_reversal_handoff import INTERZONE_TRANSIT_REASON, interzone_transit_guard
+from .liquidity_objective_policy import opposing_zone_front_run_cap
 from .risk_matrix import execution_grade_eligible
 
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
@@ -19,6 +20,7 @@ OWNER_MIN_BUFFER_POINTS = 5.0
 SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS = 45
 LEGACY_OWNER_RELEASE_REASON = "CONTEXT_GRADE_V2_INELIGIBLE_OWNER_FLAT"
 INTERZONE_OWNER_RELEASE_REASON = "PREZONE_LIQUIDITY_OWNER_RELEASED_FOR_INTERZONE_TRANSIT"
+OWNER_OBJECTIVE_CAP_REASON = "ACTIVE_OPPOSING_PRIMARY_FRONT_RUN"
 
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
@@ -26,8 +28,11 @@ _AI_RULE = """
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. Zone interaction alone
     never blocks the opposite side. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
-    thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
-    completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
+    thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
+    completes. For a flat owner only, a newly qualified active opposing primary may tighten that effective
+    destination to the canonical front-run cap while the frozen owner targets remain audit truth. This cap
+    never mutates an open position and cannot be completed from price history that predates the cap.
+    A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
     from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
     dealing-range -> value/PD-array confirmation. If an acquired owner disappears from the current map,
     fail closed until lifecycle release or safe requalification.
@@ -243,7 +248,10 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
                    target2_hit_at,target3_hit_at,objective_complete_at,invalidated_at,
                    best_price,mfe_price,last_reason,first_seen_at,last_seen_at,
                    ownership_acquired_at,ownership_authority,ownership_analysis_id,
-                   ownership_anchor_price,ownership_zone_id,ownership_zone_payload
+                   ownership_anchor_price,ownership_zone_id,ownership_zone_payload,
+                   ownership_objective_cap,ownership_objective_cap_zone_id,
+                   ownership_objective_cap_set_at,ownership_objective_cap_reached_at,
+                   ownership_objective_cap_reason
             FROM zone_reactions
             WHERE first_seen_at>=?
               AND ownership_acquired_at>0
@@ -521,6 +529,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "release_conditions": [
             "M15_ACCEPTED_INVALIDATION",
             "DEEPEST_PLANNED_LIQUIDITY_OBJECTIVE_REACHED",
+            "OPPOSING_ZONE_OWNER_OBJECTIVE_CAP_REACHED",
         ],
         "fresh_m1_confirmation_required": True,
         "no_chase": True,
@@ -530,6 +539,12 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "target3": float(owner.get("target3") or 0.0),
         "best_price": float(owner.get("best_price") or 0.0),
         "mfe_price": float(owner.get("mfe_price") or 0.0),
+        "ownership_objective_cap": float(owner.get("ownership_objective_cap") or 0.0),
+        "ownership_objective_cap_zone_id": str(owner.get("ownership_objective_cap_zone_id") or ""),
+        "ownership_objective_cap_set_at": int(owner.get("ownership_objective_cap_set_at") or 0),
+        "ownership_objective_cap_reached_at": int(owner.get("ownership_objective_cap_reached_at") or 0),
+        "ownership_objective_cap_reason": str(owner.get("ownership_objective_cap_reason") or ""),
+        "frozen_owner_targets_preserved": True,
     }
 
 
@@ -689,6 +704,198 @@ def acquire_execution_ownership(
     return owner
 
 
+def _owner_live_targets(owner: dict[str, Any]) -> list[float]:
+    """Return frozen owner targets that were genuinely ahead at ownership."""
+    direction = str(owner.get("direction") or "")
+    anchor = float(owner.get("ownership_anchor_price") or 0.0)
+    values = [
+        float(owner.get("target1") or 0.0),
+        float(owner.get("target2") or 0.0),
+        float(owner.get("target3") or 0.0),
+    ]
+    if anchor <= 0:
+        return [x for x in values if x > 0]
+    if direction == Direction.BUY.value:
+        return [x for x in values if x > anchor]
+    if direction == Direction.SELL.value:
+        return [x for x in values if 0 < x < anchor]
+    return []
+
+
+def _cap_is_profit_side(direction: str, cap: float, anchor: float, snapshot: MarketSnapshot) -> bool:
+    if cap <= 0 or anchor <= 0:
+        return False
+    point = max(abs(float(snapshot.point or 0.01)), 1e-9)
+    gap = max(point * 5.0, point * float(snapshot.spread_points or 0.0) * 1.50)
+    if direction == Direction.BUY.value:
+        return cap > anchor + gap
+    if direction == Direction.SELL.value:
+        return cap < anchor - gap
+    return False
+
+
+def _cap_is_stricter(direction: str, candidate: float, current: float) -> bool:
+    """True when candidate is closer to the owner anchor in the profit direction."""
+    if current <= 0:
+        return True
+    if direction == Direction.BUY.value:
+        return candidate < current - 1e-9
+    if direction == Direction.SELL.value:
+        return candidate > current + 1e-9
+    return False
+
+
+def _cap_blocks_deepest(direction: str, cap: float, deepest: float) -> bool:
+    if cap <= 0 or deepest <= 0:
+        return False
+    if direction == Direction.BUY.value:
+        return cap < deepest - 1e-9
+    if direction == Direction.SELL.value:
+        return cap > deepest + 1e-9
+    return False
+
+
+def _reconcile_owner_objective_cap(
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+    owner: dict[str, Any],
+    owner_zone: Zone | None,
+) -> None:
+    """Tighten a flat owner's lifecycle destination in front of a new opposite primary.
+
+    The frozen owner zone and original target ladder remain immutable audit truth.
+    This adds a one-way lifecycle/execution cap only when Sequence proves there are
+    no open positions. It never opens, closes, flips, or modifies a live position.
+    """
+    policy = dict(analysis.execution_policy or {})
+    existing = float(owner.get("ownership_objective_cap") or 0.0)
+    existing_zone_id = str(owner.get("ownership_objective_cap_zone_id") or "")
+    existing_set_at = int(owner.get("ownership_objective_cap_set_at") or 0)
+
+    if owner_zone is None:
+        policy["owner_objective_cap_reconciliation"] = {
+            "state": "OWNER_ZONE_UNAVAILABLE",
+            "active_cap": existing,
+            "opposing_zone_id": existing_zone_id,
+            "frozen_targets_preserved": True,
+            "live_position_targets_mutated": False,
+        }
+        analysis.execution_policy = policy
+        return
+
+    candidate, cap_meta = opposing_zone_front_run_cap(owner_zone, analysis, snapshot)
+    if candidate is None or cap_meta is None:
+        policy["owner_objective_cap_reconciliation"] = {
+            "state": "ACTIVE_CAP_PRESERVED" if existing > 0 else "NO_OPPOSING_CAP_REQUIRED",
+            "active_cap": existing,
+            "opposing_zone_id": existing_zone_id,
+            "frozen_targets_preserved": True,
+            "live_position_targets_mutated": False,
+        }
+        analysis.execution_policy = policy
+        return
+
+    direction = str(owner.get("direction") or owner_zone.original_direction.value)
+    anchor = float(owner.get("ownership_anchor_price") or 0.0)
+    live_targets = _owner_live_targets(owner)
+    deepest = live_targets[-1] if live_targets else 0.0
+    proposed = float(candidate)
+
+    eligible = bool(
+        deepest > 0
+        and _cap_is_profit_side(direction, proposed, anchor, snapshot)
+        and _cap_blocks_deepest(direction, proposed, deepest)
+        and _cap_is_stricter(direction, proposed, existing)
+    )
+    if not eligible:
+        policy["owner_objective_cap_reconciliation"] = {
+            "state": "ACTIVE_CAP_PRESERVED" if existing > 0 else "NO_STRICTER_CAP_REQUIRED",
+            "active_cap": existing,
+            "opposing_zone_id": existing_zone_id,
+            "candidate_cap": round(proposed, 5),
+            "candidate_zone_id": str(cap_meta.get("zone_id") or ""),
+            "frozen_deepest_target": round(deepest, 5),
+            "frozen_targets_preserved": True,
+            "live_position_targets_mutated": False,
+        }
+        analysis.execution_policy = policy
+        return
+
+    sequence_fresh, open_positions = _sequence_position_truth(int(snapshot.sent_at))
+    if not sequence_fresh or open_positions > 0:
+        policy["owner_objective_cap_reconciliation"] = {
+            "state": "DEFERRED_OPEN_POSITIONS" if open_positions > 0 else "DEFERRED_SEQUENCE_TRUTH_UNAVAILABLE",
+            "active_cap": existing,
+            "candidate_cap": round(proposed, 5),
+            "candidate_zone_id": str(cap_meta.get("zone_id") or ""),
+            "frozen_deepest_target": round(deepest, 5),
+            "sequence_fresh": sequence_fresh,
+            "open_positions": open_positions,
+            "frozen_targets_preserved": True,
+            "live_position_targets_mutated": False,
+        }
+        analysis.execution_policy = policy
+        return
+
+    key = str(owner.get("reaction_key") or "")
+    if not key:
+        return
+
+    now = int(snapshot.sent_at)
+    opposing_zone_id = str(cap_meta.get("zone_id") or "")
+    with connect() as db:
+        cur = db.execute(
+            """
+            UPDATE zone_reactions
+            SET ownership_objective_cap=?,
+                ownership_objective_cap_zone_id=?,
+                ownership_objective_cap_set_at=?,
+                ownership_objective_cap_reached_at=0,
+                ownership_objective_cap_reason=?
+            WHERE reaction_key=? AND ownership_acquired_at>0
+              AND invalidated_at=0 AND objective_complete_at=0
+            """,
+            (proposed, opposing_zone_id, now, OWNER_OBJECTIVE_CAP_REASON, key),
+        )
+    if cur.rowcount <= 0:
+        return
+
+    owner["ownership_objective_cap"] = proposed
+    owner["ownership_objective_cap_zone_id"] = opposing_zone_id
+    owner["ownership_objective_cap_set_at"] = now
+    owner["ownership_objective_cap_reached_at"] = 0
+    owner["ownership_objective_cap_reason"] = OWNER_OBJECTIVE_CAP_REASON
+
+    policy = dict(analysis.execution_policy or {})
+    policy["active_thesis"] = _owner_meta(owner, owner_zone)
+    policy["owner_objective_cap_reconciliation"] = {
+        "state": "APPLIED",
+        "active_cap": round(proposed, 5),
+        "opposing_zone_id": opposing_zone_id,
+        "frozen_deepest_target": round(deepest, 5),
+        "previous_cap": round(existing, 5) if existing > 0 else 0.0,
+        "previous_cap_set_at": existing_set_at,
+        "sequence_fresh": True,
+        "open_positions": 0,
+        "frozen_targets_preserved": True,
+        "live_position_targets_mutated": False,
+        "fresh_m1_confirmation_required": True,
+        "release_only_after_cap_reached_or_normal_invalidation": True,
+    }
+    analysis.execution_policy = policy
+    audit(
+        now,
+        "thesis.owner_objective_cap.applied",
+        f"reaction_key={key} direction={direction} cap={proposed:.5f} "
+        f"opposing_zone={opposing_zone_id} frozen_deepest={deepest:.5f}",
+    )
+    analysis.trader_brief += (
+        f" Owner objective safety cap={proposed:.2f} in front of active opposing "
+        f"{str(cap_meta.get('zone_side') or '')} zone {opposing_zone_id}; frozen target "
+        f"{deepest:.2f} remains audit truth. No live position target was changed."
+    )
+
+
 def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
     """Give a previously acquired live thesis precedence over newly ranked opposite zones."""
     if not SETTINGS.paper_only:
@@ -734,6 +941,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
 
     policy["active_thesis"] = _owner_meta(owner, owner_zone)
     analysis.execution_policy = policy
+    _reconcile_owner_objective_cap(analysis, snapshot, owner, owner_zone)
 
     if owner_zone is None:
         analysis.selected_zone_id = ""
@@ -758,7 +966,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         analysis.trader_brief += (
             f" Active acquired thesis lock={direction} ({status}) on {owner_zone.zone_id}; "
             f"newly ranked {previous_selected} remains map/context only and has no M1 authority until "
-            "the acquired thesis is invalidated or completes its deepest liquidity objective."
+            "the acquired thesis is invalidated or completes its deepest effective liquidity objective."
         )
     else:
         analysis.trader_brief += (

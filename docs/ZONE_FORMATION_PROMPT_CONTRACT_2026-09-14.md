@@ -192,6 +192,9 @@ Target hierarchy:
 3. TP3 = when a valid opposing primary zone exists, front-run its proximal envelope edge with a small spread/M15-ATR buffer. That opposing zone is the natural destination of the current move.
 4. Do not automatically target through a still-valid opposing institutional zone. A runner beyond it requires a fresh analysis after M15 accepted invalidation/requalification of that opposing area.
 5. If there are fewer valid structural objectives, leave unused targets empty rather than inventing prices.
+6. If an already-acquired thesis is flat and a newly qualified active opposing primary appears before its frozen deepest objective, the owner may receive a one-way lifecycle objective cap at the same canonical opposing-zone front-run price. This cap is permitted only when a fresh Sequence heartbeat proves zero open positions.
+7. The cap never rewrites the frozen ownership-zone payload or original objective history, never moves an objective farther away, and never changes a live position target. If positions are open or Sequence position truth is unavailable, reconciliation is deferred.
+8. A newly established owner cap cannot be claimed from pre-cap price history. Only quote/bar evidence at or after the cap-set timestamp may complete it. Reaching the cap completes/releases the owner thesis; it does not grant the opposing side an instant entry.
 
 Stop logic remains liquidity/structure based:
 
@@ -219,6 +222,7 @@ Lifecycle:
 - Once reaction is confirmed, later primary-map re-selection must not erase or rewrite that fact.
 - Target hits and maximum favourable excursion remain attached to that institutional source in persistent storage.
 - If the deepest planned liquidity objective is reached, status becomes `OBJECTIVE_COMPLETE`.
+- For a flat acquired owner with a valid one-way opposing-zone objective cap, reaching that post-cap destination also becomes `OBJECTIVE_COMPLETE` while the frozen original ladder remains audit truth.
 - If closed-M15 accepted invalidation occurs before a confirmed reaction, status becomes `INVALIDATED`.
 - If accepted invalidation occurs only after a valid reaction, history becomes `INVALIDATED_AFTER_REACTION`; the prior successful reaction remains preserved.
 - A historical reaction record is observation/journal truth only. It grants no automatic execution authority to an old zone.
@@ -256,4 +260,4 @@ authority.
 
 ## Future-change rule
 
-When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, or allows a target on the wrong side of the actual candidate entry.

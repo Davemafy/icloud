@@ -47,6 +47,35 @@ def _zone_note_int(zone: Any, prefix: str, default: int = 0) -> int:
     return default
 
 
+def _effective_thesis_targets(thesis: dict[str, Any]) -> list[float]:
+    direction = _value(thesis.get("direction")).upper()
+    try:
+        cap = float(thesis.get("ownership_objective_cap") or 0.0)
+    except (TypeError, ValueError):
+        cap = 0.0
+    values: list[float] = []
+    for key in ("target1", "target2", "target3"):
+        try:
+            target = float(thesis.get(key) or 0.0)
+        except (TypeError, ValueError):
+            target = 0.0
+        if target <= 0:
+            continue
+        if cap > 0 and direction == "BUY" and target > cap + 1e-9:
+            continue
+        if cap > 0 and direction == "SELL" and target < cap - 1e-9:
+            continue
+        values.append(target)
+    if cap > 0 and not any(abs(x - cap) <= 1e-9 for x in values):
+        values.append(cap)
+    try:
+        anchor_price = float(thesis.get("ownership_anchor_price") or 0.0)
+    except (TypeError, ValueError):
+        anchor_price = 0.0
+    values.sort(key=lambda price: abs(price - anchor_price) if anchor_price > 0 else price)
+    return (values + [0.0, 0.0, 0.0])[:3]
+
+
 def _next_objective(thesis: dict[str, Any]) -> float:
     direction = _value(thesis.get("direction")).upper()
     try:
@@ -54,6 +83,7 @@ def _next_objective(thesis: dict[str, Any]) -> float:
     except (TypeError, ValueError):
         best = 0.0
 
+    next_frozen = 0.0
     for key in ("target1", "target2", "target3"):
         try:
             target = float(thesis.get(key) or 0.0)
@@ -69,8 +99,23 @@ def _next_objective(thesis: dict[str, Any]) -> float:
             )
         )
         if not reached:
-            return target
-    return 0.0
+            next_frozen = target
+            break
+
+    try:
+        cap = float(thesis.get("ownership_objective_cap") or 0.0)
+    except (TypeError, ValueError):
+        cap = 0.0
+    cap_reached = bool(int(thesis.get("ownership_objective_cap_reached_at") or 0))
+
+    if cap > 0 and not cap_reached:
+        if next_frozen <= 0:
+            return cap
+        if direction == "BUY" and cap < next_frozen:
+            return cap
+        if direction == "SELL" and cap > next_frozen:
+            return cap
+    return next_frozen
 
 
 def _secondary_records(policy: dict[str, Any]) -> list[dict[str, Any]]:
@@ -316,6 +361,8 @@ def mt5_zone_render_text(a: Any, current_mid: float | None = None) -> str:
     # Maximum intended public map is 2 primaries + 2 reserves.
     records = records[:4]
 
+    effective_targets = _effective_thesis_targets(thesis)
+
     lines = [
         "protocol=2",
         f"analysis_id={_value(getattr(a, 'analysis_id', ''))}",
@@ -334,9 +381,9 @@ def mt5_zone_render_text(a: Any, current_mid: float | None = None) -> str:
         f"active_thesis_no_chase={_bool01(thesis.get('no_chase', False))}",
         f"active_thesis_fresh_m1_confirmation_required={_bool01(thesis.get('fresh_m1_confirmation_required', False))}",
         f"active_thesis_best_price={_num(thesis.get('best_price', 0.0))}",
-        f"active_thesis_target1={_num(thesis.get('target1', 0.0))}",
-        f"active_thesis_target2={_num(thesis.get('target2', 0.0))}",
-        f"active_thesis_target3={_num(thesis.get('target3', 0.0))}",
+        f"active_thesis_target1={_num(effective_targets[0])}",
+        f"active_thesis_target2={_num(effective_targets[1])}",
+        f"active_thesis_target3={_num(effective_targets[2])}",
         f"active_thesis_next_objective={_num(_next_objective(thesis))}",
     ]
 
