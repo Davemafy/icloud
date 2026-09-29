@@ -22,7 +22,7 @@ def test_professional_release_contract_is_self_consistent():
     assert manifest["sequence_ea_version"] == "3.46"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_56_ZoneStopTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
