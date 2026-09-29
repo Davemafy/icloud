@@ -187,3 +187,21 @@ def test_validation_ledger_copy_explains_canonical_sample_deduplication():
     cleaned = compact_dashboard_html('<h2>Live trading journal</h2></body>')
     assert "Canonical source/core samples" in cleaned
     assert "Reanalysis of the same institutional source/core remains one research sample" in cleaned
+
+
+def test_main_map_display_separates_sticky_owner_from_current_m1_handoff():
+    from types import SimpleNamespace
+    from app import main
+
+    zone = SimpleNamespace(
+        zone_id="BUY_OWNER",
+        original_direction=SimpleNamespace(value="BUY"),
+    )
+    thesis = {
+        "locked": True,
+        "owner_zone_id": "BUY_OWNER",
+        "fresh_m1_confirmation_required": True,
+    }
+
+    assert main._map_display_state(zone, "M1_READY", thesis) == "BUY THESIS OWNER ACTIVE • FRESH M1 REQUIRED"
+    assert main._map_display_state(zone, "M1_READY", {"locked": False}) == "BUY MAP CONTACTED • M1 HANDOFF ACTIVE"
