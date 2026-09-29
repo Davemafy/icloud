@@ -76,18 +76,20 @@ _VALIDATION_LEDGER_SCRIPT = r"""
       setText('vLedgerExecuted',summary.executed_publications??0);
       const rate=document.getElementById('vLedgerReactionRate');
       if(rate){
+        const other=Number(summary.reaction_confirmed_without_live_core_contact||0);
         rate.textContent=summary.reaction_rate_after_contact_pct===null||summary.reaction_rate_after_contact_pct===undefined
-          ? 'No contacted sample yet.'
-          : ('Reaction after contact '+summary.reaction_rate_after_contact_pct+'% • descriptive only');
+          ? (other>0 ? (other+' confirmed reaction'+(other===1?'':'s')+' used other qualified handoff paths; no live-core-contact rate yet.') : 'No contacted sample yet.')
+          : ('Reaction after live core contact '+summary.reaction_rate_after_contact_pct+'% • descriptive only'+(other>0?' • '+other+' other qualified-handoff reaction'+(other===1?'':'s')+' excluded from this percentage':''));
       }
       const rows=Array.isArray(data?.rows)?data.rows:[];
       body.innerHTML=rows.length?rows.map(r=>{
         const contact=r.live_core_touched_at?lt(r.live_core_touched_at):'NO';
+        const obs=Number(r.publication_observation_count||1);
         const handoff=r.handoff_at?(lt(r.handoff_at)+'<br><span class="muted">'+le(r.handoff_authority||'')+'</span>'):'—';
         const grade=le(r.structural_grade||'—')+(r.current_grade&&r.current_grade!==r.structural_grade
           ? (' → <b>'+le(r.current_grade)+'</b>'):'');
         return '<tr>'+
-          '<td>'+lt(r.published_at)+'</td>'+
+          '<td>'+lt(r.published_at)+(obs>1?('<br><span class="muted">'+obs+' exact-geometry observations collapsed</span>'):'')+'</td>'+
           '<td><b>'+le(r.zone_id||'—')+'</b><br><span class="muted">'+le(r.source_tf||'')+'</span></td>'+
           '<td>'+le(r.direction||'—')+'</td>'+
           '<td>'+grade+'</td>'+
