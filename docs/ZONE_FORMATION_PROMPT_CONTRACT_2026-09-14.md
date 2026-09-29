@@ -193,8 +193,9 @@ Target hierarchy:
 4. Do not automatically target through a still-valid opposing institutional zone. A runner beyond it requires a fresh analysis after M15 accepted invalidation/requalification of that opposing area.
 5. If there are fewer valid structural objectives, leave unused targets empty rather than inventing prices.
 6. If an already-acquired thesis is flat and a newly qualified active opposing primary appears before its frozen deepest objective, the owner may receive a one-way lifecycle objective cap at the same canonical opposing-zone front-run price. This cap is permitted only when a fresh Sequence heartbeat proves zero open positions.
-7. The cap never rewrites the frozen ownership-zone payload or original objective history, never moves an objective farther away, and never changes a live position target. If positions are open or Sequence position truth is unavailable, reconciliation is deferred.
-8. A newly established owner cap cannot be claimed from pre-cap price history. Only quote/bar evidence at or after the cap-set timestamp may complete it. Reaching the cap completes/releases the owner thesis; it does not grant the opposing side an instant entry.
+7. For a flat owner, cap reachability is measured from the current executable market quote, not from the historical ownership anchor. The old anchor is audit/handoff history and may legitimately sit beyond the new opposing-zone cap after price retraces. The cap must still be ahead of the current quote by the normal spread-aware target gap.
+8. The cap never rewrites the frozen ownership-zone payload or original objective history, never moves an objective farther away, and never changes a live position target. If positions are open or Sequence position truth is unavailable, reconciliation is deferred.
+9. A newly established owner cap cannot be claimed from pre-cap price history. Only quote/bar evidence at or after the cap-set timestamp may complete it. Reaching the cap completes/releases the owner thesis; it does not grant the opposing side an instant entry.
 
 Stop logic remains liquidity/structure based:
 
