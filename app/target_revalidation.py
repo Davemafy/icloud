@@ -4,7 +4,7 @@ from typing import Any
 
 from .models import Analysis, Direction, MarketSnapshot, Zone
 
-TARGET_REVALIDATION_CONTRACT = "TARGET_LADDER_ACTIVATION_TRUTH_V6572"
+TARGET_REVALIDATION_CONTRACT = "TARGET_LADDER_OWNER_OPPOSING_CAP_V65107"
 _M15_SECONDS = 15 * 60
 
 
@@ -179,6 +179,22 @@ def activation_target_truth(
     }
 
 
+def _beyond_owner_cap(direction: Direction, price: float, cap: float) -> bool:
+    if cap <= 0 or price <= 0:
+        return False
+    if direction == Direction.BUY:
+        return price > cap + 1e-9
+    return price < cap - 1e-9
+
+
+def _quote_crossed(direction: Direction, price: float, snapshot: MarketSnapshot) -> bool:
+    if price <= 0:
+        return False
+    if direction == Direction.BUY:
+        return float(snapshot.bid) >= price
+    return float(snapshot.ask) <= price
+
+
 def owner_target_truth(
     analysis: Analysis,
     zone: Zone,
@@ -247,8 +263,73 @@ def owner_target_truth(
 
         objectives.append(current)
 
-    open_targets = [float(x["price"]) for x in objectives if x["state"] == "OPEN"]
-    completed = [float(x["price"]) for x in objectives if x["state"] == "COMPLETED"]
+    cap = float(meta.get("ownership_objective_cap") or 0.0)
+    cap_zone_id = str(meta.get("ownership_objective_cap_zone_id") or "")
+    cap_set_at = int(meta.get("ownership_objective_cap_set_at") or 0)
+    cap_reached_at = int(meta.get("ownership_objective_cap_reached_at") or 0)
+    blocked_by_cap: list[float] = []
+
+    if cap > 0 and cap_set_at > 0:
+        for current in objectives:
+            if current.get("state") != "OPEN":
+                continue
+            price = float(current.get("price") or 0.0)
+            if _beyond_owner_cap(zone.original_direction, price, cap):
+                current["state"] = "BLOCKED_BY_OPPOSING_ZONE_CAP"
+                current["reason"] = "FROZEN_TARGET_BEYOND_ACTIVE_OPPOSING_PRIMARY"
+                blocked_by_cap.append(price)
+
+        crossed_live, live_ts, live_basis = _crossed_since(
+            snapshot,
+            zone.original_direction,
+            cap,
+            cap_set_at,
+        )
+        quote_crossed = bool(
+            int(snapshot.sent_at) >= cap_set_at
+            and _quote_crossed(zone.original_direction, cap, snapshot)
+        )
+        cap_complete = bool(cap_reached_at or crossed_live or quote_crossed)
+        cap_crossed_at = int(
+            cap_reached_at
+            or live_ts
+            or (int(snapshot.sent_at) if quote_crossed else 0)
+        )
+        cap_basis = (
+            "OWNER_OBJECTIVE_CAP_REACHED"
+            if cap_reached_at
+            else live_basis
+            if crossed_live
+            else "LIVE_QUOTE_CROSS_AFTER_CAP_SET"
+            if quote_crossed
+            else ""
+        )
+        objectives.append(
+            {
+                "label": "OWNER_CAP",
+                "index": 99,
+                "price": round(cap, 5),
+                "state": "COMPLETED" if cap_complete else "OPEN",
+                "reason": (
+                    cap_basis
+                    if cap_complete
+                    else "ACTIVE_OPPOSING_PRIMARY_PROXIMAL_FRONT_RUN"
+                ),
+                "crossed_at": cap_crossed_at,
+                "crossed_basis": cap_basis,
+                "opposing_zone_id": cap_zone_id,
+                "lifecycle_only_tightening": True,
+            }
+        )
+
+    open_targets = sorted(
+        [float(x["price"]) for x in objectives if x["state"] == "OPEN"],
+        key=lambda price: abs(float(price) - ownership_anchor),
+    )
+    completed = sorted(
+        [float(x["price"]) for x in objectives if x["state"] == "COMPLETED"],
+        key=lambda price: abs(float(price) - ownership_anchor),
+    )
     behind = [
         float(x["price"])
         for x in objectives
@@ -261,6 +342,7 @@ def owner_target_truth(
             "open_targets": open_targets,
             "completed_targets": completed,
             "behind_activation_targets": behind,
+            "blocked_by_opposing_zone_cap": blocked_by_cap,
             "next_open_target": open_targets[0] if open_targets else 0.0,
             "authority_safe": bool(open_targets),
             "execution_evaluable": True,
@@ -270,7 +352,18 @@ def owner_target_truth(
                 if open_targets
                 else "ACTIVE_TARGETS_COMPLETE_OR_EXHAUSTED"
             ),
-            "history_reason": "TARGET_LIFECYCLE_STARTED_AT_OWNERSHIP",
+            "history_reason": (
+                "TARGET_LIFECYCLE_OWNER_CAP_RECONCILED"
+                if cap > 0
+                else "TARGET_LIFECYCLE_STARTED_AT_OWNERSHIP"
+            ),
+            "owner_objective_cap_active": bool(cap > 0 and cap_set_at > 0),
+            "owner_objective_cap": round(cap, 5) if cap > 0 else 0.0,
+            "owner_objective_cap_zone_id": cap_zone_id,
+            "owner_objective_cap_set_at": cap_set_at,
+            "owner_objective_cap_reached_at": cap_reached_at,
+            "frozen_owner_targets_preserved": True,
+            "live_position_targets_mutated": False,
         }
     )
     return truth
@@ -309,6 +402,10 @@ def apply_target_revalidation(analysis: Analysis, snapshot: MarketSnapshot) -> N
         "target_lifecycle_begins_at_execution_activation": True,
         "pre_activation_crossings_consume_targets": False,
         "new_execution_authority_checks_targets_at_handoff_anchor": True,
+        "owner_objective_cap_one_way_tightening_only": True,
+        "owner_cap_requires_flat_sequence_truth": True,
+        "owner_frozen_targets_remain_audit_truth": True,
+        "live_position_targets_are_never_mutated_by_cap_reconciliation": True,
         "zone_validity_independent_of_target_status": True,
         "invalidation_logic_unchanged": True,
     }
