@@ -187,6 +187,9 @@ def test_validation_ledger_copy_explains_canonical_sample_deduplication():
     cleaned = compact_dashboard_html('<h2>Live trading journal</h2></body>')
     assert "Canonical source/core samples" in cleaned
     assert "Reanalysis of the same institutional source/core remains one research sample" in cleaned
+    assert "Reaction after live core contact" in cleaned
+    assert "exact-geometry observations collapsed" in cleaned
+    assert "other qualified-handoff reaction" in cleaned
 
 
 def test_main_map_display_separates_sticky_owner_from_current_m1_handoff():
