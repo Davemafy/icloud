@@ -10,7 +10,7 @@ from .liquidity_reversal_handoff import INTERZONE_TRANSIT_REASON, interzone_tran
 from .liquidity_objective_policy import opposing_zone_front_run_cap
 from .risk_matrix import execution_grade_eligible
 
-THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V6520"
+THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65108"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
@@ -722,15 +722,23 @@ def _owner_live_targets(owner: dict[str, Any]) -> list[float]:
     return []
 
 
-def _cap_is_profit_side(direction: str, cap: float, anchor: float, snapshot: MarketSnapshot) -> bool:
-    if cap <= 0 or anchor <= 0:
+def _cap_is_ahead_of_flat_market(direction: str, cap: float, snapshot: MarketSnapshot) -> bool:
+    """A flat-owner lifecycle cap must be reachable ahead of the current executable quote.
+
+    The ownership anchor belongs to the historical handoff and may sit beyond the
+    new opposing-zone cap after price has retraced. With zero open positions there
+    is no live trade whose profit must be measured from that old anchor. Requiring
+    the cap to stay beyond the historical anchor would therefore preserve exactly
+    the stale lock this reconciliation is intended to remove.
+    """
+    if cap <= 0:
         return False
     point = max(abs(float(snapshot.point or 0.01)), 1e-9)
     gap = max(point * 5.0, point * float(snapshot.spread_points or 0.0) * 1.50)
     if direction == Direction.BUY.value:
-        return cap > anchor + gap
+        return cap > float(snapshot.ask) + gap
     if direction == Direction.SELL.value:
-        return cap < anchor - gap
+        return cap < float(snapshot.bid) - gap
     return False
 
 
@@ -800,10 +808,11 @@ def _reconcile_owner_objective_cap(
     live_targets = _owner_live_targets(owner)
     deepest = live_targets[-1] if live_targets else 0.0
     proposed = float(candidate)
+    ahead_of_market = _cap_is_ahead_of_flat_market(direction, proposed, snapshot)
 
     eligible = bool(
         deepest > 0
-        and _cap_is_profit_side(direction, proposed, anchor, snapshot)
+        and ahead_of_market
         and _cap_blocks_deepest(direction, proposed, deepest)
         and _cap_is_stricter(direction, proposed, existing)
     )
@@ -815,6 +824,10 @@ def _reconcile_owner_objective_cap(
             "candidate_cap": round(proposed, 5),
             "candidate_zone_id": str(cap_meta.get("zone_id") or ""),
             "frozen_deepest_target": round(deepest, 5),
+            "ownership_anchor_price": round(anchor, 5),
+            "current_market_reference": round(float(snapshot.ask if direction == Direction.BUY.value else snapshot.bid), 5),
+            "candidate_ahead_of_current_flat_market": ahead_of_market,
+            "cap_reference_basis": "CURRENT_FLAT_EXECUTABLE_QUOTE_NOT_HISTORICAL_OWNERSHIP_ANCHOR",
             "frozen_targets_preserved": True,
             "live_position_targets_mutated": False,
         }
@@ -829,6 +842,9 @@ def _reconcile_owner_objective_cap(
             "candidate_cap": round(proposed, 5),
             "candidate_zone_id": str(cap_meta.get("zone_id") or ""),
             "frozen_deepest_target": round(deepest, 5),
+            "ownership_anchor_price": round(anchor, 5),
+            "current_market_reference": round(float(snapshot.ask if direction == Direction.BUY.value else snapshot.bid), 5),
+            "cap_reference_basis": "CURRENT_FLAT_EXECUTABLE_QUOTE_NOT_HISTORICAL_OWNERSHIP_ANCHOR",
             "sequence_fresh": sequence_fresh,
             "open_positions": open_positions,
             "frozen_targets_preserved": True,
@@ -873,6 +889,9 @@ def _reconcile_owner_objective_cap(
         "active_cap": round(proposed, 5),
         "opposing_zone_id": opposing_zone_id,
         "frozen_deepest_target": round(deepest, 5),
+        "ownership_anchor_price": round(anchor, 5),
+        "current_market_reference": round(float(snapshot.ask if direction == Direction.BUY.value else snapshot.bid), 5),
+        "cap_reference_basis": "CURRENT_FLAT_EXECUTABLE_QUOTE_NOT_HISTORICAL_OWNERSHIP_ANCHOR",
         "previous_cap": round(existing, 5) if existing > 0 else 0.0,
         "previous_cap_set_at": existing_set_at,
         "sequence_fresh": True,
@@ -892,7 +911,9 @@ def _reconcile_owner_objective_cap(
     analysis.trader_brief += (
         f" Owner objective safety cap={proposed:.2f} in front of active opposing "
         f"{str(cap_meta.get('zone_side') or '')} zone {opposing_zone_id}; frozen target "
-        f"{deepest:.2f} remains audit truth. No live position target was changed."
+        f"{deepest:.2f} remains audit truth. Flat-owner cap validity is measured from the "
+        f"current executable quote, not the historical ownership anchor {anchor:.2f}. "
+        "No live position target was changed."
     )
 
 
