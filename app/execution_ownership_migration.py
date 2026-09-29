@@ -25,6 +25,14 @@ _OWNERSHIP_COLUMNS = {
     "ownership_anchor_price": "REAL DEFAULT 0",
     "ownership_zone_id": "TEXT DEFAULT ''",
     "ownership_zone_payload": "TEXT DEFAULT ''",
+    # One-way lifecycle tightening only: when a newly qualified active opposing
+    # primary appears in front of an already-acquired thesis, the frozen owner
+    # targets remain audit truth while this cap becomes the effective destination.
+    "ownership_objective_cap": "REAL DEFAULT 0",
+    "ownership_objective_cap_zone_id": "TEXT DEFAULT ''",
+    "ownership_objective_cap_set_at": "INTEGER DEFAULT 0",
+    "ownership_objective_cap_reached_at": "INTEGER DEFAULT 0",
+    "ownership_objective_cap_reason": "TEXT DEFAULT ''",
 }
 
 
