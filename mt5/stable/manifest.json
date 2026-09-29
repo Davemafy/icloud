@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.38",
+  "release": "6.3.39",
   "repository": "Davemafy/icloud",
-  "ref": "99e64835e44b92640230df22a0285fa6295df7a7",
-  "data_bridge_version": "1.55",
-  "sequence_ea_version": "3.45",
+  "ref": "682238dcaf46bfd83a84f0856cc20bd83c0346a5",
+  "data_bridge_version": "1.56",
+  "sequence_ea_version": "3.46",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -182,24 +182,27 @@
     "invalidated_zone_flip_context_chart_comment",
     "canonical_primary_map_count",
     "mt5_watch_only_reason_parity",
-    "human_readable_zone_lifecycle_labels"
+    "human_readable_zone_lifecycle_labels",
+    "first_entry_zone_distal_stop_floor",
+    "zone_stop_spread_atr_broker_buffer",
+    "zone_stop_min_rr_fail_closed"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_55_CanonicalMapTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_56_ZoneStopTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_56_ZoneStopTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_56_ZoneStopTruth.mq5",
       "requires_reload": true,
-      "sha256": "ea394ae2e2e482ccfb848ac440ad6a7d8a86c0954332331bd58eb736c8b2c1a9"
+      "sha256": "968148be592f832f6203c6a691e736dd7089e92ac7dfd77c165be0243d59f8be"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_45_OwnerLifecyclePriority_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_46_ZoneDistalStop_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_46_ZoneDistalStop_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_46_ZoneDistalStop_Demo.mq5",
       "requires_reload": true,
-      "sha256": "c77c691c33036880a9c6a5521de18e8ae96f60b086d1395d9bca737230f371f9"
+      "sha256": "a573ce5b2cb1fc4637c4ab9d830e86bcb0a555f94f144464fab135f6d33d3304"
     }
   ],
   "support_files": [
