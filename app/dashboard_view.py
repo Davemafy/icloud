@@ -19,7 +19,7 @@ _VALIDATION_LEDGER_CARD = (
     '<h2>Master Sniper validation ledger <span class="pill paper">OBSERVATION ONLY</span></h2>'
     '<div class="grid">'
     '<div class="card"><h3>Published samples</h3><div class="kpi" id="vLedgerPublished">0</div>'
-    '<div class="muted">Exact zone geometries recorded after publication.</div></div>'
+    '<div class="muted">Canonical source/core samples. Reanalysis of the same institutional source/core remains one research sample.</div></div>'
     '<div class="card"><h3>Live contacts</h3><div class="kpi" id="vLedgerContacts">0</div>'
     '<div class="muted">Post-publication tactical-core contacts only.</div></div>'
     '<div class="card"><h3>Confirmed reactions</h3><div class="kpi" id="vLedgerReactions">0</div>'
@@ -456,17 +456,21 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     if(mapState && mapStateMeta){
       const rawReadiness=String(z.readiness||'');
+      const mapThesis=activeThesis();
+      const mapOwnerMatch=mapThesis.locked===true && Boolean(z.zone_id) && String(mapThesis.owner_zone_id||'')===String(z.zone_id);
       const fallback=!hasZone
         ? 'NO ACTIVE MAP'
-        : (rawReadiness==='ARMED'
-            ? String(z.direction||'')+' MAP VALID • RETEST PENDING'
-            : (rawReadiness==='INTERACTING'
-                ? String(z.direction||'')+' MAP CONTACTED • M1 CONFIRMATION PENDING'
-                : (rawReadiness==='M1_READY'
-                    ? String(z.direction||'')+' MAP CONTACTED • M1 HANDOFF ACTIVE'
-                    : String(z.direction||'')+' MAP '+(rawReadiness||'PLANNED'))));
+        : (mapOwnerMatch
+            ? String(z.direction||'')+' THESIS OWNER ACTIVE • FRESH M1 REQUIRED'
+            : (rawReadiness==='ARMED'
+                ? String(z.direction||'')+' MAP VALID • RETEST PENDING'
+                : (rawReadiness==='INTERACTING'
+                    ? String(z.direction||'')+' MAP CONTACTED • M1 CONFIRMATION PENDING'
+                    : (rawReadiness==='M1_READY'
+                        ? String(z.direction||'')+' MAP CONTACTED • M1 HANDOFF ACTIVE'
+                        : String(z.direction||'')+' MAP '+(rawReadiness||'PLANNED')))));
       mapState.textContent=String(j?.map_display_state||fallback).trim();
-      mapState.className='kpi '+(!hasZone?'warn':(rawReadiness==='M1_READY'||rawReadiness==='INTERACTING'?'blue':''));
+      mapState.className='kpi '+(!hasZone?'warn':(mapOwnerMatch?'ok':(rawReadiness==='M1_READY'||rawReadiness==='INTERACTING'?'blue':'')));
       mapStateMeta.textContent=hasZone
         ? 'Structural map lifecycle only. A valid SELL/BUY map is not execution readiness; M1 handoff and the Sequence order gate remain separate.'
         : 'No selected active map. Invalidated geometry may still remain visible as FLIP CONTEXT with zero original-direction authority.';
@@ -504,9 +508,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
           : 'M1 handoff is NO. The HTF zone can be A/A+ and still be far from executable location.'
       );
     }else{
-      state='M1 HANDOFF ACTIVE';
-      cls='blue';
-      meta=checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace → CLOSED M1 same-direction rejection/micro-break. Every entry model must pass this final confirmation before any order.';
+      state=ownerMatch ? 'THESIS OWNER ACTIVE • FRESH M1 REQUIRED' : 'M1 HANDOFF ACTIVE';
+      cls=ownerMatch ? 'ok' : 'blue';
+      meta=ownerMatch
+        ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
+        : checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace → CLOSED M1 same-direction rejection/micro-break. Every entry model must pass this final confirmation before any order.';
     }
 
     const seq=j?.sequence_debug||{};
