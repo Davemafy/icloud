@@ -179,6 +179,21 @@ For the first primary entry:
 
 Re-entry is different: after a valid primary exists and the position/thesis is protected, re-entry follows the existing continuation/re-entry contract and does not have to revisit the original core.
 
+### Strategic supplemental M1 entry models
+
+The Master Sniper location contract remains the authority. Supplemental entry models exist only to capture more valid opportunities after institutional location has already been earned; they never manufacture location or bypass the normal execution chain.
+
+- **Momentum pullback:** continuation BOS/displacement followed by a controlled 30-60% retracement into a fresh M1 PD array.
+- **VWAP-proxy reclaim:** XAUUSD CFD tick-volume-weighted fair-value proxy used only as a continuation confluence, never represented as centralized exchange VWAP or order flow. It still requires BOS/displacement plus a fresh M1 PD array overlapping the reclaim band.
+- **London/NY opening-range breakout/retest:** session opening-range displacement followed by a return to a fresh M1 PD array overlapping the broken opening-range boundary.
+- Strategic models are allowed only for a valid `CONTINUATION` thesis and only when the Cloud M15 regime/model flag and the local M1 regime both permit the model. Momentum and ORB require local `TREND` or `EXPANSION`; VWAP reclaim requires local `TREND`.
+- A strategic **first entry** still requires recent institutional-zone interaction plus live HTF handoff authority. It then passes the same closed-M1 directional rejection/micro-break confirmation, no-chase, target, minimum-RR, parity, spread/news/snapshot and risk gates as the normal primary.
+- A strategic **re-entry** is permitted only while the original thesis is still valid and the normal re-entry contract permits another leg; if positions remain open they must already be protected. It uses the same closed-M1 re-entry confirmation and re-entry cap as ordinary R1/R2.
+- Every strategic model must contain real M1 structure break/displacement and a fresh OB/FVG PD array. A session boundary, momentum retracement band or VWAP proxy by itself is never an entry.
+- Strategic model risk is multiplied by a conservative research factor (`0.75` at this release). This factor may reduce the normal thesis allocation and may never increase it.
+- Strategic first entries inherit the full institutional-zone distal stop floor. If that correct stop destroys minimum RR, the trade is rejected rather than tightening the stop.
+- Order-flow imbalance remains disabled until an appropriate centralized/depth feed exists.
+
 ## Institutional liquidity objectives
 
 Zone validity and target quality are separate decisions. A valid institutional zone must never be removed, moved or downgraded merely because an old TP map is poor.
@@ -264,4 +279,4 @@ authority.
 
 ## Future-change rule
 
-When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, places a first-entry protective stop inside the full institutional zone merely because a nearer M1 timing anchor exists, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, places a first-entry protective stop inside the full institutional zone merely because a nearer M1 timing anchor exists, lets a strategic Momentum/VWAP/ORB model manufacture authority without valid location + regime + fresh PD-array + closed-M1 confirmation, or allows a target on the wrong side of the actual candidate entry.
