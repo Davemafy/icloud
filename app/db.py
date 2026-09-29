@@ -97,7 +97,12 @@ def init_db() -> None:
             invalidated_at INTEGER DEFAULT 0,
             best_price REAL DEFAULT 0,
             mfe_price REAL DEFAULT 0,
-            last_reason TEXT DEFAULT ''
+            last_reason TEXT DEFAULT '',
+            ownership_objective_cap REAL DEFAULT 0,
+            ownership_objective_cap_zone_id TEXT DEFAULT '',
+            ownership_objective_cap_set_at INTEGER DEFAULT 0,
+            ownership_objective_cap_reached_at INTEGER DEFAULT 0,
+            ownership_objective_cap_reason TEXT DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
         CREATE INDEX IF NOT EXISTS idx_feedback_analysis_zone ON feedback(analysis_id, zone_id);
