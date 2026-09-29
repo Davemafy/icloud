@@ -322,6 +322,9 @@ def test_confirmed_a_thesis_can_continue_from_same_core_after_second_touch():
     assert selected is z
     assert z.core_method.startswith("M1_READY|THESIS_CONTINUATION|")
     assert "execution_role:THESIS_CONTINUATION" in z.notes
+    assert "PAPER THESIS_OWNER_CONTINUATION=Z1" in a.trader_brief
+    assert "not a fresh entry location" in a.trader_brief
+    assert "PAPER M1_READY=Z1: active BUY thesis" not in a.trader_brief
 
 
 def test_bplus_second_touch_zone_is_watch_only_without_primary_authority():

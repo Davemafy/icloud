@@ -127,6 +127,8 @@ def test_journal_uses_final_plan_runway_and_authority(monkeypatch):
     journal = main._journal_snapshot()
     assert journal["checks"]["clear_run"] is True
     assert journal["checks"]["m1_handoff_ready"] is True
+    assert journal["checks"]["fresh_m1_location_ready"] is True
+    assert journal["sequence_debug"]["fresh_m1_location_ready"] is True
     assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
     assert journal["sequence_debug"]["cloud_ea_mode"] == "DUAL_BRANCH"
     assert journal["sequence_debug"]["cloud_usable_runway"] == "27.53000"
@@ -157,7 +159,48 @@ def test_journal_does_not_call_raw_policy_authority_a_mismatch_when_final_plan_i
     journal = main._journal_snapshot()
     assert journal["checks"]["clear_run"] is False
     assert journal["checks"]["m1_handoff_ready"] is False
+    assert journal["checks"]["fresh_m1_location_ready"] is False
+    assert journal["sequence_debug"]["fresh_m1_location_ready"] is False
     assert journal["sequence_debug"]["cloud_authority"] == "NONE"
     assert journal["sequence_debug"]["cloud_ea_mode"] == "WATCH_ONLY"
     assert journal["sequence_debug"]["cloud_separation_guard"] == "INSUFFICIENT_USABLE_RUNWAY"
     assert journal["sequence_debug"]["authority_mismatch"] is False
+
+
+def test_owner_macro_authority_does_not_masquerade_as_fresh_m1_location(monkeypatch):
+    zone = _zone()
+    analysis = _analysis(zone)
+    snapshot = _snapshot()
+    _patch_common(monkeypatch, analysis, snapshot, "HTF_CORE_HANDOFF")
+    monkeypatch.setattr(
+        main,
+        "_sequence_debug_snapshot",
+        lambda: {
+            "online": True,
+            "authority": "HTF_CORE_HANDOFF",
+            "gate_stage": "LOCATION",
+            "gate_reason": "WAITING_FOR_VALID_LOCATION",
+            "candidate_model": "NONE",
+            "open_positions": 0,
+        },
+    )
+    monkeypatch.setattr(
+        main,
+        "active_plan_text",
+        lambda *_args, **_kwargs: (
+            "ea_mode=DUAL_BRANCH\n"
+            "execution_authority=HTF_CORE_HANDOFF\n"
+            "owner_continuation_ready=1\n"
+            "core_handoff_ready=1\n"
+            "usable_runway=27.53000\n"
+            "required_runway=10.00000\n"
+            "usable_runway_ok=1\n"
+            "separation_guard=PASS\n"
+        ),
+    )
+
+    journal = main._journal_snapshot()
+    assert journal["checks"]["m1_handoff_ready"] is True
+    assert journal["checks"]["fresh_m1_location_ready"] is False
+    assert journal["sequence_debug"]["fresh_m1_location_ready"] is False
+    assert journal["readiness_score"].endswith("/10")

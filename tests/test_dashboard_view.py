@@ -55,7 +55,7 @@ def test_directional_mitigation_audit_is_visible_and_read_only():
 def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
     html = '<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><div id="checks"></div><h2>Live trading journal</h2></body>'
     cleaned = compact_dashboard_html(html)
-    for needle in ["HTF setup quality", 'id="htfScore"', "Selected map state", 'id="mapState"', "Structural map lifecycle only", "A valid SELL/BUY map is not execution readiness", "MAP VALID • NO ENTRY AUTHORITY", "Execution readiness", 'id="executionMeta"', "WAITING FOR M1 CONFIRMATION", "M1 HANDOFF ACTIVE", "THESIS OWNER ACTIVE • FRESH M1 REQUIRED", "WAITING FOR VALUE / RETRACE", "Entry permission: NO", "Macro checks ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ", "order permission is suspended", "This is not a location failure.", "HTF location/source quality only", "Do not chase the existing move", "there is no current M1 location handoff or new-entry authority", "Current M1 location handoff ", "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner", "This is not entry authorization", "live Sequence EA must still complete sweep", "CLOSED M1 same-direction rejection/micro-break", "Every entry model must pass this final confirmation", "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor", "ownership anchor is not itself a fresh entry signal"]:
+    for needle in ["HTF setup quality", 'id="htfScore"', "Selected map state", 'id="mapState"', "Structural map lifecycle only", "A valid SELL/BUY map is not execution readiness", "MAP VALID • NO ENTRY AUTHORITY", "Execution readiness", 'id="executionMeta"', "WAITING FOR M1 CONFIRMATION", "M1 HANDOFF ACTIVE", "THESIS OWNER ACTIVE • FRESH M1 REQUIRED", "THESIS OWNER • WAITING FOR FRESH M1 LOCATION", "WAITING FOR VALUE / RETRACE", "Entry permission: NO", "Readiness checks ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ", "order permission is suspended", "This is not a location failure.", "HTF location/source quality only", "Do not chase the existing move", "there is no current M1 location handoff or new-entry authority", "Macro thesis / handoff authority ", "Fresh M1 entry location ", "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner", "This is not entry authorization", "live Sequence EA must still complete sweep", "CLOSED M1 same-direction rejection/micro-break", "Every entry model must pass this final confirmation", "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor", "ownership anchor is not itself a fresh entry signal"]:
         assert needle in cleaned
     assert "M1 HANDOFF READY" not in cleaned
     assert "Checklist " not in cleaned
@@ -208,3 +208,11 @@ def test_main_map_display_separates_sticky_owner_from_current_m1_handoff():
 
     assert main._map_display_state(zone, "M1_READY", thesis) == "BUY THESIS OWNER ACTIVE • FRESH M1 REQUIRED"
     assert main._map_display_state(zone, "M1_READY", {"locked": False}) == "BUY MAP CONTACTED • M1 HANDOFF ACTIVE"
+
+
+def test_static_checklist_separates_macro_authority_from_fresh_m1_location():
+    from pathlib import Path
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "m1_handoff_ready:'Macro thesis / handoff authority active'" in html
+    assert "fresh_m1_location_ready:'Fresh M1 entry location active'" in html
+    assert "m1_handoff_ready:'M1 location handoff active'" not in html

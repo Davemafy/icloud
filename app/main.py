@@ -972,7 +972,6 @@ def _journal_snapshot():
             and int(datetime.now(timezone.utc).timestamp()) - s.sent_at <= SETTINGS.max_snapshot_age_seconds
         ),
     }
-    score = sum(1 for v in checks.values() if v)
     target_progress = _journal_target_progress(a, z)
     # Before a zone activates, its TP ladder remains a forward PLAN. Historical
     # price travel through those future TP prices does not consume the ladder.
@@ -1002,6 +1001,25 @@ def _journal_snapshot():
         and sequence_debug.get("online")
         and str(sequence_debug.get("authority") or "NONE") != cloud_authority
     )
+
+    # m1_handoff_ready above is the persisted MACRO authority/handoff contract.
+    # It is intentionally sticky for an acquired thesis. Fresh entry location is
+    # different: Sequence reports LOCATION / WAITING_FOR_VALID_LOCATION until a
+    # new same-direction M1 location exists. Keep both truths separate so the
+    # dashboard never calls sticky owner authority a live M1 entry location.
+    seq_stage = str(sequence_debug.get("gate_stage") or "UNKNOWN").upper()
+    seq_reason = str(sequence_debug.get("gate_reason") or "").upper()
+    seq_authority = str(sequence_debug.get("authority") or "NONE").upper()
+    fresh_m1_location_ready = bool(
+        sequence_debug.get("online")
+        and seq_authority != "NONE"
+        and seq_stage not in {"OFFLINE", "UNKNOWN", "AUTHORITY", "LOCATION"}
+        and "WAITING_FOR_VALID_LOCATION" not in seq_reason
+    )
+    sequence_debug["fresh_m1_location_ready"] = fresh_m1_location_ready
+    checks["fresh_m1_location_ready"] = fresh_m1_location_ready
+    score = sum(1 for v in checks.values() if v)
+
     macro_status = _event_status(current_events, z.state.value if z else "", readiness)
     reconciled_status = _sequence_reconciled_status(macro_status, sequence_debug)
 

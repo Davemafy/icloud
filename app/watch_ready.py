@@ -390,8 +390,9 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         else:
             location_text = "retains its previously acquired macro execution location"
         analysis.trader_brief += (
-            f" PAPER M1_READY={selected.zone_id}: active {selected.original_direction.value} thesis "
-            f"{location_text}. A fresh M1 sequence remains mandatory."
+            f" PAPER THESIS_OWNER_CONTINUATION={selected.zone_id}: active {selected.original_direction.value} thesis "
+            f"{location_text}. This is preserved macro authority, not a fresh entry location; "
+            "a new same-direction M1 sequence remains mandatory."
         )
     elif sweep:
         analysis.trader_brief += (
