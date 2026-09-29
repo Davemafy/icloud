@@ -2,7 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.1'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.1'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -105,12 +106,32 @@ function BackupFile([string]$Path,[string]$BackupRoot,[string]$Name){
 function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
   $name=[IO.Path]::GetFileNameWithoutExtension($Src)
   $ex5=[IO.Path]::ChangeExtension($Src,'.ex5')
-  $log=Join-Path $LogDir ($name+'_compile.log')
-  Remove-Item $ex5,$log -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $LogDir|Out-Null
+
+  # Never place MetaEditor logs inside the managed Experts\TradeZone folder.
+  # A running/previous MetaEditor instance can keep those logs open briefly and
+  # the old installer then failed before it even reached compilation. A unique
+  # temp log makes compilation independent from stale/locked diagnostic files.
+  $log=Join-Path $LogDir ($name+'_'+[guid]::NewGuid().ToString('N')+'_compile.log')
+
+  # Remove only the executable we are about to rebuild. The compile log is new.
+  Remove-Item $ex5 -Force -ErrorAction SilentlyContinue
   Write-Host "Compiling: $(Split-Path $Src -Leaf)" -ForegroundColor Cyan
-  Start-Process -FilePath $Meta -ArgumentList @("/compile:$Src","/log:$log") -Wait|Out-Null
-  Start-Sleep -Milliseconds 900
-  $txt=if(Test-Path $log){Get-Content $log -Raw}else{''}
+
+  $p=Start-Process -FilePath $Meta -ArgumentList @("/compile:$Src","/log:$log") -PassThru
+  $p.WaitForExit()
+  Start-Sleep -Milliseconds 1200
+
+  $txt=''
+  if(Test-Path $log){
+    # MetaEditor can release the process handle a fraction before the log file
+    # becomes readable. Retry briefly instead of treating that as install failure.
+    for($try=0;$try-lt10;$try++){
+      try{$txt=Get-Content $log -Raw -ErrorAction Stop;break}
+      catch{Start-Sleep -Milliseconds 300}
+    }
+  }
+
   if(!(Test-Path $ex5)){
     if($txt){
       Write-Host ''
@@ -126,6 +147,32 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
     throw "Compile did not report 0 errors, 0 warnings for $(Split-Path $Src -Leaf)."
   }
   Write-Host "  OK: 0 errors, 0 warnings." -ForegroundColor Green
+}
+
+function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
+  if(!(Test-Path $Dest)){return}
+  $keep=@{}
+  foreach($n in @($KeepNames)){if($n){$keep[$n.ToLowerInvariant()]=$true}}
+
+  # Cleanup is best-effort and happens only AFTER the new package has compiled.
+  # A locked old log/EX5 must never make an otherwise valid install fail.
+  Get-ChildItem $Dest -File -ErrorAction SilentlyContinue | ForEach-Object{
+    $name=$_.Name
+    $low=$name.ToLowerInvariant()
+    $managed=(
+      $name -like 'InstitutionalSMC_DataBridge_*.mq5' -or
+      $name -like 'InstitutionalSMC_DataBridge_*.ex5' -or
+      $name -like 'InstitutionalSMC_SequenceEA_*.mq5' -or
+      $name -like 'InstitutionalSMC_SequenceEA_*.ex5' -or
+      $name -like '*_compile.log'
+    )
+    if(!$managed -or $keep.ContainsKey($low)){return}
+    try{
+      Remove-Item $_.FullName -Force -ErrorAction Stop
+    }catch{
+      Write-Host "  Cleanup deferred (file in use): $name" -ForegroundColor DarkYellow
+    }
+  }
 }
 function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
   $root=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5'
@@ -143,7 +190,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host ' Trade Zone - ONE-CLICK DEMO MT5 INSTALLER' -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.1") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -227,14 +274,11 @@ try{
   $expertsBackup=Join-Path $backupRoot 'experts'
   New-Item -ItemType Directory -Force -Path $includeBackup,$expertsBackup|Out-Null
 
-  # Back up the complete TradeZone tree, then refresh only root-level managed EA files.
-  # Child folders (for example Observer) are intentionally preserved.
+  # Back up the complete TradeZone tree. Do NOT destructively clean the live
+  # directory before the replacement package has compiled successfully.
   if(Test-Path $dest){
     Copy-Item $dest (Join-Path $expertsBackup 'TradeZone') -Recurse -Force
-    Get-ChildItem $dest -File -ErrorAction SilentlyContinue | ForEach-Object{
-      Remove-Item $_.FullName -Force
-    }
-    Write-Host 'Preserved existing TradeZone subfolders (including Observer).' -ForegroundColor DarkCyan
+    Write-Host 'Existing TradeZone tree backed up before update.' -ForegroundColor DarkCyan
   }else{
     New-Item -ItemType Directory -Force -Path $dest|Out-Null
   }
@@ -259,13 +303,25 @@ try{
   }
 
   if(!$SkipCompile){
-    foreach($src in $srcs){CompileOne $meta $src $dest}
+    $compileLogDir=Join-Path $tmp 'compile_logs'
+    foreach($src in $srcs){CompileOne $meta $src $compileLogDir}
   }
+
+  # New sources/executables are now in place. Prune only obsolete managed
+  # front-facing files, and never fail the install if an old diagnostic/ex5 is
+  # temporarily locked by MT5/MetaEditor.
+  $keepNames=@()
+  foreach($src in $srcs){
+    $keepNames+=(Split-Path $src -Leaf)
+    $keepNames+=([IO.Path]::GetFileName([IO.Path]::ChangeExtension($src,'.ex5')))
+  }
+  RemoveObsoleteManagedFiles $dest $keepNames
 
   SaveManagedConfig $t $cloudUrl $cloudKey
 
   Write-Host ''
   Write-Host 'SUCCESS: CURRENT TRADE ZONE EAs INSTALLED.' -ForegroundColor Green
+  Write-Host "  Installer $InstallerVersion" -ForegroundColor Green
   Write-Host "  DataBridge v$($m.data_bridge_version)" -ForegroundColor Green
   Write-Host "  Sequence EA v$($m.sequence_ea_version)" -ForegroundColor Green
   Write-Host "  Cloud URL/key are already the EA defaults." -ForegroundColor Green
