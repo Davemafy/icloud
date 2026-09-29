@@ -28,8 +28,11 @@ _AI_RULE = """
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. Zone interaction alone
     never blocks the opposite side. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
-    thesis remains sticky until M15 accepted invalidation or the deepest planned liquidity objective
-    completes. A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
+    thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
+    completes. For a flat owner only, a newly qualified active opposing primary may tighten that effective
+    destination to the canonical front-run cap while the frozen owner targets remain audit truth. This cap
+    never mutates an open position and cannot be completed from price history that predates the cap.
+    A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
     from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
     dealing-range -> value/PD-array confirmation. If an acquired owner disappears from the current map,
     fail closed until lifecycle release or safe requalification.
@@ -526,6 +529,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "release_conditions": [
             "M15_ACCEPTED_INVALIDATION",
             "DEEPEST_PLANNED_LIQUIDITY_OBJECTIVE_REACHED",
+            "OPPOSING_ZONE_OWNER_OBJECTIVE_CAP_REACHED",
         ],
         "fresh_m1_confirmation_required": True,
         "no_chase": True,
@@ -962,7 +966,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         analysis.trader_brief += (
             f" Active acquired thesis lock={direction} ({status}) on {owner_zone.zone_id}; "
             f"newly ranked {previous_selected} remains map/context only and has no M1 authority until "
-            "the acquired thesis is invalidated or completes its deepest liquidity objective."
+            "the acquired thesis is invalidated or completes its deepest effective liquidity objective."
         )
     else:
         analysis.trader_brief += (
