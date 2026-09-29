@@ -8,7 +8,7 @@ from .zone_publication_migration import ensure_zone_publication_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 from .db import connect
 
-REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V6561"
+REACTION_LIFECYCLE_CONTRACT = "INSTITUTIONAL_ZONE_REACTION_LIFECYCLE_V65107"
 TERMINAL = {"OBJECTIVE_COMPLETE", "INVALIDATED", "INVALIDATED_AFTER_REACTION"}
 
 
@@ -406,6 +406,36 @@ def _target_live_from_anchor(direction: str, target: float, anchor: float) -> bo
     return target < anchor if direction == Direction.SELL.value else target > anchor
 
 
+def _owner_cap_crossed_since_set(
+    snapshot: MarketSnapshot,
+    direction: str,
+    cap: float,
+    set_at: int,
+) -> bool:
+    """Use only evidence available after the cap existed; never retroactive best price."""
+    if cap <= 0 or set_at <= 0 or int(snapshot.sent_at) < int(set_at):
+        return False
+
+    if direction == Direction.BUY.value:
+        if float(snapshot.bid) >= cap:
+            return True
+    elif direction == Direction.SELL.value:
+        if float(snapshot.ask) <= cap:
+            return True
+    else:
+        return False
+
+    # As with publication truth, ignore a bar that began before the cap was set.
+    for bar in reversed(list(snapshot.xau_m15 or [])):
+        if int(bar.ts) < int(set_at):
+            continue
+        if direction == Direction.BUY.value and float(bar.high) >= cap:
+            return True
+        if direction == Direction.SELL.value and float(bar.low) <= cap:
+            return True
+    return False
+
+
 def update_zone_reactions(snapshot: MarketSnapshot) -> None:
     """Advance persisted zone lifecycle from live/closed market evidence.
 
@@ -517,7 +547,29 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
                 deepest = valid_targets[-1]
                 deepest_hit = _crossed(direction, best, deepest)
 
-            if deepest_hit and reaction_confirmed_at:
+            owner_cap = float(row["ownership_objective_cap"] or 0.0)
+            cap_set_at = int(row["ownership_objective_cap_set_at"] or 0)
+            cap_reached_at = int(row["ownership_objective_cap_reached_at"] or 0)
+            cap_live = bool(
+                ownership_acquired_at
+                and cap_set_at
+                and _target_live_from_anchor(direction, owner_cap, objective_anchor)
+            )
+            cap_hit = bool(
+                cap_live
+                and (
+                    cap_reached_at
+                    or _owner_cap_crossed_since_set(snapshot, direction, owner_cap, cap_set_at)
+                )
+            )
+            if cap_hit and not cap_reached_at:
+                cap_reached_at = now
+
+            if cap_hit and reaction_confirmed_at:
+                status = "OBJECTIVE_COMPLETE"
+                reason = "OPPOSING_ZONE_OWNER_OBJECTIVE_CAP_REACHED"
+                completed_at = cap_reached_at or now
+            elif deepest_hit and reaction_confirmed_at:
                 status = "OBJECTIVE_COMPLETE"
                 reason = "DEEPEST_PLANNED_LIQUIDITY_OBJECTIVE_REACHED"
                 completed_at = now
@@ -540,12 +592,13 @@ def update_zone_reactions(snapshot: MarketSnapshot) -> None:
                 """
                 UPDATE zone_reactions SET
                     status=?,reaction_confirmed_at=?,target1_hit_at=?,target2_hit_at=?,target3_hit_at=?,
-                    objective_complete_at=?,best_price=?,mfe_price=?,last_reason=?,last_seen_at=?
+                    objective_complete_at=?,ownership_objective_cap_reached_at=?,
+                    best_price=?,mfe_price=?,last_reason=?,last_seen_at=?
                 WHERE reaction_key=?
                 """,
                 (
                     status,reaction_confirmed_at,t1_hit,t2_hit,t3_hit,completed_at,
-                    best,mfe,reason,now,row["reaction_key"],
+                    cap_reached_at,best,mfe,reason,now,row["reaction_key"],
                 ),
             )
 
@@ -577,6 +630,8 @@ def attach_lifecycle(analysis: Analysis) -> Analysis:
         "contract": REACTION_LIFECYCLE_CONTRACT,
         "persistence": "SURVIVES_PRIMARY_RESELECTION_AND_ZONE_MAP_REMOVAL",
         "historical_geometry_and_targets_freeze_after_core_interaction": True,
+        "owner_target_freeze_exception": "FLAT_OWNER_MAY_GAIN_ONE_WAY_OPPOSING_ZONE_LIFECYCLE_CAP_WITH_FROZEN_TARGET_AUDIT_PRESERVED",
+        "owner_cap_never_uses_pre_cap_best_price": True,
         "zone_validity_independent_of_target_map": True,
         "interaction_is_not_execution_ownership": True,
         "execution_ownership_requires_explicit_handoff": True,
