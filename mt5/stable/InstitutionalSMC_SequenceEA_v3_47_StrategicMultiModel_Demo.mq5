@@ -1955,7 +1955,9 @@ void Evaluate()
    double a=ATR(r,ATRPeriod,1);if(a<=0){TZ_SetGate("DATA","M1_ATR_UNAVAILABLE");return;}
    MqlTick tk;if(!SymbolInfoTick(_Symbol,tk)){TZ_SetGate("MARKET","NO_TICK");return;}
    bool origBuy=(g_plan.original_direction=="BUY"),havePos=AnyOurPosition();
-   bool recentZone=TZ_RecentZoneInteraction(r,MathMax(30,ResearchRecentZoneBars));Signal sig;ZeroMemory(sig);string tag="";double share=0;
+   bool recentZone=TZ_RecentZoneInteraction(r,MathMax(30,ResearchRecentZoneBars));
+   bool strategicRecentZone=TZ_RecentZoneInteraction(r,MathMax(30,AlternativeZoneInteractionBars));
+   Signal sig;ZeroMemory(sig);string tag="";double share=0;
    g_tzLocalRegime=TZ47_LocalRegime(r);
    g_tzCandidateModel="NONE";
 
@@ -1979,7 +1981,7 @@ void Evaluate()
          else
          {
             string altModel="";
-            if(TZ47_TryAlternativePrimary(r,a,origBuy,g_tzLocalRegime,recentZone,sig,tag,altModel))
+            if(TZ47_TryAlternativePrimary(r,a,origBuy,g_tzLocalRegime,strategicRecentZone,sig,tag,altModel))
             {share=PrimaryRiskShare*AlternativeModelRiskMultiplier;g_tzCandidateModel=altModel;}
          }
       }
