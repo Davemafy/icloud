@@ -284,12 +284,17 @@ def build_validation_ledger(limit: int = 50) -> dict:
             "read_only": True,
             "summary": {
                 "publications": 0,
+                "raw_publication_records": 0,
                 "live_contacts": 0,
                 "reaction_confirmed": 0,
+                "reaction_confirmed_after_live_contact": 0,
+                "reaction_confirmed_without_live_core_contact": 0,
                 "invalidated_before_reaction": 0,
                 "invalidated_after_reaction": 0,
                 "objective_complete": 0,
                 "executed_publications": 0,
+                "reaction_rate_after_contact_pct": None,
+                "execution_rate_after_contact_pct": None,
             },
             "rows": [],
         }
