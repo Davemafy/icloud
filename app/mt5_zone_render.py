@@ -210,7 +210,15 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
         readiness = _readiness(getattr(z, "core_method", ""), getattr(z, "state", ""))
         # Keep three independent presentation truths separate:
         # map selection, current M1 handoff, and acquired thesis ownership.
-        # Selection or M1 readiness alone must never masquerade as ownership.
+        # Once a sticky thesis owns this source, the chart must not keep calling
+        # the old macro handoff "M1 HANDOFF ACTIVE" after price has travelled
+        # away. Ownership remains valid, but every new entry still requires a
+        # fresh same-direction M1 confirmation.
+        display_state = (
+            "THESIS OWNER / FRESH M1 REQUIRED"
+            if active_thesis
+            else readiness
+        )
         m1_handoff = bool(
             not thesis_locked
             and bool(selected_zone_id)
@@ -223,7 +231,7 @@ def _primary_records(a: Any, owner_zone_id: str, thesis_locked: bool) -> list[di
                 "id": zid,
                 "role": "PRIMARY",
                 "direction": _value(getattr(z, "original_direction", "")),
-                "state": readiness,
+                "state": display_state,
                 "grade": _value(getattr(z, "grade", "")),
                 "source_tf": _value(getattr(z, "source_tf", "")),
                 "source_ts": int(getattr(z, "source_ts", 0) or 0),
