@@ -13,6 +13,15 @@ def test_current_sequence_tags_recover_setup_names_from_legacy_unknown_payloads(
         "L0": "LIQUIDITY_REVERSAL",
         "C0": "CONTINUATION_RESCUE",
         "E0": "ESCAPE_PULLBACK",
+        "MP0": "MOMENTUM_PULLBACK",
+        "VW0": "VWAP_PROXY_RECLAIM",
+        "OR0": "OPENING_RANGE_RETEST",
+        "MR1": "MOMENTUM_REENTRY_1",
+        "MR2": "MOMENTUM_REENTRY_2",
+        "VR1": "VWAP_RECLAIM_REENTRY_1",
+        "VR2": "VWAP_RECLAIM_REENTRY_2",
+        "ORR1": "OPENING_RANGE_REENTRY_1",
+        "ORR2": "OPENING_RANGE_REENTRY_2",
     }
     for tag, expected in cases.items():
         assert journal._canonical_setup({"setup": "UNKNOWN", "tag": tag}) == expected
