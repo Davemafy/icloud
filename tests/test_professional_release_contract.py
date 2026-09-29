@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.39"
-    assert manifest["data_bridge_version"] == "1.56"
-    assert manifest["sequence_ea_version"] == "3.46"
+    assert manifest["release"] == "6.3.40"
+    assert manifest["data_bridge_version"] == "1.57"
+    assert manifest["sequence_ea_version"] == "3.47"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_56_ZoneStopTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_46_ZoneDistalStop_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -161,5 +161,14 @@ def test_professional_release_contract_is_self_consistent():
         "first_entry_zone_distal_stop_floor",
         "zone_stop_spread_atr_broker_buffer",
         "zone_stop_min_rr_fail_closed",
+        "strategic_multimodel_execution",
+        "momentum_pullback_execution",
+        "vwap_proxy_reclaim_execution",
+        "opening_range_retest_execution",
+        "cloud_local_regime_dual_gate",
+        "strategic_model_reduced_risk",
+        "strategic_model_fresh_pd_array",
+        "strategic_model_closed_m1_confirmation",
+        "strategic_model_zone_distal_stop",
     }
     assert required.issubset(set(manifest["channel_features"]))
