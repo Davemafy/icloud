@@ -54,6 +54,7 @@ def _next_objective(thesis: dict[str, Any]) -> float:
     except (TypeError, ValueError):
         best = 0.0
 
+    next_frozen = 0.0
     for key in ("target1", "target2", "target3"):
         try:
             target = float(thesis.get(key) or 0.0)
@@ -69,8 +70,23 @@ def _next_objective(thesis: dict[str, Any]) -> float:
             )
         )
         if not reached:
-            return target
-    return 0.0
+            next_frozen = target
+            break
+
+    try:
+        cap = float(thesis.get("ownership_objective_cap") or 0.0)
+    except (TypeError, ValueError):
+        cap = 0.0
+    cap_reached = bool(int(thesis.get("ownership_objective_cap_reached_at") or 0))
+
+    if cap > 0 and not cap_reached:
+        if next_frozen <= 0:
+            return cap
+        if direction == "BUY" and cap < next_frozen:
+            return cap
+        if direction == "SELL" and cap > next_frozen:
+            return cap
+    return next_frozen
 
 
 def _secondary_records(policy: dict[str, Any]) -> list[dict[str, Any]]:
