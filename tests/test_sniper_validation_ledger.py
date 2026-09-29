@@ -247,7 +247,7 @@ def test_repeated_same_source_core_is_one_canonical_sample_and_rate_cannot_excee
             (
                 "PUB_D1","RX_D","SIG_D1","A_D1","A_D1",zone.zone_id,"SELL","H4>H1",90,
                 zone.core_low,zone.core_high,4361.40,4370.70,
-                100,130,0,0,0,"","",0.0,"","PUBLISHED",
+                100,130,0,0,0,"",0.0,"","PUBLISHED",
             ),
             (
                 "PUB_D2","RX_D","SIG_D2","A_D2","A_D2",zone.zone_id,"SELL","H4>H1",90,
