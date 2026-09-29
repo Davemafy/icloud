@@ -199,9 +199,12 @@ Target hierarchy:
 
 Stop logic remains liquidity/structure based:
 
-- SELL operational stop belongs beyond the actual M1 BSL sweep extreme plus a small spread/ATR buffer.
-- BUY operational stop belongs beyond the actual M1 SSL sweep extreme plus a small spread/ATR buffer.
-- The HTF outer envelope is thesis invalidation; it is not automatically the default M1 stop.
+- For the FIRST entry of an institutional thesis, the M1 timing anchor may refine entry timing but may never pull the protective stop back inside the full active institutional zone.
+- FIRST SELL entry SL = the farther of (a) the actual M1 BSL sweep extreme plus buffer and (b) the full institutional zone distal high plus buffer.
+- FIRST BUY entry SL = the farther of (a) the actual M1 SSL sweep extreme minus buffer and (b) the full institutional zone distal low minus buffer.
+- The buffer is spread/ATR/broker-stop aware. It must be at least 5 broker points and at least 1.5x the live spread in price terms, and it may be widened by the existing M1 ATR stop buffer or broker minimum stop distance.
+- If this structurally correct first-entry stop makes minimum RR fail, the trade is rejected. The system must never tighten the SL back inside the zone merely to manufacture acceptable RR.
+- Re-entries after a thesis has already progressed may use their local M1 continuation structure because they are not the original institutional-zone risk event.
 
 Session context changes patience, not zone validity:
 
@@ -261,4 +264,4 @@ authority.
 
 ## Future-change rule
 
-When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, places a first-entry protective stop inside the full institutional zone merely because a nearer M1 timing anchor exists, or allows a target on the wrong side of the actual candidate entry.
