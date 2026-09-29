@@ -195,6 +195,24 @@ def _quote_crossed(direction: Direction, price: float, snapshot: MarketSnapshot)
     return float(snapshot.ask) <= price
 
 
+def _crossed_since_cap_set(
+    snapshot: MarketSnapshot,
+    direction: Direction,
+    target: float,
+    set_at: int,
+) -> tuple[bool, int, str]:
+    """Cap truth is prospective: ignore every M15 bar that began before cap creation."""
+    if set_at <= 0:
+        return False, 0, "NO_CAP_SET_TIMESTAMP"
+    for bar in sorted(list(snapshot.xau_m15 or []), key=lambda b: int(b.ts)):
+        ts = int(bar.ts)
+        if ts < int(set_at):
+            continue
+        if _crossed(direction, target, float(bar.high), float(bar.low)):
+            return True, ts, "POST_CAP_M15_CROSS"
+    return False, 0, "NO_POST_CAP_CROSS"
+
+
 def owner_target_truth(
     analysis: Analysis,
     zone: Zone,
@@ -279,7 +297,7 @@ def owner_target_truth(
                 current["reason"] = "FROZEN_TARGET_BEYOND_ACTIVE_OPPOSING_PRIMARY"
                 blocked_by_cap.append(price)
 
-        crossed_live, live_ts, live_basis = _crossed_since(
+        crossed_live, live_ts, live_basis = _crossed_since_cap_set(
             snapshot,
             zone.original_direction,
             cap,
