@@ -234,3 +234,114 @@ def test_validation_ledger_marks_invalidation_before_reaction_without_calling_it
     assert row["execution_state"] == "NO_ENTRY"
     assert any(event["event"] == "ACCEPTED_INVALIDATION" for event in row["events"])
     assert "bad_zone" not in row
+
+
+def test_repeated_same_source_core_is_one_canonical_sample_and_rate_cannot_exceed_100(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    zone = _zone()
+
+    with db.connect() as conn:
+        # Same institutional source/core, but two exact envelope publications from
+        # later reanalysis. The raw audit records stay distinct in SQL.
+        for values in (
+            (
+                "PUB_D1","RX_D","SIG_D1","A_D1","A_D1",zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,4361.40,4370.70,
+                100,130,0,0,0,"",0.0,"","PUBLISHED",
+            ),
+            (
+                "PUB_D2","RX_D","SIG_D2","A_D2","A_D2",zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,4361.35,4370.75,
+                140,200,0,0,150,"LIVE_QUOTE_OVERLAP",4365.0,"A_D2","LIVE_CONTACT_CONFIRMED",
+            ),
+        ):
+            conn.execute(
+                """
+                INSERT INTO zone_publications(
+                    publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                    zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                    first_published_at,last_seen_at,publication_qualified_mitigations,
+                    publication_raw_core_contacts,live_core_touched_at,live_core_touch_basis,
+                    live_core_touch_price,live_core_touch_analysis_id,status
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                values,
+            )
+
+        conn.execute(
+            """
+            INSERT INTO zone_reactions(
+                reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+                direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+                first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+                target1,target2,target3,runner,best_price,mfe_price,last_reason
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "RX_D","A_D1","A_D2",zone.zone_id,zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,4361.35,4370.75,"A+","REACTION_CONFIRMED",
+                100,200,150,160,
+                zone.original_target1,zone.original_target2,zone.original_target3,zone.original_runner,
+                4350.0,15.0,"REACTION_CONFIRMED",
+            ),
+        )
+
+    out = ledger.build_validation_ledger(limit=50)
+
+    assert out["summary"]["publications"] == 1
+    assert out["summary"]["raw_publication_records"] == 2
+    assert out["summary"]["live_contacts"] == 1
+    assert out["summary"]["reaction_confirmed"] == 1
+    assert out["summary"]["reaction_confirmed_after_live_contact"] == 1
+    assert out["summary"]["reaction_rate_after_contact_pct"] == 100.0
+    assert out["summary"]["reaction_rate_after_contact_pct"] <= 100.0
+    assert len(out["rows"]) == 1
+    assert out["rows"][0]["publication_observation_count"] == 2
+    assert out["rows"][0]["published_at"] == 100
+    assert out["rows"][0]["live_core_touched_at"] == 150
+
+
+def test_reaction_without_live_core_contact_does_not_inflate_after_contact_rate(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    zone = _zone()
+
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO zone_publications(
+                publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                first_published_at,last_seen_at,publication_qualified_mitigations,
+                publication_raw_core_contacts,live_core_touched_at,status
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "PUB_NC","RX_NC","SIG_NC","A_NC","A_NC",zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,zone.zone_low,zone.zone_high,100,180,0,0,0,"PUBLISHED",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO zone_reactions(
+                reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+                direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+                first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+                target1,target2,target3,runner,best_price,mfe_price,last_reason
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "RX_NC","A_NC","A_NC",zone.zone_id,zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,zone.zone_low,zone.zone_high,"A+","REACTION_CONFIRMED",
+                100,180,0,140,
+                zone.original_target1,zone.original_target2,zone.original_target3,zone.original_runner,
+                4350.0,15.0,"HTF_ZONE_SWEEP_HANDOFF",
+            ),
+        )
+
+    out = ledger.build_validation_ledger()
+
+    assert out["summary"]["live_contacts"] == 0
+    assert out["summary"]["reaction_confirmed"] == 1
+    assert out["summary"]["reaction_confirmed_after_live_contact"] == 0
+    assert out["summary"]["reaction_confirmed_without_live_core_contact"] == 1
+    assert out["summary"]["reaction_rate_after_contact_pct"] is None

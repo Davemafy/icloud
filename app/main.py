@@ -596,12 +596,25 @@ def _event_status(events: list[dict], zone_state: str, readiness: str) -> str:
     return "PLANNED"
 
 
-def _map_display_state(z, readiness: str) -> str:
-    """Human-only map lifecycle label; never grants execution authority."""
+def _map_display_state(z, readiness: str, thesis: dict | None = None) -> str:
+    """Human-only map lifecycle label; never grants execution authority.
+
+    Acquired thesis ownership is sticky lifecycle truth, while a current M1
+    handoff is transient entry-location truth. Do not label an old owner anchor
+    as a live M1 handoff simply because its stored readiness remains M1_READY.
+    """
     if z is None:
         return "NO ACTIVE MAP"
     direction = str(getattr(getattr(z, "original_direction", None), "value", "") or "").upper()
     prefix = f"{direction} " if direction else ""
+    thesis = thesis if isinstance(thesis, dict) else {}
+    owner_match = bool(
+        thesis.get("locked")
+        and str(thesis.get("owner_zone_id") or "")
+        and str(thesis.get("owner_zone_id") or "") == str(getattr(z, "zone_id", "") or "")
+    )
+    if owner_match:
+        return f"{prefix}THESIS OWNER ACTIVE • FRESH M1 REQUIRED"
     if readiness == "M1_READY":
         return f"{prefix}MAP CONTACTED • M1 HANDOFF ACTIVE"
     if readiness == "INTERACTING":
@@ -1026,7 +1039,11 @@ def _journal_snapshot():
         } if s else None,
         "checks": checks,
         "readiness_score": f"{score}/{len(checks)}",
-        "map_display_state": _map_display_state(z, readiness),
+        "map_display_state": _map_display_state(
+            z,
+            readiness,
+            dict((a.execution_policy or {}).get("active_thesis") or {}) if a else {},
+        ),
         "macro_status": macro_status,
         "status": reconciled_status,
         "events": current_events,

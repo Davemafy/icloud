@@ -13,7 +13,7 @@ from .zone_publication_migration import ensure_zone_publication_schema
 from .execution_ownership_migration import ensure_execution_ownership_schema
 
 
-VALIDATION_LEDGER_VERSION = "MASTER_SNIPER_VALIDATION_LEDGER_V1"
+VALIDATION_LEDGER_VERSION = "MASTER_SNIPER_VALIDATION_LEDGER_V2_CANONICAL_SOURCE_CORE"
 _TRADE_EVENTS = {"ENTRY_OPENED", "POSITION_MARK", "POSITION_EXIT", "TP_HIT", "SL_HIT", "TRADE_CLOSED"}
 
 
@@ -169,10 +169,80 @@ def _feedback_rows(min_ts: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def _validation_sample_key(row: dict) -> str:
+    """Canonical research identity: institutional source + tactical core.
+
+    Exact envelope publication records remain preserved in zone_publications for
+    forensic audit. The validation ledger, however, must not count repeated
+    reanalysis of the same source/core as independent samples.
+    """
+    return "|".join(
+        (
+            str(row.get("direction") or ""),
+            str(row.get("source_tf") or ""),
+            str(int(row.get("source_ts") or 0)),
+            f"{float(row.get('core_low') or 0.0):.5f}",
+            f"{float(row.get('core_high') or 0.0):.5f}",
+        )
+    )
+
+
+def _canonicalize_publications(rows: list[dict], limit: int) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for raw in rows:
+        row = dict(raw)
+        key = _validation_sample_key(row)
+        current = grouped.get(key)
+        if current is None:
+            row["validation_sample_key"] = key
+            row["publication_observation_count"] = 1
+            grouped[key] = row
+            continue
+
+        current["publication_observation_count"] = int(current.get("publication_observation_count") or 1) + 1
+
+        row_published = int(row.get("first_published_at") or 0)
+        cur_published = int(current.get("first_published_at") or 0)
+        if row_published and (cur_published <= 0 or row_published < cur_published):
+            current["first_published_at"] = row_published
+            current["first_analysis_id"] = row.get("first_analysis_id")
+            current["publication_qualified_mitigations"] = row.get("publication_qualified_mitigations")
+            current["publication_raw_core_contacts"] = row.get("publication_raw_core_contacts")
+
+        row_seen = int(row.get("last_seen_at") or 0)
+        cur_seen = int(current.get("last_seen_at") or 0)
+        if row_seen > cur_seen:
+            current["last_seen_at"] = row_seen
+            current["latest_analysis_id"] = row.get("latest_analysis_id")
+            # Keep the latest visible envelope/zone label for audit display while
+            # preserving the first publication clock above.
+            for field in ("publication_key","geometry_signature","zone_id","zone_low","zone_high","status"):
+                current[field] = row.get(field)
+
+        row_touch = int(row.get("live_core_touched_at") or 0)
+        cur_touch = int(current.get("live_core_touched_at") or 0)
+        if row_touch and (cur_touch <= 0 or row_touch < cur_touch):
+            current["live_core_touched_at"] = row_touch
+            current["live_core_touch_basis"] = row.get("live_core_touch_basis")
+            current["live_core_touch_price"] = row.get("live_core_touch_price")
+            current["live_core_touch_analysis_id"] = row.get("live_core_touch_analysis_id")
+            current["status"] = "LIVE_CONTACT_CONFIRMED"
+
+    ordered = sorted(
+        grouped.values(),
+        key=lambda row: int(row.get("first_published_at") or 0),
+        reverse=True,
+    )
+    return ordered[:limit]
+
+
 def _publication_rows(limit: int) -> list[dict]:
     ensure_execution_ownership_schema()
     ensure_zone_publication_schema()
     limit = max(1, min(int(limit), 250))
+    # Pull enough raw geometry records to collapse repeated reanalysis of the
+    # same source/core without losing older independent samples.
+    raw_limit = min(max(limit * 12, limit), 3000)
     with connect() as db:
         rows = db.execute(
             """
@@ -194,9 +264,9 @@ def _publication_rows(limit: int) -> list[dict]:
             ORDER BY p.first_published_at DESC
             LIMIT ?
             """,
-            (limit,),
+            (raw_limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    return _canonicalize_publications([dict(row) for row in rows], limit)
 
 
 def build_validation_ledger(limit: int = 50) -> dict:
@@ -214,12 +284,17 @@ def build_validation_ledger(limit: int = 50) -> dict:
             "read_only": True,
             "summary": {
                 "publications": 0,
+                "raw_publication_records": 0,
                 "live_contacts": 0,
                 "reaction_confirmed": 0,
+                "reaction_confirmed_after_live_contact": 0,
+                "reaction_confirmed_without_live_core_contact": 0,
                 "invalidated_before_reaction": 0,
                 "invalidated_after_reaction": 0,
                 "objective_complete": 0,
                 "executed_publications": 0,
+                "reaction_rate_after_contact_pct": None,
+                "execution_rate_after_contact_pct": None,
             },
             "rows": [],
         }
@@ -370,6 +445,8 @@ def build_validation_ledger(limit: int = 50) -> dict:
         output.append(
             {
                 "publication_key": str(row.get("publication_key") or ""),
+                "validation_sample_key": str(row.get("validation_sample_key") or ""),
+                "publication_observation_count": int(row.get("publication_observation_count") or 1),
                 "reaction_key": str(row.get("reaction_key") or ""),
                 "zone_id": zone_id,
                 "first_analysis_id": str(row.get("first_analysis_id") or ""),
@@ -423,18 +500,31 @@ def build_validation_ledger(limit: int = 50) -> dict:
 
     contacted = sum(1 for row in output if row["live_core_touched_at"] > 0)
     reacted = sum(1 for row in output if row["reaction_confirmed_at"] > 0)
+    reacted_after_contact = sum(
+        1 for row in output
+        if row["live_core_touched_at"] > 0
+        and row["reaction_confirmed_at"] >= row["live_core_touched_at"] > 0
+    )
     executed = sum(1 for row in output if row["entry_count"] > 0)
+    executed_after_contact = sum(
+        1 for row in output
+        if row["live_core_touched_at"] > 0 and row["entry_count"] > 0
+    )
+    raw_publication_records = sum(int(row.get("publication_observation_count") or 1) for row in output)
     summary = {
         "publications": len(output),
+        "raw_publication_records": raw_publication_records,
         "live_contacts": contacted,
         "reaction_confirmed": reacted,
+        "reaction_confirmed_after_live_contact": reacted_after_contact,
+        "reaction_confirmed_without_live_core_contact": max(0, reacted - reacted_after_contact),
         "invalidated_before_reaction": counts.get("INVALIDATED_BEFORE_REACTION", 0),
         "invalidated_after_reaction": counts.get("INVALIDATED_AFTER_REACTION", 0),
         "objective_complete": counts.get("OBJECTIVE_COMPLETE", 0),
         "objective_progress": counts.get("OBJECTIVE_PROGRESS", 0),
         "executed_publications": executed,
-        "reaction_rate_after_contact_pct": round(100.0 * reacted / contacted, 1) if contacted else None,
-        "execution_rate_after_contact_pct": round(100.0 * executed / contacted, 1) if contacted else None,
+        "reaction_rate_after_contact_pct": round(100.0 * reacted_after_contact / contacted, 1) if contacted else None,
+        "execution_rate_after_contact_pct": round(100.0 * executed_after_contact / contacted, 1) if contacted else None,
         "by_direction": {key: dict(value) for key, value in by_direction.items()},
         "by_structural_grade": {key: dict(value) for key, value in by_grade.items()},
     }
