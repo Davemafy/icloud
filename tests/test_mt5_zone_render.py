@@ -330,6 +330,8 @@ def test_live_renderer_keeps_active_owner_even_if_price_has_moved_beyond_origin_
     assert d["zone_count"] == "1"
     assert d["zone1_id"] == "BUY_OWNER"
     assert d["zone1_active_thesis"] == "1"
+    assert d["zone1_state"] == "THESIS OWNER / FRESH M1 REQUIRED"
+    assert d["zone1_m1_handoff"] == "0"
 
 
 def test_invalidated_buy_remains_visible_as_sell_flip_context():
