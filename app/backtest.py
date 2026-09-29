@@ -453,7 +453,7 @@ async def generate_v659(
     # so replay truth advances with the current Cloud instead of masquerading as
     # the older 6.5.99 analysis contract.
     backtest_contract_cloud = "6.5.104"
-    compatible_runtime_clouds = {"6.5.104"}
+    compatible_runtime_clouds = {"6.5.104", "6.5.105"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "
