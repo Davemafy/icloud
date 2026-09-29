@@ -393,12 +393,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         parts.push('This selected zone is the thesis origin/ownership anchor; it does not mean current price is still inside the original core or envelope.');
       }
       const checks=j?.checks||{};
-      const m1Handoff=checks.m1_handoff_ready===true;
       const seq=j?.sequence_debug||{};
+      const macroHandoff=checks.m1_handoff_ready===true;
+      const freshLocation=checks.fresh_m1_location_ready===true;
       const cloudAuthority=String(seq.cloud_authority||'NONE');
       const sequenceAuthority=String(seq.authority||'NONE');
       parts.push(
-        'Current M1 location handoff '+(m1Handoff?'YES':'NO')+
+        'Macro thesis / handoff authority '+(macroHandoff?'YES':'NO')+
+        '. Fresh M1 entry location '+(freshLocation?'YES':'NO')+
         '. Cloud execution authority '+cloudAuthority+
         '. Sequence authority '+sequenceAuthority+'.'
       );
@@ -480,8 +482,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     const allKeys=Object.keys(checks);
     const allPassed=allKeys.reduce((n,k)=>n+(checks[k]===true?1:0),0);
-    const checklist=allKeys.length ? ('Macro checks '+allPassed+'/'+allKeys.length+'. ') : '';
+    const checklist=allKeys.length ? ('Readiness checks '+allPassed+'/'+allKeys.length+'. ') : '';
     const m1=checks.m1_handoff_ready===true;
+    const freshM1=checks.fresh_m1_location_ready===true;
     const live=checks.live_data_safe===true;
     const thesis=activeThesis();
     const ownerMatch=thesis.locked===true && Boolean(z.zone_id) && String(thesis.owner_zone_id||'')===String(z.zone_id);
@@ -634,6 +637,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         state='ORDER SENT';
         cls='ok';
         meta=checklist+'Sequence has completed its entry gates and sent the paper order.';
+      }else if(seqStage==='LOCATION' || !freshM1){
+        state=ownerMatch ? 'THESIS OWNER • WAITING FOR FRESH M1 LOCATION' : 'WAITING FOR M1 LOCATION';
+        cls='warn';
+        meta=checklist+(ownerMatch
+          ? 'The BUY/SELL thesis owner and macro authority are preserved, but Sequence has no fresh entry location yet. '
+          : 'Macro authority exists, but Sequence has no fresh entry location yet. ')+
+          (seqReason?('Sequence: '+seqReason.replaceAll('_',' ')+'. '):'')+'Entry permission: NO.';
       }else if(limitReached){
         state='THESIS ENTRY LIMIT REACHED';
         cls='warn';
