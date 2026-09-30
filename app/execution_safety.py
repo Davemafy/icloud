@@ -182,8 +182,9 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
 
     Macro authority is historical once acquired. Leaving the original HTF core or
     envelope must not turn the plan back into WATCH_ONLY while the owner is still
-    nonterminal. Sequence remains responsible for fresh M1 BOS/displacement/value
-    and no-chase entry timing.
+    nonterminal. For the primary first entry, Sequence remains responsible for
+    M1 liquidity sweep -> M1 micro MSS -> pullback -> closed directional M1 candle
+    and no-chase timing. Re-entry/flip models keep their own explicit gates.
     """
     meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
     authority = str(meta.get("ownership_authority") or "")
