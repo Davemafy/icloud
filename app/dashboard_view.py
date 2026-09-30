@@ -517,7 +517,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls=ownerMatch ? 'ok' : 'blue';
       meta=ownerMatch
         ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
-        : checklist+'Macro location handoff is active. This is not entry authorization; the live Sequence EA must still complete sweep → MSS/BOS → displacement → value/retrace → CLOSED M1 same-direction rejection/micro-break. Every entry model must pass this final confirmation before any order.';
+        : checklist+'Macro location handoff is active. Primary first entry is: M1 liquidity sweep → M1 micro MSS → pullback → CLOSED M1 candle in trade direction → entry. M15 only validates zone health; no OTE/FVG/PD-array or displacement threshold is required for this first entry.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -582,6 +582,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
                 : '')+
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
+          }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
+            runwayText=' Absolute runway is observation only. Sequence 3.49 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
@@ -605,7 +607,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
         const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
         const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
-        const runwayBlock=seqStage==='TARGET'&&seqReason.includes('ENTRY_SPECIFIC_RUNWAY_NOT_MET');
+        const runwayBlock=cloudRunwayMode!=='RR_ONLY_M1_ORDER'&&seqStage==='TARGET'&&seqReason.includes('ENTRY_SPECIFIC_RUNWAY_NOT_MET');
         const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
         seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' '))))));
@@ -648,7 +650,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
       const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
       const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-      const forming=['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
+      const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
+      const forming=simplePrimaryWait||['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
       const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
       if(seqStage==='ORDER_SENT'){
         state='ORDER SENT';
@@ -673,14 +676,22 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         state='ENTRY BLOCKED: OBJECTIVE ALREADY TRADED';
         cls='warn';
         meta=checklist+'The nearest post-handoff objective already traded after the handoff, so the late entry is expired rather than chased. Entry permission: NO.';
+      }else if(simplePrimaryWait){
+        state='M1 PRIMARY SEQUENCE FORMING';
+        cls='blue';
+        meta=checklist+'Primary model: zone contact → M1 sweep → micro MSS → pullback → closed directional M1 candle. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
       }else if(reactionWait){
-        state='WAITING FOR M1 VALUE REACTION';
+        state='WAITING FOR M1 CONFIRMATION';
         cls='blue';
-        meta=checklist+'Execution value exists, but every P0/C0/E0, R1/R2, L0/S0, and accepted-zone flip entry requires a CLOSED M1 same-direction rejection/micro-break from the OTE/PD overlap. Entry permission: NO.';
+        meta=checklist+(seqModel==='MASTER_SNIPER_SIMPLE'
+          ? 'Primary model is waiting for its final closed M1 directional candle. Entry permission: NO.'
+          : 'This non-primary/re-entry model is waiting for its configured closed-M1 confirmation. Entry permission: NO.');
       }else if(valueWait){
-        state='WAITING FOR VALUE / RETRACE';
+        state='WAITING FOR RETRACE';
         cls='blue';
-        meta=checklist+'Macro handoff is active, but Sequence is still waiting for a valid OTE/PD-array value retrace. Entry permission: NO.';
+        meta=checklist+(seqModel==='MASTER_SNIPER_SIMPLE'
+          ? 'Primary model is waiting for the pullback after the M1 micro MSS. Entry permission: NO.'
+          : 'This non-primary/re-entry model is waiting for its configured value retrace. Entry permission: NO.');
       }else if(forming){
         state='M1 SEQUENCE FORMING';
         cls='blue';
