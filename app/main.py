@@ -993,6 +993,14 @@ def _journal_snapshot():
     sequence_debug["cloud_required_runway"] = str(final_plan.get("required_runway") or "")
     sequence_debug["cloud_runway_target"] = str(final_plan.get("usable_runway_target") or "")
     sequence_debug["cloud_runway_target_basis"] = str(final_plan.get("usable_runway_target_basis") or "")
+    sequence_debug["cloud_runway_gate_mode"] = str(final_plan.get("runway_gate_mode") or "")
+    sequence_debug["cloud_entry_specific_runway_runtime_ready"] = str(
+        final_plan.get("entry_specific_runway_runtime_ready") or ""
+    )
+    sequence_debug["cloud_conservative_edge_runway"] = str(final_plan.get("conservative_edge_runway") or "")
+    sequence_debug["cloud_runway_entry_limit"] = str(final_plan.get("runway_entry_limit") or "")
+    sequence_debug["cloud_runway_candidate_low"] = str(final_plan.get("runway_candidate_low") or "")
+    sequence_debug["cloud_runway_candidate_high"] = str(final_plan.get("runway_candidate_high") or "")
     sequence_debug["cloud_history_failures"] = str(final_plan.get("history_window_failures") or "")
     sequence_debug["cloud_history_warnings"] = str(final_plan.get("history_confluence_warnings") or "")
     sequence_debug["cloud_history_metrics"] = str(final_plan.get("history_window_metrics") or "")
