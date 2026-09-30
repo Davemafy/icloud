@@ -114,8 +114,8 @@ def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
     monkeypatch.setattr("app.professional_zone_execution_separation.history_audit", lambda _snapshot: (True, []))
     raw = plan_execution_guard._original_active_plan_text(analysis, snap)
     guarded = _kv(apply_execution_separation(guard_plan_text(raw, analysis, snap), analysis, snap))
-    assert guarded["ea_mode"] == "WATCH_ONLY"
-    assert guarded["execution_authority"] == "NONE"
+    assert guarded["ea_mode"] == "DUAL_BRANCH"
+    assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
     assert guarded["risk_model"] == RISK_MODEL
     assert guarded["risk_context"] == "COUNTERTREND"
     assert guarded["grade_risk_pct"] == "0.25"
