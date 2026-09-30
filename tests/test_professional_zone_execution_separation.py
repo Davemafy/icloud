@@ -267,6 +267,10 @@ def test_final_separation_uses_entry_specific_runway_for_matching_runtime(monkey
         "app.professional_zone_execution_separation.history_audit",
         lambda _snapshot: (True, []),
     )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation._entry_specific_runway_runtime_ready",
+        lambda _snapshot: True,
+    )
     raw = (
         "ea_mode=DUAL_BRANCH\n"
         "zone_id=Z_ENTRY_RUNWAY\n"
