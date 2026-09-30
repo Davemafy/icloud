@@ -594,7 +594,7 @@ def _handoff_reaction_instance(
         return instance_key, existing
 
     now = int(snapshot.sent_at)
-    preconfirmed_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
+    preconfirmed_authority = authority in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}
     status = "REACTION_CONFIRMED" if preconfirmed_authority else "INTERACTING"
     reaction_confirmed_at = now if preconfirmed_authority else 0
     db.execute(
@@ -639,8 +639,8 @@ def acquire_execution_ownership(
 
     HTF_CORE_HANDOFF originates from tactical-core M1_READY. HTF_ZONE_CONTACT_HANDOFF
     originates from a qualified published-envelope contact and starts as INTERACTING;
-    the M1 sequence must still prove the reaction. Legacy HTF_ZONE_SWEEP_HANDOFF remains
-    readable for existing owners. LIQUIDITY_REVERSAL_HANDOFF is M15-confirmed before
+    the M1 sequence must still prove the reaction. Legacy HTF_ZONE_SWEEP_HANDOFF keeps
+    its historical preconfirmed semantics for persisted owners. LIQUIDITY_REVERSAL_HANDOFF is M15-confirmed before
     the remote context core.
     This function never creates a zone or an order.
     """
@@ -656,6 +656,7 @@ def acquire_execution_ownership(
     liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
     zone_contact_authority = authority == "HTF_ZONE_CONTACT_HANDOFF"
     zone_sweep_authority = authority == "HTF_ZONE_SWEEP_HANDOFF"
+    preconfirmed_authority = liquidity_authority or zone_sweep_authority
     with connect() as db:
         key, row = _handoff_reaction_instance(db, analysis, snapshot, zone, authority, anchor)
         if row is None:
@@ -687,8 +688,8 @@ def acquire_execution_ownership(
             """,
             (
                 now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
-                1 if liquidity_authority else 0, now,
-                1 if liquidity_authority else 0,
+                1 if preconfirmed_authority else 0, now,
+                1 if preconfirmed_authority else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
             ),
         )
