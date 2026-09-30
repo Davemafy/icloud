@@ -178,7 +178,7 @@ def recover_owner_from_sequence_heartbeat(h: Heartbeat) -> bool:
         return False
     if status not in ACTIVE_THESIS_STATUSES:
         return False
-    if authority not in {"HTF_CORE_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}:
+    if authority not in {"HTF_CORE_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}:
         return False
 
     core_low, core_high = _f(d.get("owner_mirror_core_low")), _f(d.get("owner_mirror_core_high"))
