@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.40"
-    assert manifest["data_bridge_version"] == "1.57"
-    assert manifest["sequence_ea_version"] == "3.47"
+    assert manifest["release"] == "6.3.41"
+    assert manifest["data_bridge_version"] == "1.58"
+    assert manifest["sequence_ea_version"] == "3.48"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -170,5 +170,9 @@ def test_professional_release_contract_is_self_consistent():
         "strategic_model_fresh_pd_array",
         "strategic_model_closed_m1_confirmation",
         "strategic_model_zone_distal_stop",
+        "entry_specific_m1_runway_candidate_window",
+        "actual_entry_runway_order_gate",
+        "rolling_upgrade_runway_compatibility_guard",
+        "runway_gate_dashboard_truth",
     }
     assert required.issubset(set(manifest["channel_features"]))

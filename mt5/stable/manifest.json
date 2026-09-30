@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.40",
+  "release": "6.3.41",
   "repository": "Davemafy/icloud",
-  "ref": "9cf98bf045a45915cc4dd34c60ad678bb6856bec",
-  "data_bridge_version": "1.57",
-  "sequence_ea_version": "3.47",
+  "ref": "53cab5a1d0f28c851c20bc2908db1ad4c141c38b",
+  "data_bridge_version": "1.58",
+  "sequence_ea_version": "3.48",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -194,24 +194,28 @@
     "strategic_model_reduced_risk",
     "strategic_model_fresh_pd_array",
     "strategic_model_closed_m1_confirmation",
-    "strategic_model_zone_distal_stop"
+    "strategic_model_zone_distal_stop",
+    "entry_specific_m1_runway_candidate_window",
+    "actual_entry_runway_order_gate",
+    "rolling_upgrade_runway_compatibility_guard",
+    "runway_gate_dashboard_truth"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
       "requires_reload": true,
-      "sha256": "a0c65c889f479ff23d1757ded80f0dd19738a4f9d8badca28d9242e82204cf05"
+      "sha256": "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1"
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
       "requires_reload": true,
-      "sha256": "58e98fe3c9f6d615a755fbc38a2ff6c7f61fd90b4a2c78d862dc086fb68320cf"
+      "sha256": "73aa0655a5ccdcdd7fb7b9c2cc845b41516655a21b31646adedc6bf0a6cb9061"
     }
   ],
   "support_files": [

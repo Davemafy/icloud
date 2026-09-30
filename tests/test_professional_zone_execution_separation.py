@@ -5,6 +5,7 @@ from app.professional_zone_execution_separation import (
     apply_execution_separation,
     confluence_history_audit,
     conservative_runway,
+    entry_specific_runway_candidate,
     history_audit,
     history_metrics,
     zone_layer,
@@ -86,6 +87,47 @@ def test_conservative_runway_uses_tactical_core_edge_not_zone_midpoint():
     assert runway == 9.0
     assert required > 0
     assert ok == (runway >= required)
+
+
+def test_entry_specific_buy_runway_keeps_only_the_viable_core_subwindow():
+    zone = _zone(direction=Direction.BUY, target=110.0)
+    zone.core_high = 106.0
+    conservative, required, old_ok = conservative_runway(zone)
+    runway, required2, ok, entry_limit, low, high = entry_specific_runway_candidate(zone)
+    assert conservative == 4.0
+    assert required == 5.0
+    assert old_ok is False
+    assert runway == 10.0
+    assert required2 == 5.0
+    assert ok is True
+    assert entry_limit == 105.0
+    assert (low, high) == (100.0, 105.0)
+
+
+def test_entry_specific_sell_runway_keeps_only_the_viable_core_subwindow():
+    zone = _zone(direction=Direction.SELL, target=96.0)
+    zone.core_high = 106.0
+    conservative, required, old_ok = conservative_runway(zone)
+    runway, required2, ok, entry_limit, low, high = entry_specific_runway_candidate(zone)
+    assert conservative == 4.0
+    assert required == 5.0
+    assert old_ok is False
+    assert runway == 10.0
+    assert required2 == 5.0
+    assert ok is True
+    assert entry_limit == 101.0
+    assert (low, high) == (101.0, 106.0)
+
+
+def test_entry_specific_runway_still_fails_when_no_core_price_can_meet_minimum():
+    zone = _zone(direction=Direction.BUY, target=104.0)
+    zone.core_high = 106.0
+    runway, required, ok, entry_limit, low, high = entry_specific_runway_candidate(zone)
+    assert runway == 4.0
+    assert required == 5.0
+    assert ok is False
+    assert entry_limit == 99.0
+    assert low == 0.0 and high == 0.0
 
 
 def test_bplus_touch_count_is_telemetry_only_for_execution_layer():
@@ -201,3 +243,101 @@ def test_final_plan_exports_exact_history_failures_warnings_and_metrics(monkeypa
     assert "XAU_D1:" in out["history_window_metrics"]
     assert "DXY_H4:" in out["history_window_metrics"]
     assert out["ea_mode"] == "DUAL_BRANCH"
+
+
+def test_final_separation_uses_entry_specific_runway_for_matching_runtime(monkeypatch):
+    zone = SimpleNamespace(
+        zone_id="Z_ENTRY_RUNWAY",
+        grade=Grade.A,
+        touch_count=0,
+        original_direction=Direction.BUY,
+        core_low=100.0,
+        core_high=106.0,
+        original_target1=110.0,
+        countertrend=False,
+        setup_type="CONTINUATION",
+    )
+    analysis = SimpleNamespace(zones=[zone], generated_at=1000)
+    snapshot = SimpleNamespace(
+        spread_points=10.0,
+        sent_at=1000,
+        kind="HISTORICAL_REPLAY",
+    )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation.history_audit",
+        lambda _snapshot: (True, []),
+    )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation._entry_specific_runway_runtime_ready",
+        lambda _snapshot: True,
+    )
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "zone_id=Z_ENTRY_RUNWAY\n"
+        "execution_authority=HTF_CORE_HANDOFF\n"
+        "next_open_target=110.0\n"
+    )
+    out = dict(
+        line.split("=", 1)
+        for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
+        if "=" in line
+    )
+    assert out["runway_gate_mode"] == "ENTRY_SPECIFIC_M1_ORDER"
+    assert out["entry_specific_runway_runtime_ready"] == "1"
+    assert out["conservative_edge_runway"] == "4.00000"
+    assert out["usable_runway"] == "10.00000"
+    assert out["required_runway"] == "5.00000"
+    assert out["usable_runway_ok"] == "1"
+    assert out["runway_entry_limit"] == "105.00000"
+    assert out["runway_candidate_low"] == "100.00000"
+    assert out["runway_candidate_high"] == "105.00000"
+    assert out["separation_guard"] == "PASS"
+
+
+def test_live_rollout_keeps_conservative_guard_until_sequence_348_is_confirmed(monkeypatch):
+    zone = SimpleNamespace(
+        zone_id="Z_COMPAT",
+        grade=Grade.A,
+        touch_count=0,
+        original_direction=Direction.BUY,
+        core_low=100.0,
+        core_high=106.0,
+        original_target1=110.0,
+        countertrend=False,
+        setup_type="CONTINUATION",
+    )
+    analysis = SimpleNamespace(zones=[zone], generated_at=1000)
+    snapshot = SimpleNamespace(
+        spread_points=10.0,
+        sent_at=1000,
+        kind="LIVE",
+    )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation.history_audit",
+        lambda _snapshot: (True, []),
+    )
+    monkeypatch.setattr(
+        "app.professional_zone_execution_separation._entry_specific_runway_runtime_ready",
+        lambda _snapshot: False,
+    )
+    raw = (
+        "ea_mode=DUAL_BRANCH\n"
+        "zone_id=Z_COMPAT\n"
+        "execution_authority=HTF_CORE_HANDOFF\n"
+        "next_open_target=110.0\n"
+    )
+    # Live clock age is not part of this runway test; pin the snapshot safety
+    # result so only the structural runway mode is under examination.
+    snapshot.sent_at = int(__import__("time").time())
+    analysis.generated_at = snapshot.sent_at
+    out = dict(
+        line.split("=", 1)
+        for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
+        if "=" in line
+    )
+    assert out["runway_gate_mode"] == "CONSERVATIVE_CORE_EDGE_COMPAT"
+    assert out["usable_runway"] == "4.00000"
+    assert out["usable_runway_ok"] == "0"
+    assert out["ea_mode"] == "WATCH_ONLY"
+    assert out["execution_authority"] == "NONE"
+    assert "INSUFFICIENT_USABLE_RUNWAY" in out["separation_guard"]
