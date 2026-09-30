@@ -34,10 +34,12 @@ _AI_RULE = """
     destination to the canonical front-run cap while the frozen owner targets remain audit truth. This cap
     never mutates an open position and cannot be completed from price history that predates the cap.
     A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
-    from the acquired thesis. Primary first-entry confirmation is intentionally simple:
-    M1 liquidity sweep -> M1 micro MSS -> pullback -> closed M1 candle in thesis direction.
-    M15 validates zone health and accepted invalidation; OTE/FVG/PD-array and a separate
-    displacement threshold are not mandatory first-entry gates. If an acquired owner disappears from the current map,
+    from the acquired thesis. Primary execution has two direct M1 models:
+    (1) liquidity sweep -> micro MSS -> fresh OB/FVG -> pullback into OB/FVG -> closed M1 candle in thesis direction;
+    (2) closed directional M1 real-body engulfing at/in the valid zone.
+    Those same models may re-arm for R1/R2 while thesis/objective/risk budget remain live. M15 validates zone
+    health and accepted invalidation; OTE and a separate displacement threshold are not mandatory primary gates.
+    If an acquired owner disappears from the current map,
     fail closed until lifecycle release or safe requalification.
 """
 
