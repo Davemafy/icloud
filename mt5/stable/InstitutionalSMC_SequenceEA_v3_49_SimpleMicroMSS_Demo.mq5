@@ -50,7 +50,6 @@ input int ResearchFlipCandidateMaxMinutes=120;
 // v3.49 simple Master Sniper primary-entry timing.
 // "Micro MSS" means M1 internal structure, not M5/M15/HTF structure.
 input int SimpleMicroMSSLookbackBars=18;
-input int SimplePullbackMaxBars=8;
 
 // v3.47 strategic multi-model opportunity layer.
 // These are supplementary execution patterns only. They never create HTF authority,
@@ -1602,7 +1601,6 @@ bool TZ49_BuildSimplePrimary(MqlRates &r[],double a,bool buy,Signal &sig)
    if(ArraySize(r)<40)return false;
    int maxSweep=MathMin(SweepWindowBars,ArraySize(r)-12);
    int microDepth=MathMax(6,MathMin(SimpleMicroMSSLookbackBars,60));
-   int pullbackDepth=MathMax(1,MathMin(SimplePullbackMaxBars,20));
    double buf=SweepBufferPoints*_Point;
 
    for(int sw=5;sw<=maxSweep;sw++)
@@ -1627,16 +1625,14 @@ bool TZ49_BuildSimplePrimary(MqlRates &r[],double a,bool buy,Signal &sig)
       }
       if(br<3)continue;
 
-      int pb=-1;
-      int newestAllowed=MathMax(2,br-pullbackDepth);
-      for(int j=br-1;j>=newestAllowed;j--)
-      {
-         bool retraced=buy
-            ?(r[j].close<r[j].open || r[j].low<r[j+1].low)
-            :(r[j].close>r[j].open || r[j].high>r[j+1].high);
-         if(retraced){pb=j;break;}
-      }
-      if(pb<2)continue;
+      // No chase: the pullback must be the candle immediately before the
+      // directional confirmation candle.
+      int pb=2;
+      if(pb>=br)continue;
+      bool retraced=buy
+         ?(r[pb].close<r[pb].open || r[pb].low<r[pb+1].low)
+         :(r[pb].close>r[pb].open || r[pb].high>r[pb+1].high);
+      if(!retraced)continue;
 
       bool directional=buy?(r[1].close>r[1].open):(r[1].close<r[1].open);
       bool structureHeld=buy?(r[1].close>mss):(r[1].close<mss);
@@ -1662,7 +1658,6 @@ string TZ49_DiagnoseSimplePrimary(MqlRates &r[],bool buy,bool recentZone)
    if(!recentZone)return "LOCATION";
    int maxSweep=MathMin(SweepWindowBars,ArraySize(r)-12);
    int microDepth=MathMax(6,MathMin(SimpleMicroMSSLookbackBars,60));
-   int pullbackDepth=MathMax(1,MathMin(SimplePullbackMaxBars,20));
    double buf=SweepBufferPoints*_Point;
    bool sawSweep=false,sawMSS=false,sawPullback=false;
 
@@ -1678,11 +1673,12 @@ string TZ49_DiagnoseSimplePrimary(MqlRates &r[],bool buy,bool recentZone)
       int br=-1;
       for(int j=sw-1;j>=3;j--){if(buy?(r[j].close>mss):(r[j].close<mss)){br=j;sawMSS=true;break;}}
       if(br<3)continue;
-      int newestAllowed=MathMax(2,br-pullbackDepth);
-      for(int j=br-1;j>=newestAllowed;j--)
+      if(2<br)
       {
-         bool retraced=buy?(r[j].close<r[j].open||r[j].low<r[j+1].low):(r[j].close>r[j].open||r[j].high>r[j+1].high);
-         if(retraced){sawPullback=true;break;}
+         bool retraced=buy
+            ?(r[2].close<r[2].open||r[2].low<r[3].low)
+            :(r[2].close>r[2].open||r[2].high>r[3].high);
+         if(retraced)sawPullback=true;
       }
       if(sawPullback)break;
    }
@@ -2298,7 +2294,6 @@ int OnInit()
    int rc=TZ27_SeqCore_OnInit();if(rc!=INIT_SUCCEEDED)return rc;
    if(ResearchMaxSpreadPoints<=0||ResearchRecentZoneBars<30)return INIT_PARAMETERS_INCORRECT;
    if(SimpleMicroMSSLookbackBars<6||SimpleMicroMSSLookbackBars>60)return INIT_PARAMETERS_INCORRECT;
-   if(SimplePullbackMaxBars<1||SimplePullbackMaxBars>20)return INIT_PARAMETERS_INCORRECT;
    if(ResearchLiquidityReversalRiskMultiplier<=0||ResearchLiquidityReversalRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchZoneSweepRiskMultiplier<=0||ResearchZoneSweepRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchEscapeRiskMultiplier<=0||ResearchEscapeRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
