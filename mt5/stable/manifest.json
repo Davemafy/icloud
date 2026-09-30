@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.41",
+  "release": "6.3.42",
   "repository": "Davemafy/icloud",
-  "ref": "53cab5a1d0f28c851c20bc2908db1ad4c141c38b",
+  "ref": "d90198d0dd99c64b8d57cb5675252e0ddba7bdaf",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.48",
+  "sequence_ea_version": "3.49",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -198,7 +198,17 @@
     "entry_specific_m1_runway_candidate_window",
     "actual_entry_runway_order_gate",
     "rolling_upgrade_runway_compatibility_guard",
-    "runway_gate_dashboard_truth"
+    "runway_gate_dashboard_truth",
+    "simple_m1_micro_mss_primary",
+    "envelope_contact_arms_m1",
+    "m15_health_only_for_primary_entry",
+    "zone_distal_buffered_stop",
+    "order_time_min_rr_only",
+    "absolute_runway_telemetry_only",
+    "consumed_targets_skipped",
+    "primary_no_ote_fvg_pdarray_gate",
+    "primary_no_displacement_threshold",
+    "closed_m1_directional_confirmation"
   ],
   "files": [
     {
@@ -211,11 +221,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
       "requires_reload": true,
-      "sha256": "73aa0655a5ccdcdd7fb7b9c2cc845b41516655a21b31646adedc6bf0a6cb9061"
+      "sha256": "e6a30a1dabf9c408f8817b5b686f69e53c12d9163289ace5fa34aa9c5c6a5029"
     }
   ],
   "support_files": [
