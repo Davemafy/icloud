@@ -182,9 +182,11 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
 
     Macro authority is historical once acquired. Leaving the original HTF core or
     envelope must not turn the plan back into WATCH_ONLY while the owner is still
-    nonterminal. For the primary first entry, Sequence remains responsible for
-    M1 liquidity sweep -> M1 micro MSS -> pullback -> closed directional M1 candle
-    and no-chase timing. Re-entry/flip models keep their own explicit gates.
+    nonterminal. Primary Sequence execution uses either (1) M1 liquidity sweep ->
+    micro MSS -> fresh OB/FVG -> retest -> closed directional M1 candle, or
+    (2) a closed directional M1 engulfing pattern at/in the zone. The same primary
+    models may re-arm for R1/R2 under the thesis risk cap. Flip/liquidity-reversal
+    branches keep their own explicit gates.
     """
     meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
     authority = str(meta.get("ownership_authority") or "")
