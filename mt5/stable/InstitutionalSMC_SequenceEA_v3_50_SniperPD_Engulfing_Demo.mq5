@@ -2317,7 +2317,12 @@ void Evaluate()
       else if(g_tzExecutionAuthority=="LIQUIDITY_REVERSAL_HANDOFF")
          stage=TZ31_DiagnosePostHandoff(r,a,origBuy);
       else stage="MICRO_PATTERN";
-      TZ_SetGate(stage,"WAITING_FOR_VALID_"+stage);return;
+      string waitReason="WAITING_FOR_VALID_"+stage;
+      if(g_tzExecutionAuthority=="HTF_CORE_HANDOFF"||
+         g_tzExecutionAuthority=="HTF_ZONE_CONTACT_HANDOFF"||
+         g_tzExecutionAuthority=="HTF_ZONE_SWEEP_HANDOFF")
+         waitReason+="_OR_M1_ENGULFING";
+      TZ_SetGate(stage,waitReason);return;
    }
 
    double entry=sig.buy?tk.ask:tk.bid;
