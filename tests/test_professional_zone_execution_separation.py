@@ -135,9 +135,9 @@ def test_bplus_touch_count_is_telemetry_only_for_execution_layer():
     assert zone_layer(_zone(Grade.B_PLUS, touches=20), True, True) == "EXECUTION_CANDIDATE"
 
 
-def test_runway_failure_does_not_reject_or_move_zone_it_only_removes_execution_layer():
+def test_runway_failure_is_telemetry_only_and_does_not_remove_execution_layer():
     z = _zone(Grade.A_PLUS, touches=0)
-    assert zone_layer(z, True, False) == "MAP_CONTEXT"
+    assert zone_layer(z, True, False) == "EXECUTION_CANDIDATE"
 
 def test_conservative_runway_can_use_next_open_owner_objective():
     zone = _zone(direction=Direction.BUY, countertrend=True, target=110.0)
@@ -186,7 +186,7 @@ def test_final_separation_uses_next_open_target_not_behind_activation_tp1(monkey
     assert out["usable_runway_target"] == "4303.32000"
     assert out["usable_runway_target_basis"] == "FINAL_PLAN_NEXT_OPEN_TARGET"
     assert abs(float(out["usable_runway"]) - 27.53) < 1e-9
-    assert out["required_runway"] == "10.00000"
+    assert out["required_runway"] == "0.00000"
     assert out["usable_runway_ok"] == "1"
     assert out["separation_guard"] == "PASS"
 
@@ -245,7 +245,7 @@ def test_final_plan_exports_exact_history_failures_warnings_and_metrics(monkeypa
     assert out["ea_mode"] == "DUAL_BRANCH"
 
 
-def test_final_separation_uses_entry_specific_runway_for_matching_runtime(monkeypatch):
+def test_final_separation_exports_runway_as_telemetry_only(monkeypatch):
     zone = SimpleNamespace(
         zone_id="Z_ENTRY_RUNWAY",
         grade=Grade.A,
@@ -282,19 +282,20 @@ def test_final_separation_uses_entry_specific_runway_for_matching_runtime(monkey
         for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
         if "=" in line
     )
-    assert out["runway_gate_mode"] == "ENTRY_SPECIFIC_M1_ORDER"
+    assert out["runway_gate_mode"] == "RR_ONLY_M1_ORDER"
     assert out["entry_specific_runway_runtime_ready"] == "1"
     assert out["conservative_edge_runway"] == "4.00000"
     assert out["usable_runway"] == "10.00000"
-    assert out["required_runway"] == "5.00000"
+    assert out["required_runway"] == "0.00000"
     assert out["usable_runway_ok"] == "1"
+    assert out["runway_telemetry_ok"] == "1"
     assert out["runway_entry_limit"] == "105.00000"
     assert out["runway_candidate_low"] == "100.00000"
     assert out["runway_candidate_high"] == "105.00000"
     assert out["separation_guard"] == "PASS"
 
 
-def test_live_rollout_keeps_conservative_guard_until_sequence_348_is_confirmed(monkeypatch):
+def test_live_rollout_does_not_block_execution_on_absolute_runway(monkeypatch):
     zone = SimpleNamespace(
         zone_id="Z_COMPAT",
         grade=Grade.A,
@@ -335,9 +336,11 @@ def test_live_rollout_keeps_conservative_guard_until_sequence_348_is_confirmed(m
         for line in apply_execution_separation(raw, analysis, snapshot).splitlines()
         if "=" in line
     )
-    assert out["runway_gate_mode"] == "CONSERVATIVE_CORE_EDGE_COMPAT"
-    assert out["usable_runway"] == "4.00000"
-    assert out["usable_runway_ok"] == "0"
-    assert out["ea_mode"] == "WATCH_ONLY"
-    assert out["execution_authority"] == "NONE"
-    assert "INSUFFICIENT_USABLE_RUNWAY" in out["separation_guard"]
+    assert out["runway_gate_mode"] == "RR_ONLY_M1_ORDER"
+    assert out["usable_runway"] == "10.00000"
+    assert out["required_runway"] == "0.00000"
+    assert out["usable_runway_ok"] == "1"
+    assert out["runway_telemetry_ok"] == "1"
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "HTF_CORE_HANDOFF"
+    assert out["separation_guard"] == "PASS"
