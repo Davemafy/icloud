@@ -18,6 +18,7 @@ from .thesis_ownership_policy import (
     owner_m1_handoff_interacting,
 )
 from .timezones import safe_zoneinfo
+from .zone_reaction_lifecycle import publication_state_for_zone
 
 install_runtime_version_truth_policy()
 
@@ -165,6 +166,14 @@ def _interaction_ids(snap) -> set[str]:
 
     ids: set[str] = set()
     for z in a.zones:
+        publication = publication_state_for_zone(z)
+        live_touch = int(publication.get("live_core_touched_at") or 0) if publication else 0
+        if live_touch:
+            # Persisted post-publication contact is authoritative even if the
+            # quote has already left the core before the scheduler observes it.
+            # Including the timestamp makes this a one-shot contact edge.
+            ids.add(f"CONTACT:{z.zone_id}:{live_touch}")
+
         if primary_zone_interacting(z, snap):
             ids.add(f"CORE:{z.zone_id}")
         elif primary_zone_approaching(z, snap):
