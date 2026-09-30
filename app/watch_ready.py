@@ -230,7 +230,7 @@ def _zone_contact_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
         "macro_location_latched": True,
         "core_required_for_authority": False,
         "micro_may_complete_outside_core": True,
-        "m1_execution_model": "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE",
+        "m1_execution_model": "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING",
         "no_chase": True,
     }
 
@@ -378,7 +378,7 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         "target1_open": bool((window or contact).get("target1_open", True)),
         "macro_location_latched": bool(contact or window),
         "micro_may_complete_outside_core": bool(contact or window),
-        "m1_execution_model": "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE",
+        "m1_execution_model": "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING",
         "no_chase": True,
         "paper_only": True,
     }
@@ -402,21 +402,23 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: the published institutional envelope was contacted "
             f"({contact.get('contact_basis') or 'ZONE_CONTACT'}). M15 validates zone health only. "
-            "First-entry execution now belongs to M1: liquidity sweep -> micro MSS -> pullback -> "
-            "closed directional M1 candle. Tactical-core touch, OTE/FVG/PD-array and M15 sweep/reclaim "
-            "are not first-entry requirements."
+            "M1 execution now has two direct models. Model 1: liquidity sweep -> micro MSS -> fresh "
+            "OB/FVG -> pullback into that OB/FVG -> closed directional M1 candle. Model 2: a closed "
+            "directional M1 engulfing pattern formed at/in the valid zone. Tactical-core touch, OTE, "
+            "ATR displacement and M15 sweep/reclaim are not primary-entry requirements."
         )
     elif window:
         analysis.trader_brief += (
-            f" PAPER M1_READY={selected.zone_id}: macro location is already latched. Fresh M1 sweep -> "
-            "micro MSS -> pullback -> closed directional M1 candle may complete outside the HTF core "
-            "while the objective remains open; late chasing remains blocked."
+            f" PAPER M1_READY={selected.zone_id}: macro location is already latched. Sequence may use "
+            "Model 1 (M1 sweep -> micro MSS -> OB/FVG retest -> closed directional candle) or Model 2 "
+            "(zone engulfing). Valid P0/R1/R2 sniper cycles may re-arm while the objective and thesis "
+            "risk budget remain open; late chasing remains blocked."
         )
     else:
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: price is interacting with the {selected.source_tf} institutional "
-            "location and M15 health is intact. M1 sweep -> micro MSS -> pullback -> closed directional candle "
-            "is required before any simulated entry."
+            "location and M15 health is intact. Sequence waits for either Model 1 (M1 sweep -> micro MSS -> "
+            "OB/FVG retest -> closed directional candle) or Model 2 (zone engulfing) before any simulated entry."
         )
     return selected
 
