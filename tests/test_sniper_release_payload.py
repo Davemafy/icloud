@@ -4,16 +4,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_47_StrategicMultiModel_Demo.mq5"
-BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_57_StrategicEntryTruth.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5"
+BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
 JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEntryJournal.mq5"
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "58e98fe3c9f6d615a755fbc38a2ff6c7f61fd90b4a2c78d862dc086fb68320cf",
-    BRIDGE: "a0c65c889f479ff23d1757ded80f0dd19738a4f9d8badca28d9242e82204cf05",
+    SEQ: "73aa0655a5ccdcdd7fb7b9c2cc845b41516655a21b31646adedc6bf0a6cb9061",
+    BRIDGE: "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
     JOURNAL_CORE: "7063db3f717eca0cd6c184a5a0ee74d70e2bad78308e52cb75822d32bfdfbdd0",
@@ -29,23 +29,23 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.47"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.47"' in seq
+    assert '#property version   "3.48"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.48"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
-    assert '#property version "1.57"' in bridge
-    assert '#define TZ_BRIDGE_VERSION "1.57"' in bridge
-    assert '#define TZ_SEQUENCE_EXPECTED "3.47"' in bridge
+    assert '#property version "1.58"' in bridge
+    assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
+    assert '#define TZ_SEQUENCE_EXPECTED "3.48"' in bridge
     assert 'TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"' in inc
 
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.3.40"
-    assert manifest["ref"] == "9cf98bf045a45915cc4dd34c60ad678bb6856bec"
-    assert manifest["data_bridge_version"] == "1.57"
-    assert manifest["sequence_ea_version"] == "3.47"
+    assert manifest["release"] == "6.3.41"
+    assert manifest["ref"] == "53cab5a1d0f28c851c20bc2908db1ad4c141c38b"
+    assert manifest["data_bridge_version"] == "1.58"
+    assert manifest["sequence_ea_version"] == "3.48"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
