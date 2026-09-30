@@ -334,9 +334,12 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
     tail = old.split("|", 1)[1] if "|" in old else old
 
     core_now = _core_ready(selected, snapshot)
-    contact = {} if core_now else _zone_contact_state(selected, snapshot)
-    window = {} if (core_now or contact) else _execution_window_state(selected, snapshot)
-    location_mode = "CORE_NOW" if core_now else str((contact or window).get("mode") or "")
+    # Preserve the more specific earned core-reaction window before considering
+    # a new generic envelope-contact latch. Core remains preference, never a
+    # mandatory first-entry gate.
+    window = {} if core_now else _execution_window_state(selected, snapshot)
+    contact = {} if (core_now or window) else _zone_contact_state(selected, snapshot)
+    location_mode = "CORE_NOW" if core_now else str((window or contact).get("mode") or "")
     if location_mode == "LATCHED_AFTER_ZONE_CONTACT":
         tail = f"ZONE_CONTACT_HANDOFF|{tail}" if tail else "ZONE_CONTACT_HANDOFF"
     elif location_mode == "LATCHED_AFTER_CORE_TOUCH":
@@ -370,9 +373,9 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         "contact_price": float(contact.get("contact_price") or 0.0),
         "sweep_confirmed": False,
         "core_required_for_authority": False if contact else True,
-        "expires_at": int((contact or window).get("expires_at") or 0),
-        "target1": float((contact or window).get("target1") or selected.original_target1 or 0.0),
-        "target1_open": bool((contact or window).get("target1_open", True)),
+        "expires_at": int((window or contact).get("expires_at") or 0),
+        "target1": float((window or contact).get("target1") or selected.original_target1 or 0.0),
+        "target1_open": bool((window or contact).get("target1_open", True)),
         "macro_location_latched": bool(contact or window),
         "micro_may_complete_outside_core": bool(contact or window),
         "m1_execution_model": "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE",
@@ -392,7 +395,8 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
             location_text = "retains its previously acquired macro execution location"
         analysis.trader_brief += (
             f" PAPER THESIS_OWNER_CONTINUATION={selected.zone_id}: active {selected.original_direction.value} thesis "
-            f"{location_text}. Fresh M1 sweep -> micro MSS -> pullback -> directional close is required."
+            f"{location_text}. The ownership anchor is not a fresh entry location; fresh M1 sweep -> "
+            "micro MSS -> pullback -> directional close is required."
         )
     elif contact:
         analysis.trader_brief += (
@@ -461,12 +465,20 @@ def promote_watch_to_m1_ready(analysis: Analysis, snapshot: MarketSnapshot) -> Z
         return None
 
     def rank(z: Zone) -> tuple:
-        distance = _distance_to_range(float(snapshot.mid), float(z.zone_low), float(z.zone_high))
+        envelope_distance = _distance_to_range(
+            float(snapshot.mid), float(z.zone_low), float(z.zone_high)
+        )
+        # Envelope contact grants authority. Core proximity is only the precision
+        # tie-breaker when multiple broad envelopes overlap the same quote.
+        core_distance = _distance_to_range(
+            float(snapshot.mid), float(z.core_low), float(z.core_high)
+        )
         grade_rank = {Grade.A_PLUS: 0, Grade.A: 1, Grade.B_PLUS: 2}.get(z.grade, 9)
         bias_rank = 0 if z.original_direction == analysis.overall_bias else 1
         tf_rank = 0 if z.source_tf == "H4>H1" else 1 if z.source_tf == "H4" else 2
         return (
-            distance,
+            envelope_distance,
+            core_distance,
             grade_rank,
             bias_rank,
             tf_rank,
