@@ -21,7 +21,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
       - name: Reaction-window cloud tests
-        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_handoff_preownership_guard.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_thesis_ownership_policy.py tests/test_live_ownership_sync.py tests/test_mt5_zone_render.py tests/test_dashboard_view.py tests/test_directional_mitigation_audit.py tests/test_institutional_two_zone.py tests/test_dynamic_continuation_zoning.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_target_revalidation.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_databridge_145_source.py tests/test_databridge_146_source.py tests/test_databridge_147_source.py tests/test_databridge_148_source.py tests/test_databridge_149_source.py tests/test_databridge_153_history_window_sync.py tests/test_snapshot_history_ingress.py tests/test_journal_provenance.py tests/test_grade_risk_execution.py tests/test_sequence_340_source.py tests/test_sequence_339_source.py tests/test_sequence_338_source.py tests/test_sequence_337_source.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py
+        run: pytest -q tests/test_watch_ready.py tests/test_zone_sweep_owner_freeze.py tests/test_execution_safety.py tests/test_handoff_preownership_guard.py tests/test_execution_owner_mirror.py tests/test_service_ai_fallback.py tests/test_execution_pipeline_integration.py tests/test_spread_safety_thesis_persistence.py tests/test_owner_authority_continuity.py tests/test_thesis_ownership_policy.py tests/test_live_ownership_sync.py tests/test_mt5_zone_render.py tests/test_dashboard_view.py tests/test_directional_mitigation_audit.py tests/test_institutional_two_zone.py tests/test_dynamic_continuation_zoning.py tests/test_journal_current_tags.py tests/test_journal_durability.py tests/test_journal_objective_truth.py tests/test_target_revalidation.py tests/test_databridge_137_source.py tests/test_databridge_139_source.py tests/test_databridge_140_source.py tests/test_databridge_141_source.py tests/test_databridge_142_source.py tests/test_databridge_143_source.py tests/test_databridge_144_source.py tests/test_databridge_145_source.py tests/test_databridge_146_source.py tests/test_databridge_147_source.py tests/test_databridge_148_source.py tests/test_databridge_149_source.py tests/test_databridge_153_history_window_sync.py tests/test_snapshot_history_ingress.py tests/test_journal_provenance.py tests/test_grade_risk_execution.py tests/test_sequence_340_source.py tests/test_sequence_339_source.py tests/test_sequence_338_source.py tests/test_sequence_337_source.py tests/test_sequence_336_source.py tests/test_sequence_335_source.py tests/test_sequence_334_source.py tests/test_sequence_333_source.py tests/test_sequence_332_source.py tests/test_sequence_331_source.py tests/test_sequence_330_source.py tests/test_sequence_329_source.py tests/test_sequence_328_source.py tests/test_version_truth_local_manifest.py tests/test_professional_release_contract.py tests/test_professional_zone_execution_separation.py tests/test_sequence_349_simple_micro_mss.py tests/test_sniper_release_payload.py
       - name: Python syntax
         run: python -m compileall -q app tests
       - name: Verify manifest pinned-ref SHA256
@@ -45,70 +45,73 @@ jobs:
               assert actual == expected, f"Pinned-ref SHA mismatch for {item['path']}: expected={expected} actual={actual} ref={ref}"
           print(f"Stable manifest pinned-ref verification OK: {ref}")
           PY
-      - name: DataBridge 1.50 structural checks
+      - name: Stable DataBridge structural checks
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5')
-          t=p.read_text(encoding='utf-8')
-          core=Path('mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5').read_text(encoding='utf-8')
-          for text in (t, core):
-              for a,b in [('(',')'),('{','}'),('[',']')]:
-                  assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
-          for needle in [
-              '#property version "1.50"',
-              '#define TZ_BRIDGE_VERSION "1.50"',
-              '#define TZ_SEQUENCE_EXPECTED "3.41"',
-              'BackfillJournalHistory(false);',
-              'BackfillJournalHistory(true);',
-              'JournalContinuityResyncSeconds=180',
-              'TZ_RefreshPlanContextWithJournalContinuity()',
-              'previousCloudVersion!=g_cloudVersion',
-              'WAITING FOR CLOSED M1 VALUE REACTION',
-              'stage=="ENTRY_CONFIRMATION"',
-              'stage=="FLIP_CONFIRMATION"',
-              'THESIS ENTRY LIMIT REACHED',
-              'ENTRY BLOCKED: MIN RR',
-              'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED',
-          ]:
-              assert needle in t,needle
-          for needle in [
-              'EnableJournalHistoryBackfill','CanonicalTradeId','EventUidDeal','SendJournalAt',
-              'HistoryDealsTotal()','recovered_from_mt5_history','SavePositionMeta','LoadPositionMeta',
-              'execution_bridge_version','recovery_bridge_version','UNAVAILABLE_FROM_MT5_HISTORY','MQLInfoInteger(MQL_TESTER)',
-          ]:
-              assert needle in core,needle
-          assert 'IsTester()' not in core
-          print('DataBridge 1.50 release structural checks OK')
-          PY
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_50_BPlusAuthority.mq5
-          sha256sum mt5/stable/InstitutionalSMC_DataBridge_v1_31_XAU_DXY_Journal.mq5
-      - name: Sequence 3.41 structural checks
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
+          manifest=json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          bridge=next(x for x in manifest['files'] if x.get('role')=='data_bridge')
+          p=Path(bridge['path'])
           t=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
+          assert f'#property version "{manifest["data_bridge_version"]}"' in t
+          assert f'#define TZ_BRIDGE_VERSION "{manifest["data_bridge_version"]}"' in t
+          # The installer patches this source line to manifest sequence_ea_version.
+          assert '#define TZ_SEQUENCE_EXPECTED "' in t
+          for needle in [
+              'BackfillJournalHistory(false);',
+              'BackfillJournalHistory(true);',
+              'JournalContinuityResyncSeconds=180',
+              'gate_stage',
+              'gate_reason',
+              'ENTRY BLOCKED: MIN RR',
+          ]:
+              assert needle in t,needle
+          print(f'Stable DataBridge {manifest["data_bridge_version"]} structural checks OK: {p.name}')
+          PY
+      - name: Stable Sequence structural checks
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest=json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          seq=next(x for x in manifest['files'] if x.get('role')=='sequence_ea')
+          p=Path(seq['path'])
+          t=p.read_text(encoding='utf-8')
+          for a,b in [('(',')'),('{','}'),('[',']')]:
+              assert t.count(a)==t.count(b),(a,b,t.count(a),t.count(b))
+          assert f'#property version   "{manifest["sequence_ea_version"]}"' in t
           required=[
-              '#property version   "3.41"','TZ_BuildEscapePullback','TZ28_ArmAcceptedFlip','HTF_ZONE_SWEEP_HANDOFF',
-              'MT5_EXECUTION_OWNER_MIRROR_V1','TZ31_RefreshCloudState','Persist/release the owner mirror even while execution is safety-blocked.',
-              'TZ31_BuildPostHandoffContinuation','owner_mirror_zone_payload_b64','FileDelete("TradeZone\\\\execution_owner_state.txt")',
-              'ACCEPTED_ZONE_FLIP_HANDOFF','accepted_flip_state.txt','ResearchEscapeRiskMultiplier=0.50','gate_stage','gate_reason',
-              'ENTRY_CONFIRMATION','FLIP_CONFIRMATION','WAITING_FOR_CLOSED_M1_VALUE_REACTION','NO_OPEN_TARGET_BEYOND_ENTRY','MT5_ORDER_SEND_FAILED',
-              'TZ34_InitialRiskDistance','HistorySelectByPosition(positionId)','RunnerTrailStartR','TZ35_ReentryEntryReady','PD_ARRAY_ACCEPTED_INVALIDATION',
-              'REENTRY_LIMIT_REACHED','ENTRY_DECISION','TZ36_PostHandoffEntryReady','POST_HANDOFF_OBJECTIVE_ALREADY_TRADED','MIN_RR_NOT_MET',
-              'nearest_open_target','rr_at_entry','ResearchValidationInitialCapital=10000.0','ResearchRiskPctTrendAPlus=1.00',
-              'ResearchRiskPctTrendA=0.75','ResearchRiskPctCountertrendAPlus=0.50','ResearchRiskPctCountertrendA=0.25',
-              'CONTEXT_GRADE_MATRIX_10000_V2','TZ38_LoadRiskContract','TZ38_ThesisBudget','g_tzAcceptedFlipRiskPct',
-              'TZ39_ProfessionalValueReactionReady','TZ39_InitialEntryReady','TZ39_FlipEntryReady','TZ40_FailedZoneBreakerPD','TZ40_BreakerFlipReady',
-              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED','ProfessionalEntryReactionMinBodyATR=0.25','ProfessionalEntryReactionMaxChaseATR=0.15',
-              'bool reactionRequired=true;','TZ37_LotsForRisk','OrderCalcProfit','TZ37_SendOrders','LOT_SIZE_ZERO_OR_BELOW_MIN',
+              'HTF_ZONE_CONTACT_HANDOFF',
+              'TZ49_BuildSimplePrimary',
+              'MASTER_SNIPER_SIMPLE',
+              'TZ46_InitialZoneProtectedStop',
+              'TZ49_OpenDirectionalTargets',
+              'TZ49_DeepestDirectionalTarget',
+              'MIN_RR_NOT_MET_TO_DEEPEST_OPEN_OBJECTIVE',
+              'TZ28_ArmAcceptedFlip',
+              'LIQUIDITY_REVERSAL_HANDOFF',
+              'MT5_EXECUTION_OWNER_MIRROR_V1',
+              'accepted_flip_state.txt',
+              'OrderCalcProfit',
+              'TZ37_SendOrders',
           ]
           for needle in required:
               assert needle in t,needle
-          print('Sequence 3.41 release structural checks OK')
+          evaluate=t[t.index('void Evaluate()'):t.index('\nint OnInit()',t.index('void Evaluate()'))]
+          assert 'TZ48_EntrySpecificRunwayValid' not in evaluate
+          print(f'Stable Sequence {manifest["sequence_ea_version"]} release structural checks OK: {p.name}')
           PY
       - name: SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          manifest=json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          for item in manifest.get('files',[]):
+              actual=hashlib.sha256(Path(item['path']).read_bytes()).hexdigest()
+              assert actual==item['sha256'], (item['path'],actual,item['sha256'])
+              print(actual,item['path'])
+          PY
