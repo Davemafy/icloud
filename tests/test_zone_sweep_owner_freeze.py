@@ -56,7 +56,7 @@ def _sell(zone_id: str = "SELL_OWNER", core_low: float = 104.0, core_high: float
     )
 
 
-def test_outer_zone_liquidity_sweep_can_grant_m1_search_without_core(tmp_path, monkeypatch):
+def test_outer_zone_contact_grants_m1_search_without_core(tmp_path, monkeypatch):
     path = tmp_path / "sweep_handoff.db"
     monkeypatch.setattr(db, "_path", lambda: str(path))
     db.init_db()
@@ -75,19 +75,22 @@ def test_outer_zone_liquidity_sweep_can_grant_m1_search_without_core(tmp_path, m
     register_analysis_zones(analysis)
     snap = _snapshot()
 
-    # Mid 98 is far below the 104-105 core; authority is earned by the BSL raid/reclaim.
+    # Mid 98 is far below the 104-105 core but inside the published 95-105 envelope.
+    # M15 only validates zone health; M1 owns the sweep/micro-MSS execution sequence.
     assert watch_zone_ready(zone, snap) is True
     ready = promote_watch_to_m1_ready(analysis, snap)
     assert ready is zone
     window = analysis.execution_policy["execution_window"]
-    assert window["mode"] == "LATCHED_AFTER_ZONE_SWEEP"
-    assert window["sweep_confirmed"] is True
+    assert window["mode"] == "LATCHED_AFTER_ZONE_CONTACT"
+    assert window["zone_contact_confirmed"] is True
+    assert window["sweep_confirmed"] is False
     assert window["core_now"] is False
     assert window["core_required_for_authority"] is False
-    assert _stamp_execution_authority(analysis, ready, {}) == "HTF_ZONE_SWEEP_HANDOFF"
+    assert window["m1_execution_model"] == "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE"
+    assert _stamp_execution_authority(analysis, ready, {}) == "HTF_ZONE_CONTACT_HANDOFF"
 
 
-def test_touch_without_sweep_reclaim_does_not_grant_authority(tmp_path, monkeypatch):
+def test_envelope_contact_does_not_require_m15_sweep_reclaim(tmp_path, monkeypatch):
     path = tmp_path / "no_sweep_handoff.db"
     monkeypatch.setattr(db, "_path", lambda: str(path))
     db.init_db()
@@ -101,7 +104,12 @@ def test_touch_without_sweep_reclaim_does_not_grant_authority(tmp_path, monkeypa
         selected_zone_id=zone.zone_id,
     )
     register_analysis_zones(analysis)
-    assert watch_zone_ready(zone, _snapshot(reclaimed=False)) is False
+    snap = _snapshot(reclaimed=False)
+    assert watch_zone_ready(zone, snap) is True
+    ready = promote_watch_to_m1_ready(analysis, snap)
+    assert ready is zone
+    assert analysis.execution_policy["execution_window"]["mode"] == "LATCHED_AFTER_ZONE_CONTACT"
+    assert _stamp_execution_authority(analysis, ready, {}) == "HTF_ZONE_CONTACT_HANDOFF"
 
 
 def test_acquired_owner_keeps_original_id_and_geometry_after_rerank(tmp_path, monkeypatch):
