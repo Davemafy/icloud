@@ -312,7 +312,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
         target_override=runway_target if runway_target > 0 else None,
     )
     entry_specific_runtime_ready = _entry_specific_runway_runtime_ready(snapshot)
-    # v6.5.112 / Sequence 3.49: runway is retained for observation only.
+    # v6.5.113 / Sequence 3.50: runway is retained for observation only.
     # It no longer decides whether a valid institutional map may reach M1.
     runway = candidate_runway
     runway_ok = candidate_ok
