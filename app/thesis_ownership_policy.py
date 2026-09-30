@@ -13,7 +13,7 @@ from .risk_matrix import execution_grade_eligible
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65108"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
-EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
+EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
 OWNER_REFRESH_BUFFER_M15_ATR = 0.30
 OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
@@ -25,16 +25,19 @@ OWNER_OBJECTIVE_CAP_REASON = "ACTIVE_OPPOSING_PRIMARY_FRONT_RUN"
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
-    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_SWEEP_HANDOFF, or LIQUIDITY_REVERSAL_HANDOFF. Zone interaction alone
-    never blocks the opposite side. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
+    been acquired: HTF_CORE_HANDOFF, HTF_ZONE_CONTACT_HANDOFF, legacy HTF_ZONE_SWEEP_HANDOFF,
+    or LIQUIDITY_REVERSAL_HANDOFF. A published envelope contact may arm the primary M1 search;
+    it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
     completes. For a flat owner only, a newly qualified active opposing primary may tighten that effective
     destination to the canonical front-run cap while the frozen owner targets remain audit truth. This cap
     never mutates an open position and cannot be completed from price history that predates the cap.
     A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
-    from the acquired thesis. Continuation still requires fresh M1 sweep -> MSS/BOS -> displacement ->
-    dealing-range -> value/PD-array confirmation. If an acquired owner disappears from the current map,
+    from the acquired thesis. Primary first-entry confirmation is intentionally simple:
+    M1 liquidity sweep -> M1 micro MSS -> pullback -> closed M1 candle in thesis direction.
+    M15 validates zone health and accepted invalidation; OTE/FVG/PD-array and a separate
+    displacement threshold are not mandatory first-entry gates. If an acquired owner disappears from the current map,
     fail closed until lifecycle release or safe requalification.
 """
 
@@ -579,7 +582,7 @@ def _handoff_reaction_instance(
     if row is not None and not terminal:
         return base_key, row
 
-    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}:
+    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}:
         return base_key, None
 
     instance_key = f"{base_key}|OWN|{analysis.analysis_id}"
@@ -591,7 +594,7 @@ def _handoff_reaction_instance(
         return instance_key, existing
 
     now = int(snapshot.sent_at)
-    preconfirmed_authority = authority in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}
+    preconfirmed_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
     status = "REACTION_CONFIRMED" if preconfirmed_authority else "INTERACTING"
     reaction_confirmed_at = now if preconfirmed_authority else 0
     db.execute(
@@ -634,10 +637,11 @@ def acquire_execution_ownership(
 ) -> dict[str, Any] | None:
     """Persist thesis ownership only after a final approved execution handoff.
 
-    HTF_CORE_HANDOFF originates from tactical-core M1_READY. HTF_ZONE_SWEEP_HANDOFF
-    originates from a qualified envelope entry plus a proven structural-liquidity raid
-    and M15 reclaim, so its lifecycle is already REACTION_CONFIRMED without a core touch.
-    LIQUIDITY_REVERSAL_HANDOFF is likewise M15-confirmed before the remote context core.
+    HTF_CORE_HANDOFF originates from tactical-core M1_READY. HTF_ZONE_CONTACT_HANDOFF
+    originates from a qualified published-envelope contact and starts as INTERACTING;
+    the M1 sequence must still prove the reaction. Legacy HTF_ZONE_SWEEP_HANDOFF remains
+    readable for existing owners. LIQUIDITY_REVERSAL_HANDOFF is M15-confirmed before
+    the remote context core.
     This function never creates a zone or an order.
     """
     if not SETTINGS.paper_only or authority not in EXECUTION_AUTHORITIES:
@@ -650,6 +654,7 @@ def acquire_execution_ownership(
     now = int(snapshot.sent_at)
     anchor = float(anchor_price or snapshot.mid)
     liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
+    zone_contact_authority = authority == "HTF_ZONE_CONTACT_HANDOFF"
     zone_sweep_authority = authority == "HTF_ZONE_SWEEP_HANDOFF"
     with connect() as db:
         key, row = _handoff_reaction_instance(db, analysis, snapshot, zone, authority, anchor)
@@ -659,7 +664,7 @@ def acquire_execution_ownership(
             return None
         status = str(row["status"] or "ARMED")
         if status not in ACTIVE_THESIS_STATUSES and not (
-            (liquidity_authority or zone_sweep_authority) and status == "ARMED"
+            (liquidity_authority or zone_contact_authority or zone_sweep_authority) and status == "ARMED"
         ):
             return None
 
@@ -682,8 +687,8 @@ def acquire_execution_ownership(
             """,
             (
                 now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
-                1 if (liquidity_authority or zone_sweep_authority) else 0, now,
-                1 if (liquidity_authority or zone_sweep_authority) else 0,
+                1 if liquidity_authority else 0, now,
+                1 if liquidity_authority else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
             ),
         )
