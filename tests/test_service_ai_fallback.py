@@ -154,3 +154,81 @@ def test_real_ai_rejection_does_not_use_paper_fallback(monkeypatch):
     out = asyncio.run(service.run_analysis("TEST_AI_REJECTION"))
     assert out.approved is False
     assert "paper_ai_fallback" not in out.execution_policy
+
+
+def test_armed_structural_map_stays_approved_while_execution_handoff_is_absent(monkeypatch):
+    snap = _snapshot()
+    zone = _zone()
+    zone.core_method = "ARMED|TEST"
+    analysis = Analysis(
+        analysis_id="A_ARMED",
+        generated_at=2_000,
+        snapshot_at=2_000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=False,
+    )
+
+    monkeypatch.setattr(service, "latest_snapshot", lambda: snap)
+    monkeypatch.setattr(service, "build_prompt_analysis", lambda s, now: analysis)
+    for name in (
+        "register_analysis_zones",
+        "apply_dynamic_continuation_rezone",
+        "apply_prompt_confirmation_contract",
+        "_stamp_prompt_selection_contract",
+        "apply_secondary_zone_policy",
+        "apply_liquidity_objective_policy",
+        "update_zone_reactions",
+        "hard_release_stale_thesis",
+        "apply_target_revalidation",
+        "apply_publication_truth",
+        "save_analysis",
+        "attach_lifecycle",
+        "capture_cloud_candidates",
+        "audit",
+    ):
+        if name == "apply_publication_truth":
+            monkeypatch.setattr(service, name, lambda a, *args, **kwargs: a)
+        else:
+            monkeypatch.setattr(service, name, lambda *args, **kwargs: None)
+
+    monkeypatch.setattr(service, "apply_thesis_ownership", lambda a, s: None)
+    monkeypatch.setattr(service, "promote_watch_to_m1_ready", lambda a, s: None)
+    monkeypatch.setattr(
+        service,
+        "apply_liquidity_reversal_handoff",
+        lambda a, s: {"active": False, "authority": "NONE", "reason": "NO_HANDOFF"},
+    )
+    monkeypatch.setattr(
+        service,
+        "_stamp_execution_authority",
+        lambda a, ready, lr: "NONE",
+    )
+    monkeypatch.setattr(
+        service,
+        "build_execution_overlay",
+        lambda s, a, reason: {"regime": {"name": "RANGE"}},
+    )
+    monkeypatch.setattr(service, "regime_brief", lambda overlay: "regime test")
+    monkeypatch.setattr(
+        service,
+        "_acquire_final_ownership",
+        lambda a, s, authority, lr: ("NONE", None),
+    )
+
+    async def validator_ok(a, s):
+        return True, "Structural map valid.", [], "GEMINI:test"
+
+    monkeypatch.setattr(service, "validate_with_ai", validator_ok)
+
+    out = asyncio.run(service.run_analysis("TEST_ARMED_MAP_NO_HANDOFF"))
+
+    assert out.approved is True
+    assert out.ai_approved is False
+    assert "paper_ai_fallback" not in out.execution_policy
+    separation = out.execution_policy["structural_map_approval"]
+    assert separation["approved"] is True
+    assert separation["execution_handoff_active"] is False
+    assert separation["execution_authority"] == "NONE"
