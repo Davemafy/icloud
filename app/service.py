@@ -97,8 +97,8 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
     Once a thesis has acquired deterministic authority, later re-analysis must not
     downgrade it to WATCH_ONLY merely because price has left the original HTF
     location. The owner remains sticky until lifecycle release; Sequence still
-    requires a fresh same-direction M1 structure/displacement/value pattern and
-    therefore cannot chase price.
+    requires a fresh same-direction M1 sweep -> micro MSS -> pullback -> closed
+    directional candle and therefore cannot chase price.
     """
     authority = "NONE"
     zone_id = ""
@@ -113,6 +113,7 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
         and thesis.get("continuation_authority")
         and owner_authority in {
             "HTF_CORE_HANDOFF",
+            "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
         }
@@ -123,26 +124,22 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
     if owner_live:
         authority = owner_authority
         zone_id = owner_zone_id
-        risk_multiplier = (
-            0.50 if authority == "LIQUIDITY_REVERSAL_HANDOFF"
-            else 0.65 if authority == "HTF_ZONE_SWEEP_HANDOFF"
-            else 1.0
-        )
+        risk_multiplier = 0.50 if authority == "LIQUIDITY_REVERSAL_HANDOFF" else 1.0
     elif ready_zone is not None and a.selected_zone_id == ready_zone.zone_id:
         window = dict(policy.get("execution_window") or {})
         location_mode = str(window.get("mode") or "")
-        sweep_note = any(
-            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
-            or "ZONE_SWEEP_HANDOFF" in str(note)
+        contact_note = any(
+            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_CONTACT")
+            or "ZONE_CONTACT_HANDOFF" in str(note)
             for note in ready_zone.notes
         )
         authority = (
-            "HTF_ZONE_SWEEP_HANDOFF"
-            if location_mode == "LATCHED_AFTER_ZONE_SWEEP" or sweep_note
+            "HTF_ZONE_CONTACT_HANDOFF"
+            if location_mode == "LATCHED_AFTER_ZONE_CONTACT" or contact_note
             else "HTF_CORE_HANDOFF"
         )
         zone_id = ready_zone.zone_id
-        risk_multiplier = 0.65 if authority == "HTF_ZONE_SWEEP_HANDOFF" else 1.0
+        risk_multiplier = 1.0
     elif bool(liquidity_handoff.get("active")):
         authority = "LIQUIDITY_REVERSAL_HANDOFF"
         zone_id = str(liquidity_handoff.get("context_zone_id") or "")
@@ -410,9 +407,9 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     # block the opposite side. Ordinary WATCH/INTERACTING lifecycle records do not.
     thesis_owner = apply_thesis_ownership(a, s)
 
-    # Authority 1: qualified HTF location handoff. The strict tactical core remains
-    # valid, but a proven structural-liquidity sweep/reclaim inside the outer zone
-    # may now grant M1 SEARCH authority before core touch.
+    # Authority 1: qualified HTF location handoff. Any post-publication contact with
+    # the valid institutional envelope may grant M1 SEARCH authority. M15 validates
+    # zone health; the actual liquidity sweep and micro MSS are M1 execution events.
     ready_zone = promote_watch_to_m1_ready(a, s)
 
     # Authority 2: confirmed structural-liquidity reversal before the remote HTF
@@ -421,7 +418,7 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     liquidity_handoff = (
         apply_liquidity_reversal_handoff(a, s)
         if ready_zone is None
-        else {"active": False, "authority": "NONE", "reason": "HTF_CORE_HANDOFF_HAS_PRIORITY"}
+        else {"active": False, "authority": "NONE", "reason": "PRIMARY_ZONE_HANDOFF_HAS_PRIORITY"}
     )
     authority = _stamp_execution_authority(a, ready_zone, liquidity_handoff)
 
