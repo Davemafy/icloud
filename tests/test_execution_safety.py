@@ -357,7 +357,7 @@ def test_paper_ai_fallback_preserves_core_execution_handoff(monkeypatch):
     assert out["execution_handoff_ts"] == "1234"
 
 
-def test_paper_ai_fallback_preserves_zone_sweep_handoff(monkeypatch):
+def test_paper_ai_fallback_preserves_zone_contact_handoff(monkeypatch):
     from app import execution_safety as safety
 
     monkeypatch.setattr(
@@ -372,12 +372,13 @@ def test_paper_ai_fallback_preserves_zone_sweep_handoff(monkeypatch):
     a.ai_approved = False
     a.approved = True
     a.execution_policy = {
-        "paper_ai_fallback": {"active": True, "authority": "HTF_ZONE_SWEEP_HANDOFF"},
+        "paper_ai_fallback": {"active": True, "authority": "HTF_ZONE_CONTACT_HANDOFF"},
         "execution_window": {
             "active": True,
-            "mode": "LATCHED_AFTER_ZONE_SWEEP",
-            "sweep_confirmed": True,
-            "sweep_ts": 2222,
+            "mode": "LATCHED_AFTER_ZONE_CONTACT",
+            "zone_contact_confirmed": True,
+            "contact_ts": 2222,
+            "contact_basis": "TEST_ENVELOPE_CONTACT",
         },
     }
     raw = (
@@ -389,8 +390,10 @@ def test_paper_ai_fallback_preserves_zone_sweep_handoff(monkeypatch):
     )
     out = _kv(guard_plan_text(raw, a, _snapshot(4290.0)))
     assert out["ea_mode"] == "DUAL_BRANCH"
-    assert out["execution_authority"] == "HTF_ZONE_SWEEP_HANDOFF"
-    assert out["zone_sweep_handoff_ready"] == "1"
+    assert out["execution_authority"] == "HTF_ZONE_CONTACT_HANDOFF"
+    assert out["zone_contact_handoff_ready"] == "1"
+    assert out["zone_contact_confirmed"] == "1"
+    assert out["zone_sweep_handoff_ready"] == "0"
     assert out["execution_handoff_ts"] == "2222"
 
 
