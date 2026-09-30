@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_48_EntrySpecificRunway_Demo.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "73aa0655a5ccdcdd7fb7b9c2cc845b41516655a21b31646adedc6bf0a6cb9061",
+    SEQ: "e6a30a1dabf9c408f8817b5b686f69e53c12d9163289ace5fa34aa9c5c6a5029",
     BRIDGE: "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
@@ -29,23 +29,23 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.48"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.48"' in seq
+    assert '#property version   "3.49"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.49"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
     assert '#property version "1.58"' in bridge
     assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
-    assert '#define TZ_SEQUENCE_EXPECTED "3.48"' in bridge
+    assert '#define TZ_SEQUENCE_EXPECTED "3.49"' in bridge
     assert 'TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"' in inc
 
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.3.41"
-    assert manifest["ref"] == "53cab5a1d0f28c851c20bc2908db1ad4c141c38b"
+    assert manifest["release"] == "6.3.42"
+    assert manifest["ref"] == "d90198d0dd99c64b8d57cb5675252e0ddba7bdaf"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.48"
+    assert manifest["sequence_ea_version"] == "3.49"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
