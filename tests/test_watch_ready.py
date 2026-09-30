@@ -241,6 +241,8 @@ def test_d1_context_breaks_tie_only_after_live_location_and_grade():
 def test_preselected_armed_plan_is_visible_but_not_m1_ready_when_far():
     s = _snapshot(100.0)
     z = _zone(core_low=110.0, core_high=111.0, source_tf="H4", readiness="ARMED")
+    z.zone_low = 108.0
+    z.zone_high = 112.0
     a = Analysis(
         analysis_id="A1",
         generated_at=1,
@@ -370,7 +372,15 @@ def test_bplus_third_touch_is_still_exhausted_and_blocked():
 
 
 def test_legacy_source_core_touch_without_exact_publication_touch_cannot_open_window():
-    z = _zone(source_tf="H4>H1", readiness="INTERACTING", direction=Direction.SELL)
+    z = _zone(
+        source_tf="H4>H1",
+        readiness="INTERACTING",
+        direction=Direction.SELL,
+        core_low=104.0,
+        core_high=105.0,
+    )
+    z.zone_low = 103.0
+    z.zone_high = 106.0
     a = _publish([z], ts=1000, analysis_id="A_LEGACY", bias=Direction.SELL)
     with db.connect() as conn:
         conn.execute(
