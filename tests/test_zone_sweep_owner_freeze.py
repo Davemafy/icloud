@@ -86,7 +86,7 @@ def test_outer_zone_contact_grants_m1_search_without_core(tmp_path, monkeypatch)
     assert window["sweep_confirmed"] is False
     assert window["core_now"] is False
     assert window["core_required_for_authority"] is False
-    assert window["m1_execution_model"] == "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE"
+    assert window["m1_execution_model"] == "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING"
     assert _stamp_execution_authority(analysis, ready, {}) == "HTF_ZONE_CONTACT_HANDOFF"
 
 
