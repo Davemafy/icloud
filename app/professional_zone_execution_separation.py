@@ -29,6 +29,48 @@ MIN_BAR_COUNTS = {
     "DXY_H1": 100,
 }
 
+ENTRY_SPECIFIC_RUNWAY_SEQUENCE_MIN = (3, 48)
+ENTRY_SPECIFIC_RUNWAY_HEARTBEAT_MAX_AGE_SECONDS = 45
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    parts = []
+    for raw in str(value or "").strip().split("."):
+        if not raw.isdigit():
+            break
+        parts.append(int(raw))
+    return tuple(parts)
+
+
+def _entry_specific_runway_runtime_ready(snapshot: MarketSnapshot | None) -> bool:
+    """Relax the pre-M1 runway guard only when the runtime can enforce it at order time.
+
+    Historical replay runs the same release contract in-process, so it is safe to
+    use entry-specific runway there. Live Cloud remains on the old conservative
+    whole-core guard until a fresh Sequence >= 3.48 heartbeat proves the MT5 side
+    has the matching final order gate. This makes the release safe during rolling
+    Cloud/MT5 upgrades.
+    """
+    if snapshot is not None and str(getattr(snapshot, "kind", "") or "").upper() == "HISTORICAL_REPLAY":
+        return True
+    try:
+        from .db import latest_heartbeats
+
+        now = int(datetime.now(tz=timezone.utc).timestamp())
+        rows = latest_heartbeats(30)
+        hb = next(
+            (x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"),
+            None,
+        )
+        if hb is None:
+            return False
+        hb_ts = int(hb.get("ts") or 0)
+        if hb_ts <= 0 or now - hb_ts > ENTRY_SPECIFIC_RUNWAY_HEARTBEAT_MAX_AGE_SECONDS:
+            return False
+        return _version_tuple(str(hb.get("version") or "")) >= ENTRY_SPECIFIC_RUNWAY_SEQUENCE_MIN
+    except Exception:
+        return False
+
 
 def _span_days(bars: Iterable) -> float:
     timestamps = [int(getattr(b, "ts", 0) or 0) for b in (bars or [])]
@@ -146,6 +188,59 @@ def conservative_runway(zone: Zone, target_override: float | None = None) -> tup
     return runway, need, runway >= need
 
 
+def entry_specific_runway_candidate(
+    zone: Zone,
+    target_override: float | None = None,
+) -> tuple[float, float, bool, float, float, float]:
+    """Return the executable tactical-core sub-window for the minimum runway contract.
+
+    The HTF map should not be rejected merely because the least-favourable edge of a
+    valid tactical core is too close to TP1. M1 chooses the actual entry price. Cloud
+    therefore checks whether *any* part of the tactical core can satisfy the existing
+    absolute runway minimum, while Sequence 3.48+ re-checks the actual quote before
+    sending an order.
+
+    Returns:
+      (best_core_runway, required_runway, candidate_exists, entry_limit,
+       candidate_low, candidate_high)
+
+    BUY entry_limit is the highest acceptable entry (target - required).
+    SELL entry_limit is the lowest acceptable entry (target + required).
+    """
+    target = float(
+        target_override
+        if target_override and target_override > 0
+        else (zone.original_target1 or 0.0)
+    )
+    context = zone_risk_context(zone)
+    need = float(
+        SETTINGS.clear_run_countertrend
+        if context == "COUNTERTREND"
+        else SETTINGS.clear_run_with_trend
+    )
+    core_low = min(float(zone.core_low), float(zone.core_high))
+    core_high = max(float(zone.core_low), float(zone.core_high))
+    if target <= 0 or core_low <= 0 or core_high <= 0 or core_high < core_low:
+        return 0.0, need, False, 0.0, 0.0, 0.0
+
+    if zone.original_direction == Direction.BUY:
+        entry_limit = target - need
+        candidate_low = core_low
+        candidate_high = min(core_high, entry_limit)
+        best_runway = max(0.0, target - core_low)
+    else:
+        entry_limit = target + need
+        candidate_low = max(core_low, entry_limit)
+        candidate_high = core_high
+        best_runway = max(0.0, core_high - target)
+
+    candidate_exists = candidate_high + 1e-9 >= candidate_low
+    if not candidate_exists:
+        candidate_low = 0.0
+        candidate_high = 0.0
+    return best_runway, need, candidate_exists, entry_limit, candidate_low, candidate_high
+
+
 def zone_layer(zone: Zone, history_ok: bool, runway_ok: bool) -> str:
     if not execution_grade_eligible(zone):
         return "MAP_CONTEXT"
@@ -195,10 +290,31 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
             runway_target = candidate
             runway_target_basis = "FINAL_PLAN_" + key.upper()
             break
-    runway, runway_need, runway_ok = conservative_runway(
+    conservative_edge_runway, runway_need, conservative_edge_ok = conservative_runway(
         zone,
         target_override=runway_target if runway_target > 0 else None,
     )
+    (
+        candidate_runway,
+        candidate_need,
+        candidate_ok,
+        runway_entry_limit,
+        runway_candidate_low,
+        runway_candidate_high,
+    ) = entry_specific_runway_candidate(
+        zone,
+        target_override=runway_target if runway_target > 0 else None,
+    )
+    entry_specific_runtime_ready = _entry_specific_runway_runtime_ready(snapshot)
+    if entry_specific_runtime_ready:
+        runway = candidate_runway
+        runway_need = candidate_need
+        runway_ok = candidate_ok
+        runway_gate_mode = "ENTRY_SPECIFIC_M1_ORDER"
+    else:
+        runway = conservative_edge_runway
+        runway_ok = conservative_edge_ok
+        runway_gate_mode = "CONSERVATIVE_CORE_EDGE_COMPAT"
     spread = float(getattr(snapshot, "spread_points", 0.0) or 0.0) if snapshot is not None else 0.0
     spread_ok = snapshot is not None and spread <= float(SETTINGS.max_spread_points)
     if snapshot is None:
@@ -220,6 +336,12 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "usable_runway_ok", "1" if runway_ok else "0")
     _replace_or_append(rows, "usable_runway_target", f"{float(runway_target or zone.original_target1 or 0.0):.5f}")
     _replace_or_append(rows, "usable_runway_target_basis", runway_target_basis)
+    _replace_or_append(rows, "runway_gate_mode", runway_gate_mode)
+    _replace_or_append(rows, "entry_specific_runway_runtime_ready", "1" if entry_specific_runtime_ready else "0")
+    _replace_or_append(rows, "conservative_edge_runway", f"{conservative_edge_runway:.5f}")
+    _replace_or_append(rows, "runway_entry_limit", f"{runway_entry_limit:.5f}")
+    _replace_or_append(rows, "runway_candidate_low", f"{runway_candidate_low:.5f}")
+    _replace_or_append(rows, "runway_candidate_high", f"{runway_candidate_high:.5f}")
     _replace_or_append(rows, "map_location_authority", "SOURCE_EXACT_PRESERVED")
     _replace_or_append(rows, "live_spread_points", f"{spread:.2f}")
     _replace_or_append(rows, "max_spread_points", f"{float(SETTINGS.max_spread_points):.2f}")
@@ -303,7 +425,7 @@ def install_ai_contract_correction() -> None:
         rules["dxy_history_authority"] = "DXY is confirmation/confluence only: minimum prompt counts remain mandatory, but extended DXY depth alone cannot veto or manufacture an XAU zone."
         rules["lifecycle_history_is_separate"] = "Mitigation history may retain older M15 bars than the 3-5 trading-day analysis window; it is lifecycle telemetry only and must not change grade, risk, ranking, authority, width or location."
         rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
-        rules["clear_run_semantics"] = "usable directional space from conservative tactical-core edge to valid target; never a reason to move the institutional zone"
+        rules["clear_run_semantics"] = "pre-M1 Cloud verifies that a tactical-core sub-window can meet the absolute runway minimum; Sequence 3.48+ re-checks runway from the actual intended M1 entry quote immediately before order send. Older runtimes retain the conservative least-favourable-core-edge guard."
         return payload
 
     corrected_payload._tradezone_professional_separation = True
