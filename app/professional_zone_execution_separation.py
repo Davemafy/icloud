@@ -45,14 +45,14 @@ def _version_tuple(value: str) -> tuple[int, ...]:
 def _entry_specific_runway_runtime_ready(snapshot: MarketSnapshot | None) -> bool:
     """Relax the pre-M1 runway guard only when the runtime can enforce it at order time.
 
-    Historical replay runs the same release contract in-process, so it is safe to
-    use entry-specific runway there. Live Cloud remains on the old conservative
-    whole-core guard until a fresh Sequence >= 3.48 heartbeat proves the MT5 side
-    has the matching final order gate. This makes the release safe during rolling
-    Cloud/MT5 upgrades.
+    Live Cloud remains on the old conservative whole-core guard until a fresh
+    Sequence >= 3.48 heartbeat proves the MT5 side has the matching final order
+    gate. Historical replay also remains conservative until its dedicated MT5
+    harness carries the same actual-entry check. This makes both rolling upgrades
+    and replay provenance fail closed instead of overstating the new capability.
     """
     if snapshot is not None and str(getattr(snapshot, "kind", "") or "").upper() == "HISTORICAL_REPLAY":
-        return True
+        return False
     try:
         from .db import latest_heartbeats
 
