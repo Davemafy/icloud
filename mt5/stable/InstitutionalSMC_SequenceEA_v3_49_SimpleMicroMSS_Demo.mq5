@@ -2226,7 +2226,7 @@ void Evaluate()
    {
       valueReactionIdx=1;
    }
-   else    if(sig.reentry)
+   else if(sig.reentry)
    {
       string reentryReason="";
       if(!TZ35_ReentryEntryReady(r,a,sig.buy,sig,entry,reentryReason,valueReactionIdx))
