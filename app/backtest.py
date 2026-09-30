@@ -449,10 +449,12 @@ async def generate_v659(
     from .timezones import safe_zoneinfo
     from .zone_reaction_lifecycle import update_zone_reactions
 
-    # Live core-contact edge recovery changes when execution authority can be
-    # acquired during replay, so keep replay provenance exact for this release.
-    backtest_contract_cloud = "6.5.111"
-    compatible_runtime_clouds = {"6.5.111"}
+    # Replay remains on the 6.5.110 conservative core-edge runway contract until
+    # the dedicated MT5 replay harness implements Sequence 3.48 actual-entry runway.
+    # Cloud 6.5.111 is compatible because live-only runtime negotiation keeps
+    # HISTORICAL_REPLAY on the conservative guard.
+    backtest_contract_cloud = "6.5.110"
+    compatible_runtime_clouds = {"6.5.110", "6.5.111"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "
