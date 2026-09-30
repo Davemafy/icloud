@@ -41,8 +41,10 @@ jobs:
           assert f'#property version   "{manifest["sequence_ea_version"]}"' in text
           required=[
               'HTF_ZONE_CONTACT_HANDOFF',
-              'TZ49_BuildSimplePrimary',
-              'MASTER_SNIPER_SIMPLE',
+              'TZ50_BuildSniperPD',
+              'TZ50_BuildZoneEngulfing',
+              'MASTER_SNIPER_PD_',
+              'ZONE_ENGULFING',
               'TZ46_InitialZoneProtectedStop',
               'TZ49_OpenDirectionalTargets',
               'TZ49_DeepestDirectionalTarget',
