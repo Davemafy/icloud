@@ -73,20 +73,20 @@ def _zone(
     )
 
 
-def test_interaction_uses_core_not_broad_envelope():
+def test_live_core_interaction_is_ready():
     s = _snapshot(100.0)
     z = _zone()
     _publish([z], ts=s.sent_at)
     assert watch_zone_ready(z, s) is True
 
 
-def test_distant_core_does_not_become_ready_even_if_envelope_is_wide():
+def test_published_envelope_contact_arms_m1_even_when_core_is_deeper():
     s = _snapshot(100.0)
     z = _zone(core_low=90.0, core_high=91.0)
     z.zone_low = 89.0
     z.zone_high = 101.0
     _publish([z], ts=s.sent_at)
-    assert watch_zone_ready(z, s) is False
+    assert watch_zone_ready(z, s) is True
 
 
 def test_h4_primary_parent_can_become_ready():
@@ -119,11 +119,32 @@ def test_second_mitigation_a_grade_remains_ready():
     assert watch_zone_ready(z, s) is True
 
 
-def test_armed_zone_stays_not_ready_until_core_interaction():
+def test_armed_zone_stays_not_ready_until_envelope_contact():
     s = _snapshot(100.0)
-    z = _zone(core_low=105.0, core_high=106.0, source_tf="H4", readiness="ARMED")
+    z = _zone(core_low=110.0, core_high=111.0, source_tf="H4", readiness="ARMED")
+    z.zone_low = 108.0
+    z.zone_high = 112.0
     _publish([z], ts=s.sent_at)
     assert watch_zone_ready(z, s) is False
+
+
+def test_envelope_contact_promotes_zone_contact_handoff_without_core():
+    s = _snapshot(100.0)
+    z = _zone(core_low=90.0, core_high=91.0, source_tf="H4>H1", readiness="ARMED")
+    z.zone_low = 89.0
+    z.zone_high = 101.0
+    a = _publish([z], ts=s.sent_at, analysis_id="A_CONTACT")
+
+    selected = promote_watch_to_m1_ready(a, s)
+
+    assert selected is z
+    assert z.core_method.startswith("M1_READY|ZONE_CONTACT_HANDOFF|")
+    window = a.execution_policy["execution_window"]
+    assert window["mode"] == "LATCHED_AFTER_ZONE_CONTACT"
+    assert window["zone_contact_confirmed"] is True
+    assert window["core_now"] is False
+    assert window["core_required_for_authority"] is False
+    assert window["m1_execution_model"] == "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE"
 
 
 def test_promote_sets_selected_zone_and_m1_ready_marker():
