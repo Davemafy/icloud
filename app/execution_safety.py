@@ -23,7 +23,7 @@ CORE_INTERACTION_BUFFER_M15_ATR = 0.10
 CORE_INTERACTION_MIN_POINTS = 5.0
 TARGET_MIN_POINTS = 5.0
 TARGET_SPREAD_MULTIPLIER = 1.50
-EXECUTION_GUARD_CONTRACT = "ZONE_SWEEP_OR_CORE_TARGET_DIRECTION_V6528"
+EXECUTION_GUARD_CONTRACT = "ZONE_CONTACT_OR_CORE_TARGET_DIRECTION_V65112"
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 
 
@@ -171,6 +171,7 @@ def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
         return False
     return str(fallback.get("authority") or "") in {
         "HTF_CORE_HANDOFF",
+        "HTF_ZONE_CONTACT_HANDOFF",
         "HTF_ZONE_SWEEP_HANDOFF",
         "LIQUIDITY_REVERSAL_HANDOFF",
     }
@@ -204,6 +205,7 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
         and bool(meta.get("objective_open", True))
         and authority in {
             "HTF_CORE_HANDOFF",
+            "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
         }
@@ -294,29 +296,29 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     primary_handoff_ready = bool(cloud_ready and effective_mode == "DUAL_BRANCH")
     window = dict((analysis.execution_policy or {}).get("execution_window") or {})
     authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
-    sweep_note = any(
-        str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
-        or "ZONE_SWEEP_HANDOFF" in str(note)
+    contact_note = any(
+        str(note).startswith("execution_location:LATCHED_AFTER_ZONE_CONTACT")
+        or "ZONE_CONTACT_HANDOFF" in str(note)
         for note in zone.notes
     )
-    sweep_handoff_ready = bool(
+    contact_handoff_ready = bool(
         primary_handoff_ready
         and (
             (
-                str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
-                and bool(window.get("sweep_confirmed"))
+                str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_CONTACT"
+                and bool(window.get("zone_contact_confirmed"))
             )
-            or str(authority_meta.get("authority") or "") == "HTF_ZONE_SWEEP_HANDOFF"
-            or sweep_note
+            or str(authority_meta.get("authority") or "") == "HTF_ZONE_CONTACT_HANDOFF"
+            or contact_note
         )
     )
-    core_handoff_ready = bool(primary_handoff_ready and not sweep_handoff_ready)
+    core_handoff_ready = bool(primary_handoff_ready and not contact_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
-    handoff_ready = bool(owner_continuation_ready or core_handoff_ready or sweep_handoff_ready or liquidity_handoff_ready)
+    handoff_ready = bool(owner_continuation_ready or core_handoff_ready or contact_handoff_ready or liquidity_handoff_ready)
 
     authority = (
         owner_authority if owner_continuation_ready
-        else "HTF_ZONE_SWEEP_HANDOFF" if sweep_handoff_ready
+        else "HTF_ZONE_CONTACT_HANDOFF" if contact_handoff_ready
         else "HTF_CORE_HANDOFF" if core_handoff_ready
         else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready
         else "NONE"
@@ -324,7 +326,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
     kv["execution_authority"] = authority
     kv["core_interaction_basis"] = (
-        "OUTER_ZONE_PLUS_PROVEN_LIQUIDITY_SWEEP" if sweep_handoff_ready
+        "PUBLISHED_INSTITUTIONAL_ENVELOPE_CONTACT" if contact_handoff_ready
         else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
     )
     kv["core_interaction_buffer"] = f"{core_interaction_buffer(snapshot):.5f}"
@@ -332,15 +334,17 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["core_handoff_ready"] = "1" if core_handoff_ready else "0"
     kv["owner_continuation_ready"] = "1" if owner_continuation_ready else "0"
     kv["owner_continuation_authority"] = owner_authority if owner_continuation_ready else "NONE"
-    kv["zone_sweep_handoff_ready"] = "1" if sweep_handoff_ready else "0"
-    kv["zone_sweep_confirmed"] = "1" if bool(window.get("sweep_confirmed")) else "0"
-    kv["zone_sweep_ts"] = str(int(window.get("sweep_ts") or 0))
-    kv["zone_sweep_label"] = str(window.get("sweep_label") or "")
-    kv["zone_sweep_price"] = f"{float(window.get('sweep_price') or 0.0):.5f}"
+    kv["zone_contact_handoff_ready"] = "1" if contact_handoff_ready else "0"
+    kv["zone_contact_confirmed"] = "1" if bool(window.get("zone_contact_confirmed")) else "0"
+    kv["zone_contact_ts"] = str(int(window.get("contact_ts") or 0))
+    kv["zone_contact_basis"] = str(window.get("contact_basis") or "")
+    kv["zone_contact_price"] = f"{float(window.get('contact_price') or 0.0):.5f}"
+    kv["zone_sweep_handoff_ready"] = "0"
+    kv["zone_sweep_confirmed"] = "0"
     kv["core_required_for_authority"] = (
         "0"
-        if sweep_handoff_ready
-        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"})
+        if contact_handoff_ready
+        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"})
         else "1"
     )
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
@@ -370,8 +374,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
             or analysis.generated_at
             or 0
         )
-    elif sweep_handoff_ready:
-        handoff_ts = int(window.get("sweep_ts") or 0)
+    elif contact_handoff_ready:
+        handoff_ts = int(window.get("contact_ts") or analysis.snapshot_at or analysis.generated_at or 0)
     elif core_handoff_ready:
         handoff_ts = int(window.get("core_touched_at") or analysis.snapshot_at or analysis.generated_at or 0)
     elif liquidity_handoff_ready:
@@ -493,6 +497,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         kv["core_handoff_ready"] = "0"
         kv["owner_continuation_ready"] = "0"
         kv["owner_continuation_authority"] = "NONE"
+        kv["zone_contact_handoff_ready"] = "0"
         kv["zone_sweep_handoff_ready"] = "0"
         kv["liquidity_handoff_ready"] = "0"
 
@@ -504,8 +509,8 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         elif thesis_bplus_override:
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
-        elif sweep_handoff_ready:
-            kv["execution_role"] = "ZONE_SWEEP_PRIMARY"
+        elif contact_handoff_ready:
+            kv["execution_role"] = "MASTER_SNIPER_PRIMARY"
         elif liquidity_handoff_ready:
             kv["execution_role"] = "LIQUIDITY_REVERSAL_HANDOFF"
     else:
@@ -571,36 +576,39 @@ def normalize_candidate_feedback(
         cloud_ready = _readiness(zone) == "M1_READY"
         window = dict((analysis.execution_policy or {}).get("execution_window") or {})
         authority_meta = dict((analysis.execution_policy or {}).get("execution_authority") or {})
-        sweep_note = any(
-            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_SWEEP")
-            or "ZONE_SWEEP_HANDOFF" in str(note)
+        contact_note = any(
+            str(note).startswith("execution_location:LATCHED_AFTER_ZONE_CONTACT")
+            or "ZONE_CONTACT_HANDOFF" in str(note)
             for note in zone.notes
         )
-        sweep_primary = bool(
+        contact_primary = bool(
             cloud_ready
             and (
                 (
-                    str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_SWEEP"
-                    and bool(window.get("sweep_confirmed"))
+                    str(window.get("mode") or "") == "LATCHED_AFTER_ZONE_CONTACT"
+                    and bool(window.get("zone_contact_confirmed"))
                 )
-                or str(authority_meta.get("authority") or "") == "HTF_ZONE_SWEEP_HANDOFF"
-                or sweep_note
+                or str(authority_meta.get("authority") or "") == "HTF_ZONE_CONTACT_HANDOFF"
+                or contact_note
             )
         )
-        features["zone_context"] = 1 if (core_now or sweep_primary or owner_primary) else 0
+        features["zone_context"] = 1 if (core_now or contact_primary or owner_primary) else 0
         features["recent_zone_interaction"] = 1 if (core_now or cloud_ready or lrh_primary or owner_primary) else 0
         features["owner_continuation"] = 1 if owner_primary else 0
         features["owner_continuation_authority"] = owner_authority if owner_primary else "NONE"
         features["interaction_basis"] = (
             "PERSISTED_THESIS_OWNER" if owner_primary
             else "LIQUIDITY_REVERSAL_HANDOFF" if lrh_primary
-            else "OUTER_ZONE_PLUS_PROVEN_LIQUIDITY_SWEEP" if sweep_primary
+            else "PUBLISHED_INSTITUTIONAL_ENVELOPE_CONTACT" if contact_primary
             else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
         )
         features["core_interaction_buffer"] = round(core_interaction_buffer(snapshot), 5)
-        features["zone_sweep_handoff"] = 1 if sweep_primary else 0
-        features["zone_sweep_ts"] = int(window.get("sweep_ts") or 0)
-        features["zone_sweep_price"] = float(window.get("sweep_price") or 0.0)
+        features["zone_contact_handoff"] = 1 if contact_primary else 0
+        features["zone_sweep_handoff"] = 0
+        features["zone_contact_ts"] = int(window.get("contact_ts") or 0)
+        features["zone_sweep_ts"] = 0
+        features["zone_contact_price"] = float(window.get("contact_price") or 0.0)
+        features["zone_sweep_price"] = 0.0
         features["liquidity_reversal_handoff"] = 1 if lrh_primary else 0
         if not core_now and not cloud_ready and not lrh_primary and not owner_primary:
             reasons = list(details.get("rejection_reasons") or [])
