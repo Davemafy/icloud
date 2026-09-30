@@ -144,7 +144,7 @@ def test_envelope_contact_promotes_zone_contact_handoff_without_core():
     assert window["zone_contact_confirmed"] is True
     assert window["core_now"] is False
     assert window["core_required_for_authority"] is False
-    assert window["m1_execution_model"] == "SWEEP_MICRO_MSS_PULLBACK_DIRECTIONAL_CLOSE"
+    assert window["m1_execution_model"] == "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING"
 
 
 def test_promote_sets_selected_zone_and_m1_ready_marker():
