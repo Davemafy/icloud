@@ -531,6 +531,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const cloudRunway=String(seq.cloud_usable_runway||'');
     const cloudRequiredRunway=String(seq.cloud_required_runway||'');
     const cloudRunwayTarget=String(seq.cloud_runway_target||'');
+    const cloudRunwayMode=String(seq.cloud_runway_gate_mode||'');
+    const cloudRunwayEntryLimit=String(seq.cloud_runway_entry_limit||'');
+    const cloudRunwayCandidateLow=String(seq.cloud_runway_candidate_low||'');
+    const cloudRunwayCandidateHigh=String(seq.cloud_runway_candidate_high||'');
+    const cloudConservativeEdgeRunway=String(seq.cloud_conservative_edge_runway||'');
     const cloudHistoryFailures=String(seq.cloud_history_failures||'');
     const cloudHistoryWarnings=String(seq.cloud_history_warnings||'');
     const cloudHistoryMetrics=String(seq.cloud_history_metrics||'');
@@ -570,6 +575,17 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         if(cloudRunway||cloudRequiredRunway||cloudRunwayTarget){
           runwayText=' Runway '+(cloudRunway||'—')+' / required '+(cloudRequiredRunway||'—')+
             (cloudRunwayTarget?' to target '+cloudRunwayTarget:'')+'.';
+          if(cloudRunwayMode==='ENTRY_SPECIFIC_M1_ORDER'){
+            runwayText+=' M1 entry-specific runway is active'+
+              ((cloudRunwayCandidateLow||cloudRunwayCandidateHigh)
+                ? ' inside core '+(cloudRunwayCandidateLow||'—')+'–'+(cloudRunwayCandidateHigh||'—')
+                : '')+
+              (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
+              '; the actual quote is checked again immediately before order.';
+          }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
+            runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
+              (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
+          }
         }
         let historyText='';
         if(why.includes('ANALYSIS_HISTORY_WINDOW_INCOMPLETE')){
@@ -589,10 +605,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
         const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
         const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
+        const runwayBlock=seqStage==='TARGET'&&seqReason.includes('ENTRY_SPECIFIC_RUNWAY_NOT_MET');
         const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' ')))));
-        seqGate.className='kpi '+(limitReached||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' '))))));
+        seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
       }else{
         seqGate.textContent=seqStage.replaceAll('_',' ');
