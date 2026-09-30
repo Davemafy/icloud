@@ -68,9 +68,10 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
         "there is no current M1 location handoff or new-entry authority",
         "Macro thesis / handoff authority ", "Fresh M1 entry location ",
         "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner",
-        "Primary first entry is: M1 liquidity sweep", "M1 micro MSS", "pullback",
-        "CLOSED M1 candle in trade direction", "M15 only validates zone health",
-        "no OTE/FVG/PD-array or displacement threshold",
+        "Model 1: M1 liquidity sweep", "M1 micro MSS", "fresh OB/FVG",
+        "pullback into that OB/FVG", "CLOSED M1 candle in trade direction",
+        "Model 2: CLOSED directional M1 engulfing", "M15 validates zone health only",
+        "no M5/M15 MSS, OTE or displacement threshold",
         "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor",
         "ownership anchor is not itself a fresh entry signal"
     ]:
