@@ -30,46 +30,46 @@ jobs:
       - name: MQL structural checks
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
-          p=Path('mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5')
+          manifest=json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          seq=next(x for x in manifest['files'] if x.get('role')=='sequence_ea')
+          p=Path(seq['path'])
           text=p.read_text(encoding='utf-8')
           for a,b in [('(',')'),('{','}'),('[',']')]:
               assert text.count(a)==text.count(b),(a,b,text.count(a),text.count(b))
-          assert '#property version   "3.41"' in text
+          assert f'#property version   "{manifest["sequence_ea_version"]}"' in text
           required=[
-              'TZ_BuildEscapePullback',
+              'HTF_ZONE_CONTACT_HANDOFF',
+              'TZ49_BuildSimplePrimary',
+              'MASTER_SNIPER_SIMPLE',
+              'TZ46_InitialZoneProtectedStop',
+              'TZ49_OpenDirectionalTargets',
+              'TZ49_DeepestDirectionalTarget',
+              'MIN_RR_NOT_MET_TO_DEEPEST_OPEN_OBJECTIVE',
               'TZ28_ArmAcceptedFlip',
-              'TZ31_RefreshCloudState',
-              'Persist/release the owner mirror even while execution is safety-blocked.',
-              'TZ31_BuildPostHandoffContinuation',
-              'HTF_ZONE_SWEEP_HANDOFF',
               'LIQUIDITY_REVERSAL_HANDOFF',
               'MT5_EXECUTION_OWNER_MIRROR_V1',
-              'owner_mirror_zone_payload_b64',
-              'FileDelete("TradeZone\\\\execution_owner_state.txt")',
-              'execution_handoff_ts',
-              'gate_stage',
-              'gate_reason',
               'ENTRY_CONFIRMATION',
               'FLIP_CONFIRMATION',
-              'WAITING_FOR_CLOSED_M1_VALUE_REACTION',
-              'NO_OPEN_TARGET_BEYOND_ENTRY',
-              'MT5_ORDER_SEND_FAILED',
-              'TZ34_InitialRiskDistance',
-              'HistorySelectByPosition(positionId)',
-              'RunnerTrailStartR',
-              'TZ39_ProfessionalValueReactionReady',
-              'TZ39_InitialEntryReady',
-              'TZ39_FlipEntryReady',
-              'TZ40_FailedZoneBreakerPD',
-              'TZ40_BreakerFlipReady',
-              'BREAKER_RETEST_MSS_DISPLACEMENT_CONFIRMED',
-              'ProfessionalEntryReactionMinBodyATR=0.25',
-              'ProfessionalEntryReactionMaxChaseATR=0.15',
+              'OrderCalcProfit',
+              'TZ37_SendOrders',
           ]
           for needle in required:
               assert needle in text, needle
-          print('Sequence 3.41 MQL structural checks OK')
+          evaluate=text[text.index('void Evaluate()'):text.index('\nint OnInit()',text.index('void Evaluate()'))]
+          assert 'TZ48_EntrySpecificRunwayValid' not in evaluate
+          print(f'Stable Sequence {manifest["sequence_ea_version"]} MQL structural checks OK: {p.name}')
           PY
       - name: Stable EA SHA256
-        run: sha256sum mt5/stable/InstitutionalSMC_SequenceEA_v3_41_BPlusAuthority_Demo.mq5
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          manifest=json.loads(Path('mt5/stable/manifest.json').read_text(encoding='utf-8'))
+          seq=next(x for x in manifest['files'] if x.get('role')=='sequence_ea')
+          data=Path(seq['path']).read_bytes()
+          actual=hashlib.sha256(data).hexdigest()
+          assert actual==seq['sha256'], (actual,seq['sha256'])
+          print(actual, seq['path'])
+          PY
