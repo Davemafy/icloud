@@ -173,18 +173,23 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
     for BUY. Mitigation count is telemetry only and cannot remove the reserve. While Level 1 is valid, Level 2
     remains plotted context; a fresh analysis requalifies it before any promotion. Do not manufacture a reserve
     if no second independent institutional source qualifies.
-13. M1 cannot redefine the HTF zone. The PRIMARY FIRST-ENTRY model is deliberately simple and M1-only:
-    price contacts the published institutional envelope -> M1 liquidity sweep -> M1 MICRO MSS (internal
-    1-minute structure, not M5/M15/HTF structure) -> pullback -> CLOSED M1 candle in the trade direction ->
-    entry. M15 validates zone health/accepted invalidation only. Tactical-core touch, M15 sweep/reclaim,
-    displacement-ATR thresholds, dealing-range construction, OTE, FVG and PD-array overlap are NOT mandatory
-    first-entry gates. Initial SL belongs beyond the full institutional zone with the configured buffer.
+13. M1 cannot redefine the HTF zone. PRIMARY execution has TWO direct M1 models.
+    MODEL 1: price contacts the published institutional envelope -> M1 liquidity sweep -> M1 MICRO MSS
+    (internal 1-minute structure, not M5/M15/HTF structure) -> fresh M1 OB or FVG from that MSS leg ->
+    pullback into that OB/FVG -> CLOSED M1 candle in trade direction -> entry.
+    MODEL 2: a CLOSED directional M1 real-body engulfing pattern formed at/in the valid institutional zone
+    -> entry. Model 2 does not need a separate sweep/MSS chain.
+    Model 1 and Model 2 may re-arm for R1/R2 while the same thesis remains valid, the objective remains open,
+    and any existing position is flat or protected. M15 validates zone health/accepted invalidation only.
+    Tactical-core touch, M15 sweep/reclaim, displacement-ATR thresholds, dealing-range construction and OTE
+    are NOT mandatory primary sniper gates. Initial SL for both models, including same-thesis R1/R2 cycles,
+    belongs beyond the full institutional zone with the configured buffer.
 14. When there is NO acquired thesis owner, a valid PRIMARY BUY and PRIMARY SELL are independent execution
     candidates. The zone currently at a qualifying M1 handoff location may receive execution authority even
     when it is counter to D1. D1 remains context and a tie-breaker; it must not monopolize authority merely
     because the D1-aligned zone was pre-selected. After one side earns a valid handoff and ownership, normal
     thesis ownership blocks the opposite side until release. Countertrend authority never bypasses spread/news/
-    snapshot safety, target-direction checks, actual-entry minimum-RR, risk sizing, or the simple M1 sequence.
+    snapshot safety, target-direction checks, actual-entry minimum-RR, risk sizing, or the two M1 sniper models.
 
 This contract comes from the user's institutional XAU framework: identify the MOST IMPORTANT levels where
 price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15 structure,
