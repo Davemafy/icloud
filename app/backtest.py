@@ -451,8 +451,8 @@ async def generate_v659(
 
     # Live core-contact edge recovery changes when execution authority can be
     # acquired during replay, so keep replay provenance exact for this release.
-    backtest_contract_cloud = "6.5.110"
-    compatible_runtime_clouds = {"6.5.110"}
+    backtest_contract_cloud = "6.5.111"
+    compatible_runtime_clouds = {"6.5.111"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "
