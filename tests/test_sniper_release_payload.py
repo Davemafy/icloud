@@ -36,7 +36,7 @@ def test_release_payload_versions_and_parity_wiring():
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
     assert '#property version "1.58"' in bridge
     assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
-    assert '#define TZ_SEQUENCE_EXPECTED "3.49"' in bridge
+    assert '#define TZ_SEQUENCE_EXPECTED "' in bridge  # installer patches this to manifest sequence_ea_version
     assert 'TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"' in inc
 
 
