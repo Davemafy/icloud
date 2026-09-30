@@ -517,7 +517,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls=ownerMatch ? 'ok' : 'blue';
       meta=ownerMatch
         ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
-        : checklist+'Macro location handoff is active. Primary first entry is: M1 liquidity sweep → M1 micro MSS → pullback → CLOSED M1 candle in trade direction → entry. M15 only validates zone health; no OTE/FVG/PD-array or displacement threshold is required for this first entry.';
+        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro MSS → fresh OB/FVG → pullback into that OB/FVG → CLOSED M1 candle in trade direction → entry. Model 2: CLOSED directional M1 engulfing at/in the zone → entry. M15 validates zone health only; no M5/M15 MSS, OTE or displacement threshold is required for these primary sniper models.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -583,7 +583,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence 3.49 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence 3.50 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
@@ -610,7 +610,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const runwayBlock=cloudRunwayMode!=='RR_ONLY_M1_ORDER'&&seqStage==='TARGET'&&seqReason.includes('ENTRY_SPECIFIC_RUNWAY_NOT_MET');
         const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 VALUE REACTION':(valueWait?'WAITING FOR VALUE / RETRACE':seqStage.replaceAll('_',' '))))));
+        const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':(sniperWait?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
         seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
       }else{
@@ -650,7 +651,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
       const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
       const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-      const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
+      const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
       const forming=simplePrimaryWait||['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
       const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
       if(seqStage==='ORDER_SENT'){
@@ -679,18 +680,18 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(simplePrimaryWait){
         state='M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Primary model: zone contact → M1 sweep → micro MSS → pullback → closed directional M1 candle. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+'Model 1 is forming: zone contact → M1 sweep → micro MSS → fresh OB/FVG → pullback into OB/FVG → closed directional M1 candle. Model 2 (zone engulfing) remains available in parallel. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
       }else if(reactionWait){
         state='WAITING FOR M1 CONFIRMATION';
         cls='blue';
-        meta=checklist+(seqModel==='MASTER_SNIPER_SIMPLE'
-          ? 'Primary model is waiting for its final closed M1 directional candle. Entry permission: NO.'
+        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING')
+          ? 'Sniper model is waiting for its final closed M1 directional confirmation. Entry permission: NO.'
           : 'This non-primary/re-entry model is waiting for its configured closed-M1 confirmation. Entry permission: NO.');
       }else if(valueWait){
         state='WAITING FOR RETRACE';
         cls='blue';
-        meta=checklist+(seqModel==='MASTER_SNIPER_SIMPLE'
-          ? 'Primary model is waiting for the pullback after the M1 micro MSS. Entry permission: NO.'
+        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING')
+          ? 'Model 1 is waiting for the OB/FVG pullback after the M1 micro MSS. Entry permission: NO.'
           : 'This non-primary/re-entry model is waiting for its configured value retrace. Entry permission: NO.');
       }else if(forming){
         state='M1 SEQUENCE FORMING';
