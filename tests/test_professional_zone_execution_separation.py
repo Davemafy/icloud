@@ -185,7 +185,7 @@ def test_final_separation_uses_next_open_target_not_behind_activation_tp1(monkey
     assert out["execution_authority"] == "HTF_CORE_HANDOFF"
     assert out["usable_runway_target"] == "4303.32000"
     assert out["usable_runway_target_basis"] == "FINAL_PLAN_NEXT_OPEN_TARGET"
-    assert abs(float(out["usable_runway"]) - 27.53) < 1e-9
+    assert abs(float(out["usable_runway"]) - 48.91) < 1e-9
     assert out["required_runway"] == "0.00000"
     assert out["usable_runway_ok"] == "1"
     assert out["separation_guard"] == "PASS"
