@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.42",
+  "release": "6.3.43",
   "repository": "Davemafy/icloud",
-  "ref": "d90198d0dd99c64b8d57cb5675252e0ddba7bdaf",
+  "ref": "44a61ea4dd5e4067ba5acd7dfa55d3013177b44b",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.49",
+  "sequence_ea_version": "3.50",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -199,16 +199,20 @@
     "actual_entry_runway_order_gate",
     "rolling_upgrade_runway_compatibility_guard",
     "runway_gate_dashboard_truth",
-    "simple_m1_micro_mss_primary",
     "envelope_contact_arms_m1",
     "m15_health_only_for_primary_entry",
     "zone_distal_buffered_stop",
     "order_time_min_rr_only",
     "absolute_runway_telemetry_only",
     "consumed_targets_skipped",
-    "primary_no_ote_fvg_pdarray_gate",
     "primary_no_displacement_threshold",
-    "closed_m1_directional_confirmation"
+    "closed_m1_directional_confirmation",
+    "model1_m1_sweep_micro_mss_ob_fvg_retest",
+    "model2_zone_engulfing",
+    "sniper_cycle_rearm_r1_r2",
+    "sniper_reentries_zone_distal_stop",
+    "model1_no_ote_gate",
+    "model2_no_mss_requirement"
   ],
   "files": [
     {
@@ -221,11 +225,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_49_SimpleMicroMSS_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
       "requires_reload": true,
-      "sha256": "e6a30a1dabf9c408f8817b5b686f69e53c12d9163289ace5fa34aa9c5c6a5029"
+      "sha256": "0a4e0452134dfb41c1de8fbcf61e85f4d4c10d7d40dc5a64673c12db9ab73501"
     }
   ],
   "support_files": [
