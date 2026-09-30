@@ -459,7 +459,22 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
         if paper_ai_fallback:
             _activate_paper_ai_fallback(a, authority, "AI_PROVIDER_UNAVAILABLE")
         elif selected and not execution_selected:
-            a.approved = False
+            # Structural map approval and live execution handoff are separate
+            # authorities. A valid published A+/A/B+ map must remain approved
+            # while it is ARMED/approaching; /mt5/plan stays WATCH_ONLY until a
+            # live core/sweep/liquidity handoff is earned. Clearing approved here
+            # made a later real core contact unable to become executable without
+            # rebuilding the whole map under a different approval state.
+            policy = dict(a.execution_policy or {})
+            policy["structural_map_approval"] = {
+                "approved": bool(a.approved),
+                "selected_zone_id": str(a.selected_zone_id or ""),
+                "execution_handoff_active": False,
+                "execution_authority": "NONE",
+                "separation_contract": "STRUCTURAL_MAP_VS_EXECUTION_HANDOFF_V1",
+                "paper_only": True,
+            }
+            a.execution_policy = policy
         elif SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and execution_selected and not ok:
             # A real provider's explicit rejection remains fail-closed.
             a.approved = False

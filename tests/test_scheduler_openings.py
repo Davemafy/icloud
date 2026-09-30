@@ -194,3 +194,52 @@ def test_market_drift_does_not_replace_wrong_side_lifecycle_logic(monkeypatch):
     # SELL map is no longer above price; that belongs to invalidation/flip logic.
     snap = _drift_snap(mid=4_320.0)
     assert scheduler._market_drift_refresh(snap, now_utc=7_300) == {}
+
+
+def test_interaction_ids_distinguish_approach_from_exact_core_contact(monkeypatch):
+    settings = SimpleNamespace(paper_only=True)
+    monkeypatch.setattr(scheduler, "SETTINGS", settings)
+
+    zone = SimpleNamespace(zone_id="PZ_TEST")
+    analysis = SimpleNamespace(zones=[zone])
+    monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: analysis)
+    monkeypatch.setattr(scheduler, "owner_core_interacting", lambda snap: None)
+    monkeypatch.setattr(scheduler, "publication_state_for_zone", lambda z: {})
+
+    monkeypatch.setattr(
+        scheduler,
+        "primary_zone_interacting",
+        lambda z, snap: bool(getattr(snap, "core", False)),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "primary_zone_approaching",
+        lambda z, snap: bool(getattr(snap, "approach", False)),
+    )
+
+    approach = SimpleNamespace(approach=True, core=False)
+    contact = SimpleNamespace(approach=True, core=True)
+
+    assert scheduler._interaction_ids(approach) == {"APPROACH:PZ_TEST"}
+    assert scheduler._interaction_ids(contact) == {"CORE:PZ_TEST"}
+
+
+def test_interaction_ids_recover_persisted_contact_even_after_quote_leaves_core(monkeypatch):
+    settings = SimpleNamespace(paper_only=True)
+    monkeypatch.setattr(scheduler, "SETTINGS", settings)
+
+    zone = SimpleNamespace(zone_id="PZ_TEST")
+    analysis = SimpleNamespace(zones=[zone])
+    monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: analysis)
+    monkeypatch.setattr(scheduler, "owner_core_interacting", lambda snap: None)
+    monkeypatch.setattr(scheduler, "primary_zone_interacting", lambda z, snap: False)
+    monkeypatch.setattr(scheduler, "primary_zone_approaching", lambda z, snap: False)
+    monkeypatch.setattr(
+        scheduler,
+        "publication_state_for_zone",
+        lambda z: {"live_core_touched_at": 123456},
+    )
+
+    assert scheduler._interaction_ids(SimpleNamespace()) == {
+        "CONTACT:PZ_TEST:123456"
+    }

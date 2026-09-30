@@ -449,11 +449,10 @@ async def generate_v659(
     from .timezones import safe_zoneinfo
     from .zone_reaction_lifecycle import update_zone_reactions
 
-    # Source-exact continuation and closed-HTF causality change zoning outcomes,
-    # so replay truth advances with the current Cloud instead of masquerading as
-    # the older 6.5.99 analysis contract.
-    backtest_contract_cloud = "6.5.104"
-    compatible_runtime_clouds = {"6.5.104", "6.5.105", "6.5.106", "6.5.107", "6.5.108", "6.5.109"}
+    # Live core-contact edge recovery changes when execution authority can be
+    # acquired during replay, so keep replay provenance exact for this release.
+    backtest_contract_cloud = "6.5.110"
+    compatible_runtime_clouds = {"6.5.110"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "

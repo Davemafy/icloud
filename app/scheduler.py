@@ -6,7 +6,7 @@ from typing import Awaitable, Callable
 
 from .config import SETTINGS
 from .db import audit, latest_analysis, latest_snapshot
-from .institutional_two_zone import primary_zone_approaching
+from .institutional_two_zone import primary_zone_approaching, primary_zone_interacting
 from .engine import atr
 from .liquidity_reversal_handoff import detect_liquidity_reversal_handoff
 from .prompt_contract import prompt_snapshot_complete
@@ -18,6 +18,7 @@ from .thesis_ownership_policy import (
     owner_m1_handoff_interacting,
 )
 from .timezones import safe_zoneinfo
+from .zone_reaction_lifecycle import publication_state_for_zone
 
 install_runtime_version_truth_policy()
 
@@ -149,12 +150,35 @@ def _fresh_complete_snapshot(snap, now_utc: int) -> bool:
 
 
 def _interaction_ids(snap) -> set[str]:
+    """Return edge-sensitive approach/contact tokens for scheduler refresh.
+
+    A zone can spend many snapshots inside the broad M15-ATR approach buffer
+    before the executable quote actually overlaps its tactical core. Using only
+    zone_id for both states latched the approach event and hid the later core
+    contact, so run_analysis() never got the transition that promotes M1_READY.
+    Keep approach refreshes, but make CORE a distinct edge.
+    """
     if not SETTINGS.paper_only:
         return set()
     a = latest_analysis(ai_required=False)
     if a is None:
         return set()
-    ids = {z.zone_id for z in a.zones if primary_zone_approaching(z, snap)}
+
+    ids: set[str] = set()
+    for z in a.zones:
+        publication = publication_state_for_zone(z)
+        live_touch = int(publication.get("live_core_touched_at") or 0) if publication else 0
+        if live_touch:
+            # Persisted post-publication contact is authoritative even if the
+            # quote has already left the core before the scheduler observes it.
+            # Including the timestamp makes this a one-shot contact edge.
+            ids.add(f"CONTACT:{z.zone_id}:{live_touch}")
+
+        if primary_zone_interacting(z, snap):
+            ids.add(f"CORE:{z.zone_id}")
+        elif primary_zone_approaching(z, snap):
+            ids.add(f"APPROACH:{z.zone_id}")
+
     owner = owner_core_interacting(snap)
     if owner is not None:
         owner_id = str(owner.get("latest_zone_id") or owner.get("reaction_key") or "")
