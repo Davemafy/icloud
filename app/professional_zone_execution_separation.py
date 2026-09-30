@@ -29,7 +29,7 @@ MIN_BAR_COUNTS = {
     "DXY_H1": 100,
 }
 
-ENTRY_SPECIFIC_RUNWAY_SEQUENCE_MIN = (3, 48)
+ENTRY_SPECIFIC_RUNWAY_SEQUENCE_MIN = (3, 49)
 ENTRY_SPECIFIC_RUNWAY_HEARTBEAT_MAX_AGE_SECONDS = 45
 
 
@@ -241,10 +241,16 @@ def entry_specific_runway_candidate(
     return best_runway, need, candidate_exists, entry_limit, candidate_low, candidate_high
 
 
-def zone_layer(zone: Zone, history_ok: bool, runway_ok: bool) -> str:
+def zone_layer(zone: Zone, history_ok: bool, runway_ok: bool = True) -> str:
+    """Execution layer is structural/history authority; absolute runway is telemetry only.
+
+    The first-entry quality gate is RR at the actual M1 entry using the zone-distal
+    buffered stop and a live directional objective. A fixed absolute-dollar runway
+    must not erase a valid institutional location before M1 can do its job.
+    """
     if not execution_grade_eligible(zone):
         return "MAP_CONTEXT"
-    if not history_ok or not runway_ok:
+    if not history_ok:
         return "MAP_CONTEXT"
     return "EXECUTION_CANDIDATE"
 
@@ -306,15 +312,11 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
         target_override=runway_target if runway_target > 0 else None,
     )
     entry_specific_runtime_ready = _entry_specific_runway_runtime_ready(snapshot)
-    if entry_specific_runtime_ready:
-        runway = candidate_runway
-        runway_need = candidate_need
-        runway_ok = candidate_ok
-        runway_gate_mode = "ENTRY_SPECIFIC_M1_ORDER"
-    else:
-        runway = conservative_edge_runway
-        runway_ok = conservative_edge_ok
-        runway_gate_mode = "CONSERVATIVE_CORE_EDGE_COMPAT"
+    # v6.5.112 / Sequence 3.49: runway is retained for observation only.
+    # It no longer decides whether a valid institutional map may reach M1.
+    runway = candidate_runway
+    runway_ok = candidate_ok
+    runway_gate_mode = "RR_ONLY_M1_ORDER"
     spread = float(getattr(snapshot, "spread_points", 0.0) or 0.0) if snapshot is not None else 0.0
     spread_ok = snapshot is not None and spread <= float(SETTINGS.max_spread_points)
     if snapshot is None:
@@ -324,7 +326,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     else:
         snapshot_age = max(0, int(datetime.now(tz=timezone.utc).timestamp()) - int(snapshot.sent_at))
     snapshot_ok = snapshot is not None and snapshot_age <= int(SETTINGS.max_snapshot_age_seconds)
-    layer = zone_layer(zone, history_ok, runway_ok)
+    layer = zone_layer(zone, history_ok, True)
 
     _replace_or_append(rows, "institutional_layer", layer)
     _replace_or_append(rows, "history_window_ok", "1" if history_ok else "0")
@@ -332,7 +334,7 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "history_confluence_warnings", ",".join(history_warnings) if history_warnings else "NONE")
     _replace_or_append(rows, "history_window_metrics", history_metrics_text)
     _replace_or_append(rows, "usable_runway", f"{runway:.5f}")
-    _replace_or_append(rows, "required_runway", f"{runway_need:.5f}")
+    _replace_or_append(rows, "required_runway", "0.00000")
     _replace_or_append(rows, "usable_runway_ok", "1" if runway_ok else "0")
     _replace_or_append(rows, "usable_runway_target", f"{float(runway_target or zone.original_target1 or 0.0):.5f}")
     _replace_or_append(rows, "usable_runway_target_basis", runway_target_basis)
@@ -357,15 +359,14 @@ def apply_execution_separation(text: str, analysis, snapshot: MarketSnapshot | N
     _replace_or_append(rows, "bplus_reduced_risk", "1" if bplus_grade_authority else "0")
 
     # Location/map truth is independent of execution authority. Incomplete analysis
-    # history or runway keeps a zone as context. Live spread/snapshot safety is a
+    # history can keep a zone as context. Absolute runway is observation only; final
+    # entry quality is enforced by actual-entry RR. Live spread/snapshot safety is a
     # separate final execution hold and never destroys an earned thesis/map.
     reasons = []
     if not execution_grade_eligible(zone):
         reasons.append("GRADE_NOT_EXECUTABLE")
     if not history_ok:
         reasons.append("ANALYSIS_HISTORY_WINDOW_INCOMPLETE")
-    if not runway_ok:
-        reasons.append("INSUFFICIENT_USABLE_RUNWAY")
     if not spread_ok:
         reasons.append("SPREAD_SAFETY_HOLD")
     if not snapshot_ok:
@@ -425,7 +426,7 @@ def install_ai_contract_correction() -> None:
         rules["dxy_history_authority"] = "DXY is confirmation/confluence only: minimum prompt counts remain mandatory, but extended DXY depth alone cannot veto or manufacture an XAU zone."
         rules["lifecycle_history_is_separate"] = "Mitigation history may retain older M15 bars than the 3-5 trading-day analysis window; it is lifecycle telemetry only and must not change grade, risk, ranking, authority, width or location."
         rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
-        rules["clear_run_semantics"] = "pre-M1 Cloud verifies that a tactical-core sub-window can meet the absolute runway minimum; Sequence 3.48+ re-checks runway from the actual intended M1 entry quote immediately before order send. Older runtimes retain the conservative least-favourable-core-edge guard."
+        rules["clear_run_semantics"] = "absolute runway is observation only. Primary order quality is checked at the actual M1 entry using the full-zone buffered SL and a still-open directional objective; Sequence 3.49 applies the minimum RR gate and does not require a fixed absolute-dollar runway."
         return payload
 
     corrected_payload._tradezone_professional_separation = True
