@@ -160,6 +160,24 @@ def test_promote_sets_selected_zone_and_m1_ready_marker():
     assert a.execution_policy["execution_window"]["mode"] == "CORE_NOW"
 
 
+
+def test_m1_ready_state_remains_eligible_on_next_analysis_cycle():
+    s = _snapshot(100.0, ts=10)
+    z = _zone(source_tf="H4>H1", readiness="INTERACTING", direction=Direction.BUY)
+    a = _publish([z], ts=10, analysis_id="A_STICKY")
+
+    first = promote_watch_to_m1_ready(a, s)
+    assert first is z
+    assert z.core_method.startswith("M1_READY|")
+
+    # The next cloud analysis receives the already-promoted zone geometry/state.
+    # It must not lose execution search authority merely because readiness now
+    # begins with M1_READY instead of WATCH/ARMED/INTERACTING.
+    second = promote_watch_to_m1_ready(a, _snapshot(100.0, ts=11))
+    assert second is z
+    assert watch_zone_ready(z, _snapshot(100.0, ts=11)) is True
+    assert z.core_method.startswith("M1_READY|")
+
 def test_no_owner_countertrend_interaction_can_override_remote_d1_plan_selection():
     s = _snapshot(100.0)
     sell = _zone(
