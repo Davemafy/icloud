@@ -2650,7 +2650,8 @@ void Evaluate()
    bool primaryAuthority=(
       g_tzExecutionAuthority=="HTF_CORE_HANDOFF"||
       g_tzExecutionAuthority=="HTF_ZONE_CONTACT_HANDOFF"||
-      g_tzExecutionAuthority=="HTF_ZONE_SWEEP_HANDOFF"
+      g_tzExecutionAuthority=="HTF_ZONE_SWEEP_HANDOFF"||
+      g_tzExecutionAuthority=="STRUCTURAL_BREAKOUT_HANDOFF"
    );
    bool breakoutWatchAuthority=(g_tzExecutionAuthority=="STRUCTURAL_BREAKOUT_WATCH");
    bool objectiveOpen=!ObjectiveReached(false,origBuy,origBuy?tk.bid:tk.ask);
