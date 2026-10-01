@@ -11,14 +11,14 @@ from .zone_reaction_lifecycle import publication_state_for_zone
 
 # Public primary zones stay analysis-only until live price reaches the published
 # institutional envelope. M15 validates zone health only; it is not the entry trigger.
-# Once the envelope is contacted after publication, Cloud grants M1 SEARCH authority.
+# Once the envelope is contacted after publication, Cloud grants M1 SEARCH authority.\n# M1_READY is sticky across re-analysis while the same location/window remains valid;\n# otherwise a successful promotion would demote itself back to WATCH_ONLY on the next cycle.
 # Sequence then executes the first-entry model on M1 only:
 # liquidity sweep -> micro MSS -> pullback -> closed directional M1 candle.
 # Tactical-core contact remains useful location telemetry but is not required.
 # A temporary contact window never survives M15 invalidation, deepest-objective
 # completion, or age.
 MAX_CORE_WIDTH_M15_ATR = 3.00
-READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING"}
+READY_INPUT_STATES = {"WATCH", "ARMED", "INTERACTING", "M1_READY"}
 READY_SOURCE_TFS = {"H1", "H4", "H4>H1"}
 THESIS_CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 EXECUTION_WINDOW_SECONDS = 3 * 60 * 60
