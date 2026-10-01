@@ -45,6 +45,7 @@ jobs:
               'TZ50_BuildZoneEngulfing',
               'TZ51_FindNearestMicroSwing',
               'TZ52_ResetSniperTrace',
+              'TZ53_FindRetestedPostMssPD',
               'trace_sweep_price',
               'trace_mss_level',
               'trace_pd_low',
