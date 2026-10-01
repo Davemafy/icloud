@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import SETTINGS
 from .dashboard_view import compact_dashboard_html
 from .execution_owner_mirror import owner_plan_text, recover_owner_from_sequence_heartbeat
-from .db import init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
+from .db import audit, init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_analysis, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
@@ -25,6 +25,7 @@ from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
+from .thesis_ownership_policy import acquire_execution_ownership
 from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
 from .sniper_validation_ledger import build_validation_ledger, export_validation_csv
 from .backtest_jobs import BacktestJobError, run_replay_job, start_replay_job, replay_job_status, replay_job_result
@@ -447,8 +448,45 @@ def feedback(f: Feedback):
             details.setdefault("execution_cloud_version", SETTINGS.app_version)
         details.setdefault("cloud_ingest_version", SETTINGS.app_version)
         f = f.model_copy(update={"details": details})
+    breakout_owner_acquired = False
+    if event == "BREAKOUT_EXECUTION_OPENED":
+        analysis = active_analysis()
+        snapshot = latest_snapshot()
+        if (
+            analysis is not None
+            and snapshot is not None
+            and str(f.analysis_id or "") == str(analysis.analysis_id or "")
+            and str(f.zone_id or "")
+        ):
+            owner = acquire_execution_ownership(
+                analysis,
+                snapshot,
+                "STRUCTURAL_BREAKOUT_HANDOFF",
+                str(f.zone_id),
+                float(f.price or 0.0),
+            )
+            if owner is not None:
+                save_analysis(analysis)
+                breakout_owner_acquired = True
+                audit(
+                    int(f.ts),
+                    "thesis.execution_owner.breakout_acquired",
+                    f"analysis={f.analysis_id} zone={f.zone_id} price={float(f.price or 0.0):.5f}",
+                )
+        if not breakout_owner_acquired:
+            audit(
+                int(f.ts),
+                "thesis.execution_owner.breakout_failed",
+                f"analysis={f.analysis_id} zone={f.zone_id} active_analysis={getattr(analysis, 'analysis_id', '') if analysis else ''}",
+            )
+
     save_feedback(f)
-    return {"ok": True, "journal_event": True, "journal_sync": "v4_provenance"}
+    return {
+        "ok": True,
+        "journal_event": True,
+        "journal_sync": "v4_provenance",
+        "breakout_owner_acquired": breakout_owner_acquired,
+    }
 
 
 def _append_multimodel_plan(text: str, a) -> str:
@@ -477,6 +515,11 @@ def _append_multimodel_plan(text: str, a) -> str:
         "model_vwap_proxy_reclaim": flag("vwap_proxy_reclaim"),
         "model_opening_range_retest": flag("opening_range_retest"),
         "model_institutional_breakout": flag("institutional_breakout"),
+        "breakout_campaign_key": (
+            f"BREAKOUT|{str(getattr(a, 'analysis_id', '') or '')}|{str(getattr(a, 'selected_zone_id', '') or '')}|P0"
+            if bool(models.get("institutional_breakout", False)) and a is not None
+            else ""
+        ),
         "model_accepted_zone_flip": flag("accepted_zone_flip"),
         "model_order_flow_imbalance": flag("order_flow_imbalance"),
         "alt_primary_requires_zone_interaction": "1" if rules.get("alternative_primary_requires_recent_zone_interaction", True) else "0",
