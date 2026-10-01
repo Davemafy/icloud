@@ -517,7 +517,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls=ownerMatch ? 'ok' : 'blue';
       meta=ownerMatch
         ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
-        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro MSS → fresh OB/FVG → pullback into that OB/FVG → CLOSED M1 candle in trade direction → entry. Model 2: CLOSED directional M1 engulfing at/in the zone → entry. M15 validates zone health only; no M5/M15 MSS, OTE or displacement threshold is required for these primary sniper models.';
+        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro structure shift → causal OB/FVG → bounded retest → CLOSED M1 directional confirmation. Model 2: recent-zone engulfing is only a pattern candidate and must still prove a CLOSED M1 micro structure shift before entry. Model 3: institutional boundary breakout → displacement → acceptance → retest → CLOSED M1 micro structure shift → directional confirmation. M15 validates zone health; M1 structure remains mandatory for every execution family.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -525,6 +525,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqStage=String(seq.gate_stage||'UNKNOWN');
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
+    const seqVersion=String(seq.version||'');
     const cloudMode=String(seq.cloud_ea_mode||'UNKNOWN');
     const cloudGuard=String(seq.cloud_execution_guard_reason||'');
     const cloudSeparation=String(seq.cloud_separation_guard||'');
@@ -543,6 +544,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqMismatch=seq.authority_mismatch===true;
     const seqOpen=Number(seq.open_positions||0);
     const traceLiquidity=Number(seq.trace_liquidity_level||0);
+    const traceContactTs=Number(seq.trace_contact_ts||0);
+    const traceReconstructed=seq.trace_reconstructed_pre_handoff===true;
+    const campaignKey=String(seq.campaign_key||'');
     const traceSweep=Number(seq.trace_sweep_price||0);
     const traceSweepTs=Number(seq.trace_sweep_ts||0);
     const traceMss=Number(seq.trace_mss_level||0);
@@ -556,6 +560,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const tracePrice=(v)=>v?Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:5}):'—';
     const traceTime=(v)=>v?new Date(Number(v)*1000).toLocaleString():'—';
     const traceParts=[];
+    if(campaignKey)traceParts.push('Campaign '+campaignKey);
+    if(traceContactTs)traceParts.push('Zone contact @ '+traceTime(traceContactTs)+(traceReconstructed?' (reconstructed pre-handoff)':''));
     if(traceSweep||traceLiquidity)traceParts.push('Sweep '+tracePrice(traceSweep)+(traceLiquidity?' over liquidity '+tracePrice(traceLiquidity):'')+(traceSweepTs?' @ '+traceTime(traceSweepTs):''));
     if(traceMss)traceParts.push('Micro MSS '+tracePrice(traceMss)+(traceMssTs?' broken @ '+traceTime(traceMssTs):''));
     if(tracePdLow||tracePdHigh)traceParts.push((tracePdType||'PD')+' '+tracePrice(tracePdLow)+'–'+tracePrice(tracePdHigh)+(tracePdTs?' formed @ '+traceTime(tracePdTs):''));
@@ -603,7 +609,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence 3.61 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
@@ -630,8 +636,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const runwayBlock=cloudRunwayMode!=='RR_ONLY_M1_ORDER'&&seqStage==='TARGET'&&seqReason.includes('ENTRY_SPECIFIC_RUNWAY_NOT_MET');
         const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-        const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
-        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':(sniperWait?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
+        const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_MICRO_SHIFT','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
+        const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_M1_MICRO_SHIFT','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
+        const continuationWait=['CONTINUATION_M1_SHIFT','CONTINUATION_OB_FVG','CONTINUATION_PD_PULLBACK','CONTINUATION_POST_RETEST_M1_SHIFT'].includes(seqStage);
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':((sniperWait||breakoutWait||continuationWait)?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
         seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.'+traceText;
       }else{
@@ -671,9 +679,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       const minRRBlock=seqStage==='TARGET'&&seqReason.includes('MIN_RR_NOT_MET');
       const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
       const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
-      const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
-      const forming=simplePrimaryWait||['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
-      const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR'].includes(seqStage);
+      const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_MICRO_SHIFT','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
+      const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_M1_MICRO_SHIFT','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
+      const continuationWait=['CONTINUATION_M1_SHIFT','CONTINUATION_OB_FVG','CONTINUATION_PD_PULLBACK','CONTINUATION_POST_RETEST_M1_SHIFT'].includes(seqStage);
+      const forming=simplePrimaryWait||breakoutWait||continuationWait||['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
+      const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR','BREAKOUT_NO_CHASE','BREAKOUT_REGIME'].includes(seqStage);
       if(seqStage==='ORDER_SENT'){
         state='ORDER SENT';
         cls='ok';
@@ -700,7 +710,15 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(simplePrimaryWait){
         state='M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Unified Model 1: zone interaction → micro-liquidity sweep → micro MSS → causal OB/FVG → bounded retest → latest closed directional M1 candle. Model 2 (recent-zone engulfing) remains available in parallel. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+'Unified Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains parallel but cannot bypass the same M1 structure-shift rule. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+      }else if(breakoutWait){
+        state='BREAKOUT SEQUENCE FORMING';
+        cls='blue';
+        meta=checklist+'Model 3 is progressing through institutional boundary break → acceptance → retest → CLOSED M1 micro structure shift → directional confirmation. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
+      }else if(continuationWait){
+        state='CONTINUATION RE-ENTRY FORMING';
+        cls='blue';
+        meta=checklist+'R1/R2 continuation is evaluating the causal displacement OB/FVG and still requires a CLOSED M1 micro structure shift before entry. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
       }else if(reactionWait){
         state='WAITING FOR M1 CONFIRMATION';
         cls='blue';
