@@ -13,7 +13,7 @@ def test_sequence_351_uses_nearest_m1_micro_swing_for_mss():
     assert '#property version   "3.51"' in text
     assert '#define TZ_SEQUENCE_VERSION "3.51"' in text
     assert "TZ51_FindNearestMicroSwing" in text
-    assert "nearest 1-bar internal swing" in text
+    assert "Nearest one-minute internal swing" in text
     assert text.count("TZ51_FindNearestMicroSwing(r,sw,buy,microDepth,ms,mss)") == 2
 
 
