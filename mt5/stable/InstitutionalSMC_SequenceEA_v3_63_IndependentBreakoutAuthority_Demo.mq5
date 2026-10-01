@@ -2913,7 +2913,7 @@ int OnInit()
    TZ_SetGate("BOOT","READY");TZ28_LoadAcceptedFlip();TZ63_LoadBreakoutOwnerPending();TZ31_RefreshCloudState(true);TZ63_TryBreakoutOwnerHandoff(true);TZ_PreCoreSync();
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
    TZ_SavePersistentState();TZ28_SaveAcceptedFlip();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
-   Print("TradeZone Sequence runtime ",TZ_SEQUENCE_VERSION," active. COMPREHENSIVE entry engine: campaign-stable P0/R1/R2, pre-handoff reconstruction, original-zone reacquisition, displacement OB/FVG continuation and institutional breakout/acceptance-retest. CLOSED M1 micro structure shift is mandatory for every model. Trade management unchanged.");return INIT_SUCCEEDED;
+   Print("TradeZone Sequence runtime ",TZ_SEQUENCE_VERSION," active. Independent institutional breakout authority: structural watch -> displacement -> acceptance -> retest -> CLOSED M1 micro structure shift -> directional confirmation, structural stop and post-order ownership. Zone acquisition/re-entry models and trade management remain unchanged.");return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason){TZ_SavePersistentState();TZ28_SaveAcceptedFlip();TZ_WriteSequenceState();TZ27_SeqCore_OnDeinit(reason);}
