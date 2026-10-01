@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.1",
+  "release": "6.4.2",
   "repository": "Davemafy/icloud",
-  "ref": "24d2749a82acae29b2cd16bded07f10ae56a9313",
+  "ref": "35d138f658de993005cc8dfec1c3e568dcea584a",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.61",
+  "sequence_ea_version": "3.62",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -212,7 +212,6 @@
     "sniper_cycle_rearm_r1_r2",
     "sniper_reentries_zone_distal_stop",
     "model1_no_ote_gate",
-    "model2_no_mss_requirement",
     "nearest_m1_micro_swing_mss",
     "micro_mss_one_bar_internal_pivot",
     "m1_sniper_trace_telemetry",
@@ -230,7 +229,17 @@
     "bounded_pd_retest_window",
     "bounded_directional_confirmation_window",
     "recent_zone_engulfing_parallel_model",
-    "sequence_361_compile_scope_fix"
+    "sequence_361_compile_scope_fix",
+    "comprehensive_entry_engine_repair",
+    "stable_owner_campaign_identity",
+    "pre_handoff_m1_event_reconstruction",
+    "original_zone_reacquisition_r1_r2",
+    "causal_displacement_ob_fvg_continuation",
+    "institutional_breakout_acceptance_retest",
+    "breakout_compression_range_watch",
+    "universal_m1_micro_structure_shift_all_models",
+    "breakout_direct_entry_disabled",
+    "breakout_reduced_campaign_risk"
   ],
   "files": [
     {
@@ -243,11 +252,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_61_UnifiedEntryEngine_CompileFix_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_61_UnifiedEntryEngine_CompileFix_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_61_UnifiedEntryEngine_CompileFix_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
       "requires_reload": true,
-      "sha256": "7c3d23467b69d95780799debdd5dde4f83021f559cf1096544c60f4d209bcc44"
+      "sha256": "b0c168776fbcc6e9159f12656eb287de18584d4efa17275c1afa950a392bbbdb"
     }
   ],
   "support_files": [
