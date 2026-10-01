@@ -407,3 +407,60 @@ def test_trade_event_with_zone_id_never_leaks_to_sibling_zone_in_same_analysis(t
     assert rows[buy.zone_id]["execution_state"] == "CLOSED"
     assert rows[sell.zone_id]["execution_state"] == "NO_ENTRY"
     assert out["summary"]["executed_publications"] == 1
+
+
+def test_canonical_ledger_keeps_first_publication_after_more_than_old_raw_window(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    zone = _zone()
+    analysis = _analysis(zone)
+
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO analyses(ts,analysis_id,payload,ai_ok) VALUES(?,?,?,?)",
+            (100, analysis.analysis_id, analysis.model_dump_json(), 1),
+        )
+        # More observations than the old limit*12 raw-row window. Geometry
+        # envelope drifts, but source/core identity is intentionally unchanged.
+        for i in range(650):
+            ts = 100 + i
+            conn.execute(
+                """
+                INSERT INTO zone_publications(
+                    publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                    zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                    first_published_at,last_seen_at,publication_qualified_mitigations,
+                    publication_raw_core_contacts,live_core_touched_at,live_core_touch_basis,
+                    live_core_touch_price,live_core_touch_analysis_id,status
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    f"PUB_MANY_{i}","RX_MANY",f"SIG_MANY_{i}","A_TEST","A_TEST",
+                    zone.zone_id,"SELL","H4>H1",90,zone.core_low,zone.core_high,
+                    zone.zone_low,zone.zone_high + i * 0.00001,
+                    ts,ts,0,0,
+                    110 if i == 0 else 0,
+                    "LIVE_QUOTE_OVERLAP" if i == 0 else "",
+                    4365.0 if i == 0 else 0.0,
+                    "A_TEST" if i == 0 else "",
+                    "LIVE_CONTACT_CONFIRMED" if i == 0 else "PUBLISHED",
+                ),
+            )
+
+        conn.execute(
+            "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
+            (120,"ENTRY_OPENED","A_TEST",zone.zone_id,4364.5,'{"position_id":7001,"setup":"PRIMARY","grade":"A+"}'),
+        )
+        conn.execute(
+            "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
+            (130,"TRADE_CLOSED","A_TEST",zone.zone_id,4358.0,'{"position_id":7001,"setup":"PRIMARY","grade":"A+"}'),
+        )
+
+    out = ledger.build_validation_ledger(limit=50)
+    assert out["summary"]["publications"] == 1
+    assert out["summary"]["raw_publication_records"] == 650
+    row = out["rows"][0]
+    assert row["published_at"] == 100
+    assert row["live_core_touched_at"] == 110
+    assert row["publication_observation_count"] == 650
+    assert row["execution_state"] == "CLOSED"
+    assert out["summary"]["executed_publications"] == 1
