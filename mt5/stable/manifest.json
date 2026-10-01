@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.43",
+  "release": "6.3.44",
   "repository": "Davemafy/icloud",
-  "ref": "44a61ea4dd5e4067ba5acd7dfa55d3013177b44b",
+  "ref": "30ed7b8c403b79fd520100bd60b23d658cd8ce33",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.50",
+  "sequence_ea_version": "3.51",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -212,7 +212,9 @@
     "sniper_cycle_rearm_r1_r2",
     "sniper_reentries_zone_distal_stop",
     "model1_no_ote_gate",
-    "model2_no_mss_requirement"
+    "model2_no_mss_requirement",
+    "nearest_m1_micro_swing_mss",
+    "micro_mss_one_bar_internal_pivot"
   ],
   "files": [
     {
@@ -225,11 +227,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
       "requires_reload": true,
-      "sha256": "0a4e0452134dfb41c1de8fbcf61e85f4d4c10d7d40dc5a64673c12db9ab73501"
+      "sha256": "95c2ac468136ff990e0cd72625146246134337df4e2f6c75e7580507751b64af"
     }
   ],
   "support_files": [
