@@ -398,7 +398,17 @@ def build_validation_ledger(limit: int = 50) -> dict:
             ts = int(item.get("ts") or 0)
             if ts < published_at or (window_end > 0 and ts >= window_end):
                 continue
-            if str(item.get("zone_id") or "") != zone_id and str(item.get("analysis_id") or "") not in analysis_ids:
+            feedback_zone_id = str(item.get("zone_id") or "")
+            feedback_analysis_id = str(item.get("analysis_id") or "")
+            if feedback_zone_id:
+                # Exact campaign attribution is authoritative. A trade belonging
+                # to the BUY zone must never be projected onto a sibling SELL
+                # publication merely because both zones existed in one analysis.
+                if feedback_zone_id != zone_id:
+                    continue
+            elif feedback_analysis_id not in analysis_ids:
+                # Legacy journal rows without zone_id may fall back to analysis
+                # identity, but only when explicit zone provenance is absent.
                 continue
             event = str(item.get("event") or "").upper()
             if event not in _TRADE_EVENTS:
