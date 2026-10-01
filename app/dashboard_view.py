@@ -542,6 +542,26 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqOnline=seq.online===true;
     const seqMismatch=seq.authority_mismatch===true;
     const seqOpen=Number(seq.open_positions||0);
+    const traceLiquidity=Number(seq.trace_liquidity_level||0);
+    const traceSweep=Number(seq.trace_sweep_price||0);
+    const traceSweepTs=Number(seq.trace_sweep_ts||0);
+    const traceMss=Number(seq.trace_mss_level||0);
+    const traceMssTs=Number(seq.trace_mss_break_ts||0);
+    const tracePdType=String(seq.trace_pd_type||'');
+    const tracePdLow=Number(seq.trace_pd_low||0);
+    const tracePdHigh=Number(seq.trace_pd_high||0);
+    const tracePdTs=Number(seq.trace_pd_ts||0);
+    const tracePullbackTs=Number(seq.trace_pullback_ts||0);
+    const traceConfirmTs=Number(seq.trace_confirm_ts||0);
+    const tracePrice=(v)=>v?Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:5}):'—';
+    const traceTime=(v)=>v?new Date(Number(v)*1000).toLocaleString():'—';
+    const traceParts=[];
+    if(traceSweep||traceLiquidity)traceParts.push('Sweep '+tracePrice(traceSweep)+(traceLiquidity?' over liquidity '+tracePrice(traceLiquidity):'')+(traceSweepTs?' @ '+traceTime(traceSweepTs):''));
+    if(traceMss)traceParts.push('Micro MSS '+tracePrice(traceMss)+(traceMssTs?' broken @ '+traceTime(traceMssTs):''));
+    if(tracePdLow||tracePdHigh)traceParts.push((tracePdType||'PD')+' '+tracePrice(tracePdLow)+'–'+tracePrice(tracePdHigh)+(tracePdTs?' formed @ '+traceTime(tracePdTs):''));
+    if(tracePullbackTs)traceParts.push('PD pullback touched @ '+traceTime(tracePullbackTs));
+    if(traceConfirmTs)traceParts.push('Directional close @ '+traceTime(traceConfirmTs));
+    const traceText=traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'';
 
     if(seqOnline && seqOpen>0){
       state='IN TRADE • MANAGING';
@@ -583,7 +603,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence 3.50 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence 3.52 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
@@ -602,7 +622,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(seqStage==='ORDER_SENT'){
         seqGate.textContent='ORDER SENT';
         seqGate.className='kpi ok';
-        seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.';
+        seqMeta.textContent='Sequence '+String(seq.version||'')+' sent the paper order. Model '+String(seq.last_execution_model||seqModel)+'.'+traceText;
       }else if(seqAuthority!=='NONE'){
         const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
         const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
@@ -613,7 +633,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
         seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':(sniperWait?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
         seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
-        seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.';
+        seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.'+traceText;
       }else{
         seqGate.textContent=seqStage.replaceAll('_',' ');
         seqGate.className='kpi warn';
