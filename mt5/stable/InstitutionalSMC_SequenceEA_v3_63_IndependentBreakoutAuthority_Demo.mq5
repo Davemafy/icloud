@@ -2642,6 +2642,7 @@ void Evaluate()
    bool recentZone=TZ_RecentZoneInteraction(r,MathMax(30,ResearchRecentZoneBars));
    bool strategicRecentZone=TZ_RecentZoneInteraction(r,MathMax(30,AlternativeZoneInteractionBars));
    Signal sig;ZeroMemory(sig);string tag="";double share=0;string primaryStage="";bool primaryScanned=false;
+   string breakoutWatchStage="";bool breakoutWatchScanned=false;
    g_tzLocalRegime=TZ47_LocalRegime(r);
    g_tzCandidateModel="NONE";
 
@@ -2650,6 +2651,7 @@ void Evaluate()
       g_tzExecutionAuthority=="HTF_ZONE_CONTACT_HANDOFF"||
       g_tzExecutionAuthority=="HTF_ZONE_SWEEP_HANDOFF"
    );
+   bool breakoutWatchAuthority=(g_tzExecutionAuthority=="STRUCTURAL_BREAKOUT_WATCH");
    bool objectiveOpen=!ObjectiveReached(false,origBuy,origBuy?tk.bid:tk.ask);
 
    if(primaryAuthority)
@@ -2713,6 +2715,23 @@ void Evaluate()
          }
       }
    }
+   else if(breakoutWatchAuthority)
+   {
+      if(g_primaryEntries>0)
+      {TZ_SetGate("AUTHORITY","BREAKOUT_OWNER_HANDOFF_PENDING");return;}
+      if(havePos){TZ_SetGate("POSITION","BREAKOUT_WATCH_REQUIRES_FLAT_BOOK");return;}
+      if(g_plan.setup_type!="CONTINUATION")
+      {TZ_SetGate("AUTHORITY","BREAKOUT_WATCH_REQUIRES_CONTINUATION_MAP");return;}
+      if(!objectiveOpen){TZ_SetGate("TARGET","NO_OPEN_BREAKOUT_OBJECTIVE");return;}
+      breakoutWatchScanned=true;
+      if(TZ62_BuildInstitutionalBreakout(r,a,origBuy,g_tzLocalRegime,sig,breakoutWatchStage))
+      {
+         sig.reentry=false;tag="B0";
+         share=PrimaryRiskShare*MathMin(1.0,MathMax(0.10,BreakoutRiskMultiplier));
+         g_tzCandidateModel="INSTITUTIONAL_BREAKOUT";
+         breakoutWatchStage="READY";
+      }
+   }
    else if(g_tzExecutionAuthority=="LIQUIDITY_REVERSAL_HANDOFF"&&!havePos&&g_primaryEntries==0)
    {
       bool authorityBuy=(g_tzLRDirection=="BUY");
@@ -2731,11 +2750,14 @@ void Evaluate()
    {
       string stage="";
       if(primaryAuthority&&primaryScanned)stage=primaryStage;
+      else if(breakoutWatchAuthority&&breakoutWatchScanned)
+         stage=(breakoutWatchStage!=""?breakoutWatchStage:"BREAKOUT_BOUNDARY");
       else if(g_tzExecutionAuthority=="LIQUIDITY_REVERSAL_HANDOFF")
          stage=TZ31_DiagnosePostHandoff(r,a,origBuy);
       else stage="MICRO_PATTERN";
       string waitReason="WAITING_FOR_VALID_"+stage;
       if(primaryAuthority)waitReason+="_OR_M1_ENGULFING";
+      if(breakoutWatchAuthority)waitReason="WAITING_FOR_INSTITUTIONAL_BREAKOUT_SEQUENCE";
       TZ_SetGate(stage,waitReason);return;
    }
 
