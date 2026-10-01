@@ -26,7 +26,8 @@ _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_CONTACT_HANDOFF, legacy HTF_ZONE_SWEEP_HANDOFF,
-    or LIQUIDITY_REVERSAL_HANDOFF. A published envelope contact may arm the primary M1 search;
+    LIQUIDITY_REVERSAL_HANDOFF, or post-order STRUCTURAL_BREAKOUT_HANDOFF. Breakout watch by itself never
+    owns the thesis; ownership is acquired only after a valid paper breakout order opens. A published envelope contact may arm the primary M1 search;
     it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
