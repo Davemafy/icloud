@@ -603,7 +603,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence 3.53 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence 3.60 checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
@@ -700,7 +700,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(simplePrimaryWait){
         state='M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Model 1 is forming: zone contact → M1 sweep → micro MSS → fresh OB/FVG → pullback into OB/FVG → closed directional M1 candle. Model 2 (zone engulfing) remains available in parallel. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+'Unified Model 1: zone interaction → micro-liquidity sweep → micro MSS → causal OB/FVG → bounded retest → latest closed directional M1 candle. Model 2 (recent-zone engulfing) remains available in parallel. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
       }else if(reactionWait){
         state='WAITING FOR M1 CONFIRMATION';
         cls='blue';
