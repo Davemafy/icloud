@@ -395,8 +395,9 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
             location_text = "retains its previously acquired macro execution location"
         analysis.trader_brief += (
             f" PAPER THESIS_OWNER_CONTINUATION={selected.zone_id}: active {selected.original_direction.value} thesis "
-            f"{location_text}. The ownership anchor is not a fresh entry location; fresh M1 sweep -> "
-            "micro MSS -> pullback -> directional close is required."
+            f"{location_text}. The ownership anchor is not a fresh entry by itself. Sequence now waits for "
+            "either Model 1 (M1 liquidity sweep -> micro MSS -> fresh OB/FVG -> pullback into that OB/FVG -> "
+            "closed directional M1 candle) or Model 2 (closed directional M1 engulfing at/in the valid zone)."
         )
     elif contact:
         analysis.trader_brief += (
