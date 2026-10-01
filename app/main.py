@@ -86,6 +86,34 @@ def _dashboard_ro_connect() -> sqlite3.Connection:
     return conn
 
 
+def _dashboard_persisted_owner_anchor(zone_id: str) -> tuple[float, int]:
+    """Read immutable ownership acquisition truth for display only.
+
+    This value never feeds plan generation or Sequence execution. It exists so
+    the journal cannot relabel a later continuation/current quote as the original
+    campaign ownership anchor.
+    """
+    if not zone_id:
+        return 0.0, 0
+    try:
+        with _dashboard_ro_connect() as db:
+            row = db.execute(
+                """
+                SELECT ownership_anchor_price,ownership_acquired_at
+                FROM zone_reactions
+                WHERE ownership_zone_id=? AND ownership_anchor_price>0
+                ORDER BY ownership_acquired_at ASC, first_seen_at ASC
+                LIMIT 1
+                """,
+                (zone_id,),
+            ).fetchone()
+        if row is None:
+            return 0.0, 0
+        return float(row["ownership_anchor_price"] or 0.0), int(row["ownership_acquired_at"] or 0)
+    except Exception:
+        return 0.0, 0
+
+
 def _dashboard_component_state(desired: str, installed: str, running: str, age: int | None) -> str:
     if age is None or age > 180:
         return "OFFLINE"
@@ -940,6 +968,13 @@ def _journal_snapshot():
         }
     )
 
+    # Dashboard/history display only: freeze the original ownership acquisition
+    # reference from persisted lifecycle truth. Do not overwrite target_truth;
+    # execution and trade-management code continue using their existing contract.
+    persisted_owner_anchor, persisted_owner_acquired_at = (
+        _dashboard_persisted_owner_anchor(z.zone_id) if z is not None else (0.0, 0)
+    )
+
     finalized_runway = str(final_plan.get("usable_runway_ok") or "")
     if finalized_runway in {"0", "1"}:
         clear_run_ok = finalized_runway == "1"
@@ -1058,8 +1093,17 @@ def _journal_snapshot():
         "target_open_objectives": target_truth.get("open_targets") or [],
         "target_completed_objectives": target_truth.get("completed_targets") or [],
         "target_behind_activation_objectives": target_truth.get("behind_activation_targets") or [],
-        "target_activation_reference": target_truth.get("activation_reference"),
-        "target_activation_reference_basis": target_truth.get("activation_reference_basis"),
+        "target_activation_reference": (
+            persisted_owner_anchor
+            if persisted_owner_anchor > 0
+            else target_truth.get("activation_reference")
+        ),
+        "target_activation_reference_basis": (
+            "PERSISTED_OWNERSHIP_ACQUISITION_ANCHOR"
+            if persisted_owner_anchor > 0
+            else target_truth.get("activation_reference_basis")
+        ),
+        "target_ownership_acquired_at": persisted_owner_acquired_at,
         "target_history_complete": bool(target_truth.get("history_complete")),
         "target_history_reason": target_truth.get("history_reason"),
         "target_remap_required": bool(target_truth.get("remap_required")),
