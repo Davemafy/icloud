@@ -240,12 +240,24 @@ def _publication_rows(limit: int) -> list[dict]:
     ensure_execution_ownership_schema()
     ensure_zone_publication_schema()
     limit = max(1, min(int(limit), 250))
-    # Pull enough raw geometry records to collapse repeated reanalysis of the
-    # same source/core without losing older independent samples.
-    raw_limit = min(max(limit * 12, limit), 3000)
+    # Select the most recently observed CANONICAL source/core samples first, then
+    # pull every exact-geometry publication belonging to those samples. A bounded
+    # raw-row LIMIT is unsafe here: frequent envelope refinements can create more
+    # than hundreds of exact publications for one source/core and push the true
+    # first publication/contact/execution outside the read window. That made a
+    # previously executed sample appear new again after enough reanalysis.
     with connect() as db:
         rows = db.execute(
             """
+            WITH canonical_keys AS (
+                SELECT
+                    direction,source_tf,source_ts,core_low,core_high,
+                    MAX(last_seen_at) AS canonical_last_seen
+                FROM zone_publications
+                GROUP BY direction,source_tf,source_ts,core_low,core_high
+                ORDER BY canonical_last_seen DESC
+                LIMIT ?
+            )
             SELECT
                 p.*,
                 r.status AS lifecycle_status,
@@ -260,11 +272,16 @@ def _publication_rows(limit: int) -> list[dict]:
                 r.ownership_analysis_id,r.ownership_anchor_price,
                 r.ownership_zone_id
             FROM zone_publications p
+            JOIN canonical_keys k
+              ON k.direction=p.direction
+             AND k.source_tf=p.source_tf
+             AND k.source_ts=p.source_ts
+             AND k.core_low=p.core_low
+             AND k.core_high=p.core_high
             LEFT JOIN zone_reactions r ON r.reaction_key=p.reaction_key
             ORDER BY p.first_published_at DESC
-            LIMIT ?
             """,
-            (raw_limit,),
+            (limit,),
         ).fetchall()
     return _canonicalize_publications([dict(row) for row in rows], limit)
 
