@@ -2920,7 +2920,7 @@ void OnDeinit(const int reason){TZ_SavePersistentState();TZ28_SaveAcceptedFlip()
 void OnTimer()
 {
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
-   TZ_PreCoreSync();TZ_LoadPersistentState();
+   TZ63_TryBreakoutOwnerHandoff(false);TZ_PreCoreSync();TZ_LoadPersistentState();
    if(g_tzFlipPlanStored){g_flipPrimaryEntries=g_tzAcceptedFlipEntries;g_flipReentries=g_tzAcceptedFlipReentries;}
    TZ28_SaveAcceptedFlip();TZ_SavePersistentState();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
 }
