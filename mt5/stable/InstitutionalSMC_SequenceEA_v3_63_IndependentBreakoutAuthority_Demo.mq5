@@ -2910,7 +2910,7 @@ int OnInit()
    if(ResearchValidationInitialCapital<=0||ResearchRiskPctTrendAPlus<=0||ResearchRiskPctTrendA<=0||ResearchRiskPctCountertrendAPlus<=0||ResearchRiskPctCountertrendA<=0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchRiskPctTrendA>ResearchRiskPctTrendAPlus||ResearchRiskPctCountertrendAPlus>ResearchRiskPctTrendA||ResearchRiskPctCountertrendA>ResearchRiskPctCountertrendAPlus)return INIT_PARAMETERS_INCORRECT;
    g_tzValidationInitialCapital=ResearchValidationInitialCapital;g_tzRiskContext="TREND";g_tzOriginalRiskPct=0.0;g_tzFlipRiskPct=0.0;g_tzGradeRiskPct=0.0;
-   TZ_SetGate("BOOT","READY");TZ28_LoadAcceptedFlip();TZ31_RefreshCloudState(true);TZ_PreCoreSync();
+   TZ_SetGate("BOOT","READY");TZ28_LoadAcceptedFlip();TZ63_LoadBreakoutOwnerPending();TZ31_RefreshCloudState(true);TZ63_TryBreakoutOwnerHandoff(true);TZ_PreCoreSync();
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
    TZ_SavePersistentState();TZ28_SaveAcceptedFlip();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
    Print("TradeZone Sequence runtime ",TZ_SEQUENCE_VERSION," active. COMPREHENSIVE entry engine: campaign-stable P0/R1/R2, pre-handoff reconstruction, original-zone reacquisition, displacement OB/FVG continuation and institutional breakout/acceptance-retest. CLOSED M1 micro structure shift is mandatory for every model. Trade management unchanged.");return INIT_SUCCEEDED;
