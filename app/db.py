@@ -218,6 +218,19 @@ def latest_analysis(ai_required: bool = False) -> Optional[Analysis]:
     return Analysis.model_validate_json(row[0]) if row else None
 
 
+def analysis_by_id(analysis_id: str) -> Optional[Analysis]:
+    """Load the exact immutable analysis that originated an execution event."""
+    key = str(analysis_id or "")
+    if not key:
+        return None
+    with _lock, connect() as db:
+        row = db.execute(
+            "SELECT payload FROM analyses WHERE analysis_id=? ORDER BY id DESC LIMIT 1",
+            (key,),
+        ).fetchone()
+    return Analysis.model_validate_json(row[0]) if row else None
+
+
 def save_feedback(f: Feedback) -> None:
     # Observer v3.24 is shadow telemetry only. Normalize its context/targets to the
     # current cloud execution contract before the journal or ML dataset sees it:

@@ -377,7 +377,7 @@ def _favourable_extreme(row: Any, snapshot: MarketSnapshot) -> float:
 def _mfe(row: Any, best: float) -> float:
     authority = str(row["ownership_authority"] or "") if "ownership_authority" in row.keys() else ""
     anchor = float(row["ownership_anchor_price"] or 0.0) if "ownership_anchor_price" in row.keys() else 0.0
-    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"} or anchor <= 0:
+    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"} or anchor <= 0:
         anchor = float(row["core_low"] if str(row["direction"]) == Direction.SELL.value else row["core_high"])
     if str(row["direction"]) == Direction.SELL.value:
         return max(0.0, anchor - best)

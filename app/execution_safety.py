@@ -174,6 +174,7 @@ def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
         "HTF_ZONE_CONTACT_HANDOFF",
         "HTF_ZONE_SWEEP_HANDOFF",
         "LIQUIDITY_REVERSAL_HANDOFF",
+        "STRUCTURAL_BREAKOUT_WATCH",
     }
 
 
@@ -211,6 +212,7 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
             "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
+            "STRUCTURAL_BREAKOUT_HANDOFF",
         }
     )
     return ready, authority, meta
@@ -278,6 +280,49 @@ def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict
     return True, meta
 
 
+def _structural_breakout_watch_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict[str, Any]]:
+    """Independent continuation-breakout observation authority.
+
+    This does not acquire thesis ownership and does not authorize a market order.
+    It only permits Sequence to scan a pre-existing intraday boundary. Sequence
+    must still prove displacement, acceptance, retest, CLOSED M1 micro structure
+    shift, directional confirmation, structural stop, target history and minimum RR.
+    """
+    policy = dict(analysis.execution_policy or {})
+    mm = dict(policy.get("multi_model") or {})
+    models = dict(mm.get("models") or {})
+    regime = dict(mm.get("regime") or {})
+    owner = dict(policy.get("active_thesis") or {})
+
+    if not SETTINGS.paper_only or not bool(analysis.approved):
+        return False, {"reason": "PAPER_OR_MAP_APPROVAL_MISSING"}
+    if zone.state != ZoneState.ACTIVE or not execution_grade_eligible(zone):
+        return False, {"reason": "ZONE_NOT_EXECUTION_ELIGIBLE"}
+    if str(zone.setup_type or "") != "CONTINUATION":
+        return False, {"reason": "BREAKOUT_REQUIRES_CONTINUATION_MAP"}
+    if not bool(models.get("institutional_breakout")):
+        return False, {"reason": "BREAKOUT_MODEL_NOT_ELIGIBLE"}
+    if bool(owner.get("locked")):
+        return False, {"reason": "ACTIVE_THESIS_OWNER_HAS_PRIORITY"}
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        fallback = dict(policy.get("paper_ai_fallback") or {})
+        if not (
+            bool(fallback.get("active"))
+            and str(fallback.get("authority") or "") == "STRUCTURAL_BREAKOUT_WATCH"
+        ):
+            return False, {"reason": "AI_BREAKOUT_WATCH_NOT_APPROVED"}
+
+    regime_name = str(regime.get("name") or "UNKNOWN")
+    if regime_name not in {"COMPRESSION", "RANGE", "TREND", "EXPANSION"}:
+        return False, {"reason": "BREAKOUT_REGIME_NOT_ELIGIBLE", "regime": regime_name}
+
+    return True, {
+        "reason": "STRUCTURAL_BREAKOUT_WATCH_READY",
+        "regime": regime_name,
+        "direction": zone.original_direction.value,
+    }
+
+
 def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
     """Fail closed unless one of the two explicit PAPER execution authorities is active."""
     if analysis is None or snapshot is None:
@@ -318,16 +363,25 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     core_handoff_ready = bool(primary_handoff_ready and not contact_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
     handoff_ready = bool(owner_continuation_ready or core_handoff_ready or contact_handoff_ready or liquidity_handoff_ready)
+    breakout_watch_ready, breakout_watch_meta = _structural_breakout_watch_ready(analysis, zone)
+    if handoff_ready:
+        breakout_watch_ready = False
+        breakout_watch_meta = {"reason": "PRIMARY_OR_OWNER_HANDOFF_HAS_PRIORITY"}
 
     authority = (
         owner_authority if owner_continuation_ready
         else "HTF_ZONE_CONTACT_HANDOFF" if contact_handoff_ready
         else "HTF_CORE_HANDOFF" if core_handoff_ready
         else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready
+        else "STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_ready
         else "NONE"
     )
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
     kv["execution_authority"] = authority
+    kv["breakout_watch_ready"] = "1" if breakout_watch_ready else "0"
+    kv["breakout_watch_reason"] = str(breakout_watch_meta.get("reason") or "")
+    kv["breakout_watch_regime"] = str(breakout_watch_meta.get("regime") or "")
+    kv["breakout_watch_direction"] = str(breakout_watch_meta.get("direction") or "")
     kv["core_interaction_basis"] = (
         "PUBLISHED_INSTITUTIONAL_ENVELOPE_CONTACT" if contact_handoff_ready
         else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
@@ -346,8 +400,9 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["zone_sweep_confirmed"] = "0"
     kv["core_required_for_authority"] = (
         "0"
-        if contact_handoff_ready
-        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"})
+        if breakout_watch_ready
+        or contact_handoff_ready
+        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"})
         else "1"
     )
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
@@ -449,7 +504,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["owner_target_progress_applied"] = "1" if bool(owner_meta.get("locked")) and str(owner_meta.get("owner_zone_id") or "") == zone.zone_id else "0"
     kv["next_open_target"] = f"{float(exported_original[0] if exported_original else 0.0):.5f}"
     kv["original_target_direction_valid"] = "1" if original_valid else "0"
-    kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
+    kv["live_target_direction_valid"] = "1" if (not (handoff_ready or breakout_watch_ready) or bool(live_valid)) else "0"
     kv["target_revalidation_contract"] = TARGET_REVALIDATION_CONTRACT
     kv["target_revalidation_enforced"] = "1" if target_truth_enforced else "0"
     kv["target_revalidation_status"] = str(target_truth.get("status") or "UNAVAILABLE")
@@ -485,11 +540,11 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     target_authority_safe = bool(
         not target_truth_enforced or target_truth.get("authority_safe")
     )
-    if not handoff_ready:
+    if not handoff_ready and not breakout_watch_ready:
         guard_reasons.append("NO_EXECUTION_HANDOFF")
     if not original_valid:
         guard_reasons.append("NO_DIRECTIONALLY_VALID_ORIGINAL_TARGET")
-    if handoff_ready and not live_valid:
+    if (handoff_ready or breakout_watch_ready) and not live_valid:
         guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
     if handoff_ready and target_truth_enforced and not target_authority_safe:
         target_reason = "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
@@ -504,9 +559,12 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         kv["zone_sweep_handoff_ready"] = "0"
         kv["liquidity_handoff_ready"] = "0"
 
-    if handoff_ready and original_valid and live_valid and target_authority_safe:
+    if (handoff_ready or breakout_watch_ready) and original_valid and live_valid and target_authority_safe:
         kv["ea_mode"] = "DUAL_BRANCH"
-        if owner_continuation_ready:
+        if breakout_watch_ready:
+            kv["setup_type"] = "CONTINUATION"
+            kv["execution_role"] = "STRUCTURAL_BREAKOUT_WATCH"
+        elif owner_continuation_ready:
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
         elif thesis_bplus_override:

@@ -13,7 +13,7 @@ from .risk_matrix import execution_grade_eligible
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65108"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
-EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
+EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"}
 OWNER_REFRESH_BUFFER_M15_ATR = 0.30
 OWNER_M1_HANDOFF_BUFFER_M15_ATR = 0.10
 OWNER_MIN_BUFFER_POINTS = 5.0
@@ -26,7 +26,8 @@ _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_CONTACT_HANDOFF, legacy HTF_ZONE_SWEEP_HANDOFF,
-    or LIQUIDITY_REVERSAL_HANDOFF. A published envelope contact may arm the primary M1 search;
+    LIQUIDITY_REVERSAL_HANDOFF, or post-order STRUCTURAL_BREAKOUT_HANDOFF. Breakout watch by itself never
+    owns the thesis; ownership is acquired only after a valid paper breakout order opens. A published envelope contact may arm the primary M1 search;
     it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
@@ -584,7 +585,7 @@ def _handoff_reaction_instance(
     if row is not None and not terminal:
         return base_key, row
 
-    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}:
+    if authority not in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"}:
         return base_key, None
 
     instance_key = f"{base_key}|OWN|{analysis.analysis_id}"
@@ -596,7 +597,7 @@ def _handoff_reaction_instance(
         return instance_key, existing
 
     now = int(snapshot.sent_at)
-    preconfirmed_authority = authority in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF"}
+    preconfirmed_authority = authority in {"LIQUIDITY_REVERSAL_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"}
     status = "REACTION_CONFIRMED" if preconfirmed_authority else "INTERACTING"
     reaction_confirmed_at = now if preconfirmed_authority else 0
     db.execute(
@@ -658,7 +659,8 @@ def acquire_execution_ownership(
     liquidity_authority = authority == "LIQUIDITY_REVERSAL_HANDOFF"
     zone_contact_authority = authority == "HTF_ZONE_CONTACT_HANDOFF"
     zone_sweep_authority = authority == "HTF_ZONE_SWEEP_HANDOFF"
-    preconfirmed_authority = liquidity_authority or zone_sweep_authority
+    breakout_authority = authority == "STRUCTURAL_BREAKOUT_HANDOFF"
+    preconfirmed_authority = liquidity_authority or zone_sweep_authority or breakout_authority
     with connect() as db:
         key, row = _handoff_reaction_instance(db, analysis, snapshot, zone, authority, anchor)
         if row is None:
@@ -667,7 +669,7 @@ def acquire_execution_ownership(
             return None
         status = str(row["status"] or "ARMED")
         if status not in ACTIVE_THESIS_STATUSES and not (
-            (liquidity_authority or zone_contact_authority or zone_sweep_authority) and status == "ARMED"
+            (liquidity_authority or zone_contact_authority or zone_sweep_authority or breakout_authority) and status == "ARMED"
         ):
             return None
 

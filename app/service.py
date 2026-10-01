@@ -116,6 +116,7 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
             "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
+            "STRUCTURAL_BREAKOUT_HANDOFF",
         }
         and owner_zone_id
         and owner_zone_id == str(a.selected_zone_id or "")
@@ -425,11 +426,19 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
     a.trader_brief += " " + regime_brief(overlay)
+    selected_zone = next((z for z in a.zones if z.zone_id == a.selected_zone_id), None)
+    breakout_watch_selected = bool(
+        selected_zone is not None
+        and selected_zone.setup_type == "CONTINUATION"
+        and execution_grade_eligible(selected_zone)
+        and str(getattr(selected_zone.state, "value", selected_zone.state)) == "ACTIVE"
+        and bool(dict(overlay.get("models") or {}).get("institutional_breakout"))
+    )
     try:
         ok, summary, risks, provider = await validator(a, s)
         a.ai_provider = provider
         selected = bool(a.selected_zone_id)
-        execution_selected = bool(authority != "NONE" and selected)
+        execution_selected = bool((authority != "NONE" or breakout_watch_selected) and selected)
         a.ai_approved = bool(ok and execution_selected)
         if execution_selected:
             if summary:
@@ -454,7 +463,8 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
             )
         )
         if paper_ai_fallback:
-            _activate_paper_ai_fallback(a, authority, "AI_PROVIDER_UNAVAILABLE")
+            fallback_authority = authority if authority != "NONE" else ("STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_selected else "NONE")
+            _activate_paper_ai_fallback(a, fallback_authority, "AI_PROVIDER_UNAVAILABLE")
         elif selected and not execution_selected:
             # Structural map approval and live execution handoff are separate
             # authorities. A valid published A+/A/B+ map must remain approved
@@ -489,9 +499,10 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
         a.ai_provider = "ERROR"
         a.ai_approved = False
-        execution_selected = bool(authority != "NONE" and a.selected_zone_id)
+        execution_selected = bool((authority != "NONE" or breakout_watch_selected) and a.selected_zone_id)
         if execution_selected and SETTINGS.paper_only:
-            _activate_paper_ai_fallback(a, authority, f"{type(exc).__name__}:{exc}")
+            fallback_authority = authority if authority != "NONE" else ("STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_selected else "NONE")
+            _activate_paper_ai_fallback(a, fallback_authority, f"{type(exc).__name__}:{exc}")
         elif a.selected_zone_id:
             a.approved = False
             a.guards.append("AI_PROVIDER_UNAVAILABLE")
