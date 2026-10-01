@@ -362,12 +362,17 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     core_handoff_ready = bool(primary_handoff_ready and not contact_handoff_ready)
     liquidity_handoff_ready, lrh = _liquidity_handoff_ready(analysis, zone)
     handoff_ready = bool(owner_continuation_ready or core_handoff_ready or contact_handoff_ready or liquidity_handoff_ready)
+    breakout_watch_ready, breakout_watch_meta = _structural_breakout_watch_ready(analysis, zone)
+    if handoff_ready:
+        breakout_watch_ready = False
+        breakout_watch_meta = {"reason": "PRIMARY_OR_OWNER_HANDOFF_HAS_PRIORITY"}
 
     authority = (
         owner_authority if owner_continuation_ready
         else "HTF_ZONE_CONTACT_HANDOFF" if contact_handoff_ready
         else "HTF_CORE_HANDOFF" if core_handoff_ready
         else "LIQUIDITY_REVERSAL_HANDOFF" if liquidity_handoff_ready
+        else "STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_ready
         else "NONE"
     )
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
