@@ -1666,7 +1666,8 @@ bool TZ_ResearchGuards()
       g_tzExecutionAuthority!="HTF_ZONE_CONTACT_HANDOFF"&&
       g_tzExecutionAuthority!="HTF_ZONE_SWEEP_HANDOFF"&&
       g_tzExecutionAuthority!="LIQUIDITY_REVERSAL_HANDOFF"&&
-      g_tzExecutionAuthority!="STRUCTURAL_BREAKOUT_WATCH")
+      g_tzExecutionAuthority!="STRUCTURAL_BREAKOUT_WATCH"&&
+      g_tzExecutionAuthority!="STRUCTURAL_BREAKOUT_HANDOFF")
    {TZ_SetGate("AUTHORITY","NO_CLOUD_EXECUTION_AUTHORITY");return false;}
    MqlTick t;if(!SymbolInfoTick(_Symbol,t)){TZ_SetGate("MARKET","NO_TICK");return false;}double spread=(t.ask-t.bid)/_Point;
    double maxSpread=PaperResearchMode?ResearchMaxSpreadPoints:MaxSpreadPoints;
