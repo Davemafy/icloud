@@ -716,12 +716,18 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         or "WAITING_FOR_PULLBACK" in reason
     ):
         return "WAITING FOR VALUE"
-    if stage in {"SWEEP", "FLIP_SWEEP"}:
+    if stage in {"SWEEP", "FLIP_SWEEP", "M1_SWEEP"}:
         return "WAITING FOR SWEEP"
-    if stage in {"MSS_BOS", "FLIP_MSS_BOS"}:
-        return "WAITING FOR MSS/BOS"
-    if stage in {"DISPLACEMENT", "FLIP_DISPLACEMENT"}:
+    if stage in {"MSS_BOS", "FLIP_MSS_BOS", "M1_MICRO_MSS", "M1_MICRO_SHIFT", "BREAKOUT_M1_MICRO_SHIFT", "CONTINUATION_M1_SHIFT", "CONTINUATION_POST_RETEST_M1_SHIFT"}:
+        return "WAITING FOR M1 MICRO SHIFT"
+    if stage in {"DISPLACEMENT", "FLIP_DISPLACEMENT", "BREAKOUT_DISPLACEMENT"}:
         return "WAITING FOR DISPLACEMENT"
+    if stage in {"BREAKOUT_BOUNDARY", "BREAKOUT_ACCEPTANCE", "BREAKOUT_RETEST", "BREAKOUT_DIRECTIONAL_CLOSE"}:
+        return "BREAKOUT SEQUENCE FORMING"
+    if stage in {"CONTINUATION_OB_FVG", "CONTINUATION_PD_PULLBACK"}:
+        return "CONTINUATION SEQUENCE FORMING"
+    if stage in {"BREAKOUT_NO_CHASE", "BREAKOUT_REGIME"}:
+        return "EXECUTION HOLD"
     if stage in {"SAFETY", "RISK", "TARGET", "DUPLICATE", "AUTHORITY", "DATA", "MARKET", "BAR"}:
         return "EXECUTION HOLD"
 
@@ -772,6 +778,9 @@ def _sequence_debug_snapshot() -> dict:
         "candidate_model": str(details.get("candidate_model") or "NONE"),
         "last_execution_model": str(details.get("last_execution_model") or ""),
         "trace_liquidity_level": float(details.get("trace_liquidity_level") or 0.0),
+        "trace_contact_ts": int(details.get("trace_contact_ts") or 0),
+        "trace_reconstructed_pre_handoff": bool(details.get("trace_reconstructed_pre_handoff")),
+        "campaign_key": str(details.get("campaign_key") or ""),
         "trace_sweep_price": float(details.get("trace_sweep_price") or 0.0),
         "trace_sweep_ts": int(details.get("trace_sweep_ts") or 0),
         "trace_mss_level": float(details.get("trace_mss_level") or 0.0),
