@@ -89,7 +89,7 @@ jobs:
               'TZ60_FindNearestMicroSwing',
               'TZ60_FindRetestedCausalPD',
               'TZ60_BuildEngulfing',
-              'TZ62_UniversalM1ShiftReady',
+              'TZ63_ModelSpecificConfirmationReady',
               'TZ62_BuildDisplacementContinuation',
               'TZ62_BuildInstitutionalBreakout',
               'owner_mirror_campaign_key',
@@ -113,6 +113,9 @@ jobs:
           ]
           for needle in required:
               assert needle in t,needle
+          assert 'TZ62_UniversalM1ShiftReady' not in t
+          assert 'ENGULFING_WAITING_FOR_M1_MICRO_STRUCTURE_SHIFT' not in t
+          assert 'stage="BREAKOUT_M1_MICRO_SHIFT"' not in t
           evaluate=t[t.index('void Evaluate()'):t.index('\nint OnInit()',t.index('void Evaluate()'))]
           assert 'TZ48_EntrySpecificRunwayValid' not in evaluate
           print(f'Stable Sequence {manifest["sequence_ea_version"]} release structural checks OK: {p.name}')
