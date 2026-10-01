@@ -2927,7 +2927,7 @@ void OnTimer()
 void OnTick()
 {
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
-   TZ_PreCoreSync();ManagePositions();Evaluate();
+   TZ63_TryBreakoutOwnerHandoff(false);TZ_PreCoreSync();ManagePositions();Evaluate();
    if(g_tzFlipPlanStored){g_flipPrimaryEntries=g_tzAcceptedFlipEntries;g_flipReentries=g_tzAcceptedFlipReentries;}
    TZ28_SaveAcceptedFlip();TZ_SavePersistentState();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
 }
