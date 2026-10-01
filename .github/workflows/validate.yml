@@ -41,11 +41,12 @@ jobs:
           assert f'#property version   "{manifest["sequence_ea_version"]}"' in text
           required=[
               'HTF_ZONE_CONTACT_HANDOFF',
-              'TZ50_BuildSniperPD',
-              'TZ50_BuildZoneEngulfing',
-              'TZ51_FindNearestMicroSwing',
-              'TZ52_ResetSniperTrace',
-              'TZ53_FindRetestedPostMssPD',
+              'TZ60_ScanPrimaryEngine',
+              'TZ60_FindNearestMicroSwing',
+              'TZ60_FindRetestedCausalPD',
+              'TZ60_BuildEngulfing',
+              'SniperPullbackMaxBars',
+              'SniperConfirmMaxBars',
               'trace_sweep_price',
               'trace_mss_level',
               'trace_pd_low',
