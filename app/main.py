@@ -476,6 +476,7 @@ def _append_multimodel_plan(text: str, a) -> str:
         "model_momentum_pullback": flag("momentum_pullback"),
         "model_vwap_proxy_reclaim": flag("vwap_proxy_reclaim"),
         "model_opening_range_retest": flag("opening_range_retest"),
+        "model_institutional_breakout": flag("institutional_breakout"),
         "model_accepted_zone_flip": flag("accepted_zone_flip"),
         "model_order_flow_imbalance": flag("order_flow_imbalance"),
         "alt_primary_requires_zone_interaction": "1" if rules.get("alternative_primary_requires_recent_zone_interaction", True) else "0",
@@ -484,6 +485,11 @@ def _append_multimodel_plan(text: str, a) -> str:
         "vwap_band_atr": str(params.get("vwap_band_atr", 0.15)),
         "opening_range_minutes": str(params.get("opening_range_minutes", 30)),
         "alt_model_risk_multiplier": str(params.get("alternate_model_risk_multiplier", 0.75)),
+        "breakout_risk_multiplier": str(params.get("breakout_risk_multiplier", 0.75)),
+        "breakout_balance_bars": str(params.get("breakout_balance_bars", 12)),
+        "breakout_compression_max_atr": str(params.get("breakout_compression_max_atr", 2.50)),
+        "breakout_min_break_atr": str(params.get("breakout_min_break_atr", 0.50)),
+        "breakout_boundary_band_atr": str(params.get("breakout_boundary_band_atr", 0.12)),
     }
     return text + "".join(f"{k}={v}\n" for k, v in extra.items())
 
