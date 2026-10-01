@@ -451,10 +451,10 @@ async def generate_v659(
 
     # Replay remains on the 6.5.110 conservative core-edge runway contract until
     # the dedicated MT5 replay harness implements Sequence 3.48 actual-entry runway.
-    # Cloud 6.5.114 keeps the same historical map/replay contract. The live
+    # Cloud 6.5.115 keeps the same historical map/replay contract. The live
     # M1 trace addition is observation-only and does not redefine historical HTF zoning data.
     backtest_contract_cloud = "6.5.110"
-    compatible_runtime_clouds = {"6.5.110", "6.5.111", "6.5.112", "6.5.113", "6.5.114"}
+    compatible_runtime_clouds = {"6.5.110", "6.5.111", "6.5.112", "6.5.113", "6.5.114", "6.5.115"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "
