@@ -60,6 +60,12 @@ def owner_plan_text(now: int) -> str:
     effective_targets, effective_hits = _effective_mirror_targets(owner)
     cap_active = bool(float(owner.get("ownership_objective_cap") or 0.0) > 0)
 
+    campaign_key = (
+        f"{str(owner.get('direction') or '')}|"
+        f"{str(owner.get('source_tf') or '')}|"
+        f"{int(owner.get('source_ts') or 0)}|"
+        f"{int(owner.get('ownership_acquired_at') or 0)}"
+    )
     fields = {
         "owner_mirror_contract": OWNER_MIRROR_CONTRACT,
         "owner_mirror_active": "1",
@@ -73,6 +79,7 @@ def owner_plan_text(now: int) -> str:
         "owner_mirror_status": str(owner.get("status") or "INTERACTING"),
         "owner_mirror_authority": str(owner.get("ownership_authority") or ""),
         "owner_mirror_acquired_at": str(int(owner.get("ownership_acquired_at") or 0)),
+        "owner_mirror_campaign_key": campaign_key,
         "owner_mirror_core_low": str(float(owner.get("core_low") or 0.0)),
         "owner_mirror_core_high": str(float(owner.get("core_high") or 0.0)),
         "owner_mirror_zone_low": str(float(owner.get("zone_low") or 0.0)),

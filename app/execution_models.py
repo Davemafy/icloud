@@ -142,6 +142,12 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
     allow_orb = bool(
         continuation and directional_match and regime["name"] in {"TREND", "EXPANSION"}
     )
+    # Breakout watch may arm before expansion. This is observation permission only;
+    # Sequence still requires closed break, acceptance, retest and M1 micro shift.
+    allow_breakout = bool(
+        selected and directional_match
+        and regime["name"] in {"COMPRESSION", "RANGE", "TREND", "EXPANSION"}
+    )
 
     return {
         "contract": "V6_3_SMC_LOCATION_REGIME_MULTIMODEL",
@@ -153,6 +159,7 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
             "momentum_pullback": allow_momentum,
             "vwap_proxy_reclaim": allow_vwap,
             "opening_range_retest": allow_orb,
+            "institutional_breakout": allow_breakout,
             "accepted_zone_flip": bool(selected),
             "order_flow_imbalance": False,
         },
@@ -167,6 +174,10 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
             "alternative_model_requires_closed_m1_reaction": True,
             "alternative_model_first_entry_uses_zone_distal_stop": True,
             "alternative_model_min_rr_fail_closed": True,
+            "all_execution_models_require_m1_micro_structure_shift": True,
+            "breakout_requires_closed_displacement": True,
+            "breakout_requires_acceptance_and_retest": True,
+            "breakout_direct_candle_entry_disabled": True,
             "sequence_requires_cloud_and_local_regime_permission": True,
             "no_model_bypasses_spread_news_snapshot_risk_guards": True,
             "vwap_is_cfd_tick_volume_proxy_not_comex_volume": True,
@@ -178,6 +189,11 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
             "vwap_band_atr": 0.15,
             "opening_range_minutes": 30,
             "alternate_model_risk_multiplier": 0.75,
+            "breakout_risk_multiplier": 0.75,
+            "breakout_balance_bars": 12,
+            "breakout_compression_max_atr": 2.50,
+            "breakout_min_break_atr": 0.50,
+            "breakout_boundary_band_atr": 0.12,
         },
     }
 
