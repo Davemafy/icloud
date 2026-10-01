@@ -2588,6 +2588,17 @@ void Evaluate()
          string sniperModel="";
          if(TZ60_ScanPrimaryEngine(r,origBuy,false,recentZone,sig,sniperModel,primaryStage))
          {tag="P0";share=PrimaryRiskShare;g_tzCandidateModel=sniperModel;}
+         else if(g_plan.setup_type=="CONTINUATION"&&recentZone)
+         {
+            string breakoutStage="";
+            if(TZ62_BuildInstitutionalBreakout(r,a,origBuy,g_tzLocalRegime,sig,breakoutStage))
+            {
+               sig.reentry=false;tag="B0";
+               share=PrimaryRiskShare*MathMin(1.0,MathMax(0.10,BreakoutRiskMultiplier));
+               g_tzCandidateModel="INSTITUTIONAL_BREAKOUT";primaryStage="READY";
+            }
+            else if(breakoutStage!="")primaryStage=breakoutStage;
+         }
       }
       else
       {
@@ -2602,9 +2613,29 @@ void Evaluate()
          double rshare=(g_reentries==0?Reentry1RiskShare:Reentry2RiskShare);
          if(TZ60_ScanPrimaryEngine(r,origBuy,true,recentZone,sig,sniperModel,primaryStage))
          {
-            tag="R"+IntegerToString(g_reentries+1);
-            share=rshare;
-            g_tzCandidateModel=sniperModel;
+            tag="R"+IntegerToString(g_reentries+1);share=rshare;g_tzCandidateModel=sniperModel;
+         }
+         else
+         {
+            string continuationStage="";
+            if(TZ62_BuildDisplacementContinuation(r,a,origBuy,sig,continuationStage))
+            {
+               tag="R"+IntegerToString(g_reentries+1);
+               share=rshare*MathMin(1.0,MathMax(0.10,ContinuationReentryRiskMultiplier));
+               g_tzCandidateModel="DISPLACEMENT_CONTINUATION";primaryStage="READY";
+            }
+            else
+            {
+               string breakoutStage="";
+               if(TZ62_BuildInstitutionalBreakout(r,a,origBuy,g_tzLocalRegime,sig,breakoutStage))
+               {
+                  tag="R"+IntegerToString(g_reentries+1);
+                  share=rshare*MathMin(1.0,MathMax(0.10,BreakoutRiskMultiplier));
+                  g_tzCandidateModel="INSTITUTIONAL_BREAKOUT";primaryStage="READY";
+               }
+               else if(continuationStage!=""&&continuationStage!="CONTINUATION_M1_SHIFT")primaryStage=continuationStage;
+               else if(breakoutStage!="")primaryStage=breakoutStage;
+            }
          }
       }
    }
@@ -2634,13 +2665,20 @@ void Evaluate()
       TZ_SetGate(stage,waitReason);return;
    }
 
+
+   int universalShiftIdx=-1;double universalShiftLevel=0.0;string universalShiftReason="";
+   if(!TZ62_UniversalM1ShiftReady(r,sig.buy,sig,universalShiftReason,universalShiftIdx,universalShiftLevel))
+   {TZ_SetGate("M1_MICRO_SHIFT",universalShiftReason);return;}
+
    double entry=sig.buy?tk.ask:tk.bid;
    int valueReactionIdx=-1;
    bool postHandoff=(tag=="L0"||tag=="S0");
    bool reactionRequired=true;
    bool sniperModel=(
       StringFind(sig.pd_type,"MASTER_SNIPER_PD_")==0||
-      sig.pd_type=="ZONE_ENGULFING"
+      sig.pd_type=="ZONE_ENGULFING"||
+      StringFind(sig.pd_type,"CONTINUATION_PD_")==0||
+      StringFind(sig.pd_type,"BREAKOUT_")==0
    );
    if(sniperModel)
    {
@@ -2710,7 +2748,7 @@ void Evaluate()
       g_lastSequence=seq;g_lastTradeBar=cb;
       g_tzLastModel=(g_tzCandidateModel!=""&&g_tzCandidateModel!="NONE"?g_tzCandidateModel:sig.pd_type);
       TZ_SetGate("ORDER_SENT",g_tzLastSplitPartial?"DEMO_ENTRY_OPENED_PARTIAL_SPLIT":"DEMO_ENTRY_OPENED");
-      Print("SMC Research v3.61 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
+      Print("SMC Research v3.62 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
             " gate=",g_tzGateStage," lr=",g_tzLRLabel,"@",g_tzLRPrice," entry=",entry," sl=",sl,
             " rrTarget=",rrTarget," rr=",DoubleToString(rr,2)," riskMoney=",risk);
    }
@@ -2725,6 +2763,17 @@ int OnInit()
    if(SniperPullbackMaxBars<2||SniperPullbackMaxBars>30)return INIT_PARAMETERS_INCORRECT;
    if(SniperConfirmMaxBars<1||SniperConfirmMaxBars>6)return INIT_PARAMETERS_INCORRECT;
    if(SniperEngulfContextBars<2||SniperEngulfContextBars>12)return INIT_PARAMETERS_INCORRECT;
+   if(SniperContactLeadBars<1||SniperContactLeadBars>120)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutRiskMultiplier<=0||BreakoutRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
+   if(ContinuationReentryRiskMultiplier<=0||ContinuationReentryRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutLookbackBars<30||BreakoutLookbackBars>360)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutBalanceBars<6||BreakoutBalanceBars>60)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutCompressionMaxATR<0.75||BreakoutCompressionMaxATR>6.0)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutMinBreakATR<0.30||BreakoutMinBreakATR>2.0)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutBoundaryBandATR<=0||BreakoutBoundaryBandATR>0.50)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutRetestMaxBars<3||BreakoutRetestMaxBars>60)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutAcceptanceBars<1||BreakoutAcceptanceBars>8)return INIT_PARAMETERS_INCORRECT;
+   if(BreakoutMaxChaseATR<0.10||BreakoutMaxChaseATR>1.50)return INIT_PARAMETERS_INCORRECT;
    if(ResearchLiquidityReversalRiskMultiplier<=0||ResearchLiquidityReversalRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchZoneSweepRiskMultiplier<=0||ResearchZoneSweepRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
    if(ResearchEscapeRiskMultiplier<=0||ResearchEscapeRiskMultiplier>1.0)return INIT_PARAMETERS_INCORRECT;
@@ -2758,7 +2807,7 @@ int OnInit()
    TZ_SetGate("BOOT","READY");TZ28_LoadAcceptedFlip();TZ31_RefreshCloudState(true);TZ_PreCoreSync();
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
    TZ_SavePersistentState();TZ28_SaveAcceptedFlip();TZ_WriteSequenceState();TZ_SendSequenceHeartbeat();
-   Print("TradeZone Sequence runtime ",TZ_SEQUENCE_VERSION," active. UNIFIED primary engine: zone sweep -> micro MSS -> causal OB/FVG -> bounded retest -> latest directional M1, or recent-zone engulfing. P0/R1/R2 use the same scanner. Full-zone buffered SL + actual-entry RR.");return INIT_SUCCEEDED;
+   Print("TradeZone Sequence runtime ",TZ_SEQUENCE_VERSION," active. COMPREHENSIVE entry engine: campaign-stable P0/R1/R2, pre-handoff reconstruction, original-zone reacquisition, displacement OB/FVG continuation and institutional breakout/acceptance-retest. CLOSED M1 micro structure shift is mandatory for every model. Trade management unchanged.");return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason){TZ_SavePersistentState();TZ28_SaveAcceptedFlip();TZ_WriteSequenceState();TZ27_SeqCore_OnDeinit(reason);}
