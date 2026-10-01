@@ -718,7 +718,7 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return "WAITING FOR VALUE"
     if stage in {"SWEEP", "FLIP_SWEEP", "M1_SWEEP"}:
         return "WAITING FOR SWEEP"
-    if stage in {"MSS_BOS", "FLIP_MSS_BOS", "M1_MICRO_MSS", "M1_MICRO_SHIFT", "BREAKOUT_M1_MICRO_SHIFT", "CONTINUATION_M1_SHIFT", "CONTINUATION_POST_RETEST_M1_SHIFT"}:
+    if stage in {"MSS_BOS", "FLIP_MSS_BOS", "M1_MICRO_MSS", "M1_MICRO_SHIFT", "CONTINUATION_M1_SHIFT", "CONTINUATION_POST_RETEST_M1_SHIFT"}:
         return "WAITING FOR M1 MICRO SHIFT"
     if stage in {"DISPLACEMENT", "FLIP_DISPLACEMENT", "BREAKOUT_DISPLACEMENT"}:
         return "WAITING FOR DISPLACEMENT"
