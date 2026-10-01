@@ -498,9 +498,10 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
         audit(now, "analysis.ai.error", f"reason={reason} error={type(exc).__name__}:{exc}")
         a.ai_provider = "ERROR"
         a.ai_approved = False
-        execution_selected = bool(authority != "NONE" and a.selected_zone_id)
+        execution_selected = bool((authority != "NONE" or breakout_watch_selected) and a.selected_zone_id)
         if execution_selected and SETTINGS.paper_only:
-            _activate_paper_ai_fallback(a, authority, f"{type(exc).__name__}:{exc}")
+            fallback_authority = authority if authority != "NONE" else ("STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_selected else "NONE")
+            _activate_paper_ai_fallback(a, fallback_authority, f"{type(exc).__name__}:{exc}")
         elif a.selected_zone_id:
             a.approved = False
             a.guards.append("AI_PROVIDER_UNAVAILABLE")
