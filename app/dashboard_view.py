@@ -570,7 +570,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
         seqGate.textContent='CLOUD PLAN WATCH ONLY';
         seqGate.className='kpi warn';
-        let why=cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD';
+        let why=(cloudSeparation&&cloudSeparation!=='PASS')?cloudSeparation:(cloudGuard||'NO_EXECUTION_HANDOFF');
         let runwayText='';
         if(cloudRunway||cloudRequiredRunway||cloudRunwayTarget){
           runwayText=' Runway '+(cloudRunway||'—')+' / required '+(cloudRequiredRunway||'—')+
@@ -636,7 +636,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     }else if(seqOnline && seqStage==='AUTHORITY' && seqReason==='PLAN_WATCH_ONLY' && cloudMode==='WATCH_ONLY'){
       state='CLOUD PLAN WATCH ONLY';
       cls='warn';
-      const why=cloudSeparation||cloudGuard||'FINAL_PLAN_GUARD';
+      const why=(cloudSeparation&&cloudSeparation!=='PASS')?cloudSeparation:(cloudGuard||'NO_EXECUTION_HANDOFF');
       const historyText=why.includes('ANALYSIS_HISTORY_WINDOW_INCOMPLETE')
         ? ' Failed history: '+(cloudHistoryFailures||'UNSPECIFIED')+'.'+(cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'')
         : '';
