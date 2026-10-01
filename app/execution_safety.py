@@ -279,6 +279,49 @@ def _liquidity_handoff_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict
     return True, meta
 
 
+def _structural_breakout_watch_ready(analysis: Analysis, zone: Zone) -> tuple[bool, dict[str, Any]]:
+    """Independent continuation-breakout observation authority.
+
+    This does not acquire thesis ownership and does not authorize a market order.
+    It only permits Sequence to scan a pre-existing intraday boundary. Sequence
+    must still prove displacement, acceptance, retest, CLOSED M1 micro structure
+    shift, directional confirmation, structural stop, target history and minimum RR.
+    """
+    policy = dict(analysis.execution_policy or {})
+    mm = dict(policy.get("multi_model") or {})
+    models = dict(mm.get("models") or {})
+    regime = dict(mm.get("regime") or {})
+    owner = dict(policy.get("active_thesis") or {})
+
+    if not SETTINGS.paper_only or not bool(analysis.approved):
+        return False, {"reason": "PAPER_OR_MAP_APPROVAL_MISSING"}
+    if zone.state != ZoneState.ACTIVE or not execution_grade_eligible(zone):
+        return False, {"reason": "ZONE_NOT_EXECUTION_ELIGIBLE"}
+    if str(zone.setup_type or "") != "CONTINUATION":
+        return False, {"reason": "BREAKOUT_REQUIRES_CONTINUATION_MAP"}
+    if not bool(models.get("institutional_breakout")):
+        return False, {"reason": "BREAKOUT_MODEL_NOT_ELIGIBLE"}
+    if bool(owner.get("locked")):
+        return False, {"reason": "ACTIVE_THESIS_OWNER_HAS_PRIORITY"}
+    if SETTINGS.require_ai_for_execution and SETTINGS.ai_enabled and not bool(analysis.ai_approved):
+        fallback = dict(policy.get("paper_ai_fallback") or {})
+        if not (
+            bool(fallback.get("active"))
+            and str(fallback.get("authority") or "") == "STRUCTURAL_BREAKOUT_WATCH"
+        ):
+            return False, {"reason": "AI_BREAKOUT_WATCH_NOT_APPROVED"}
+
+    regime_name = str(regime.get("name") or "UNKNOWN")
+    if regime_name not in {"COMPRESSION", "RANGE", "TREND", "EXPANSION"}:
+        return False, {"reason": "BREAKOUT_REGIME_NOT_ELIGIBLE", "regime": regime_name}
+
+    return True, {
+        "reason": "STRUCTURAL_BREAKOUT_WATCH_READY",
+        "regime": regime_name,
+        "direction": zone.original_direction.value,
+    }
+
+
 def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapshot | None) -> str:
     """Fail closed unless one of the two explicit PAPER execution authorities is active."""
     if analysis is None or snapshot is None:
