@@ -2816,11 +2816,14 @@ void Evaluate()
       StringFind(sig.pd_type,"MASTER_SNIPER_PD_")==0||
       sig.pd_type=="ZONE_ENGULFING"
    );
-   double sl=(sig.reentry&&!zoneProtectedSniper)
+   bool breakoutModel=(StringFind(sig.pd_type,"BREAKOUT_")==0);
+   double sl=breakoutModel
       ?NormalizeDouble(microSl,_Digits)
-      :TZ46_InitialZoneProtectedStop(sig.buy,microSl,g_plan.zone_low,g_plan.zone_high,a);
+      :(sig.reentry&&!zoneProtectedSniper)
+         ?NormalizeDouble(microSl,_Digits)
+         :TZ46_InitialZoneProtectedStop(sig.buy,microSl,g_plan.zone_low,g_plan.zone_high,a);
    entry=NormalizeDouble(entry,_Digits);
-   if(sl<=0){TZ_SetGate("RISK","ZONE_DISTAL_STOP_UNAVAILABLE");return;}
+   if(sl<=0){TZ_SetGate("RISK",breakoutModel?"BREAKOUT_STRUCTURAL_STOP_UNAVAILABLE":"ZONE_DISTAL_STOP_UNAVAILABLE");return;}
    if((sig.buy&&sl>=entry)||(!sig.buy&&sl<=entry)){TZ_SetGate("RISK","INVALID_STOP_SIDE");return;}
 
    // v3.60: actual-entry RR to the deepest still-open planned objective is the
@@ -2830,8 +2833,12 @@ void Evaluate()
    if(!TZ36_NearestDirectionalTarget(false,sig.buy,entry,nearestTarget)||
       !TZ49_DeepestDirectionalTarget(false,sig.buy,entry,rrTarget))
    {TZ_SetGate("TARGET","NO_OPEN_TARGET_BEYOND_ENTRY");return;}
-   if(postHandoff&&TZ36_TargetAlreadyTradedSinceHandoff(r,sig.buy,nearestTarget))
-   {TZ_SetGate("TARGET","POST_HANDOFF_OBJECTIVE_ALREADY_TRADED");return;}
+   datetime objectiveAnchor=breakoutModel?g_tzTraceSweepTs:(postHandoff?g_tzExecutionHandoffTs:0);
+   if(objectiveAnchor>0&&TZ36_TargetAlreadyTradedSince(r,sig.buy,nearestTarget,objectiveAnchor))
+   {
+      TZ_SetGate("TARGET",breakoutModel?"BREAKOUT_OBJECTIVE_ALREADY_TRADED":"POST_HANDOFF_OBJECTIVE_ALREADY_TRADED");
+      return;
+   }
    if(!TZ36_MinRRValid(entry,sl,rrTarget,rr,rrRequired))
    {TZ_SetGate("TARGET","MIN_RR_NOT_MET_TO_DEEPEST_OPEN_OBJECTIVE");return;}
 
@@ -2842,9 +2849,10 @@ void Evaluate()
    {
       if(sig.reentry)g_reentries++;else g_primaryEntries++;
       g_lastSequence=seq;g_lastTradeBar=cb;
+      TZ63_QueueBreakoutOwnerHandoff(tag,entry,sig.pd_type);
       g_tzLastModel=(g_tzCandidateModel!=""&&g_tzCandidateModel!="NONE"?g_tzCandidateModel:sig.pd_type);
       TZ_SetGate("ORDER_SENT",g_tzLastSplitPartial?"DEMO_ENTRY_OPENED_PARTIAL_SPLIT":"DEMO_ENTRY_OPENED");
-      Print("SMC Research v3.62 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
+      Print("SMC Research v3.63 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
             " gate=",g_tzGateStage," lr=",g_tzLRLabel,"@",g_tzLRPrice," entry=",entry," sl=",sl,
             " rrTarget=",rrTarget," rr=",DoubleToString(rr,2)," riskMoney=",risk);
    }
