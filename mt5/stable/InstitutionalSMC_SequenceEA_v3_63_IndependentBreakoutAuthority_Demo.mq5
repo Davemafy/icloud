@@ -179,6 +179,9 @@ bool g_tzTraceReconstructedPreHandoff=false;
 double g_tzLRPrice=0.0,g_tzLRRiskMultiplier=0.50;
 datetime g_tzExecutionHandoffTs=0,g_tzLastCloudSync=0;
 string g_tzRuntimeThesisKey="";
+string g_tzBreakoutCampaignKey="";
+string g_tzBreakoutOwnerPendingBody="";
+datetime g_tzBreakoutOwnerLastAttempt=0;
 bool g_tzCloudLiveBlocked=false;
 string g_tzCloudLiveBlockReason="";
 
@@ -1123,6 +1126,7 @@ void TZ27_LoadExecutionAuthority(bool force=false)
    TZ30_SaveOwnerMirrorFromPlan(text);
    if(KV(text,"analysis_id")!=g_plan.analysis_id){g_tzExecutionAuthority="NONE";TZ_SetGate("AUTHORITY","ANALYSIS_ID_MISMATCH");return;}
    g_tzExecutionAuthority=KV(text,"execution_authority");if(g_tzExecutionAuthority=="")g_tzExecutionAuthority="NONE";
+   g_tzBreakoutCampaignKey=KV(text,"breakout_campaign_key");
    g_tzLRDirection=KV(text,"liquidity_reversal_direction");
    g_tzLRLabel=KV(text,"liquidity_reversal_label");
    g_tzLRPrice=StringToDouble(KV(text,"liquidity_reversal_price"));
@@ -1223,18 +1227,22 @@ bool TZ31_RefreshCloudState(bool force=false)
    string ownerId=KV(text,"owner_mirror_zone_id");
    string ownerAcquired=KV(text,"owner_mirror_acquired_at");
    string ownerCampaign=KV(text,"owner_mirror_campaign_key");
+   string planAuthority=KV(text,"execution_authority");if(planAuthority=="")planAuthority="NONE";
+   string breakoutCampaign=KV(text,"breakout_campaign_key");
    string newThesisKey=(ownerActive=="1"&&ownerCampaign!="")
       ?("CAMPAIGN|"+ownerCampaign)
       :(ownerActive=="1"&&ownerId!="")
          ?("OWNER|"+ownerId+"|"+ownerAcquired)
-         :("ZONE|"+p.zone_id);
+         :(planAuthority=="STRUCTURAL_BREAKOUT_WATCH"&&breakoutCampaign!="")
+            ?("CAMPAIGN|"+breakoutCampaign)
+            :("ZONE|"+p.zone_id);
    if(g_tzRuntimeThesisKey!=""&&newThesisKey!=g_tzRuntimeThesisKey)ResetPlanState();
    g_tzRuntimeThesisKey=newThesisKey;
    g_lastAnalysis=p.analysis_id;
    g_plan=p;
 
-   g_tzExecutionAuthority=KV(text,"execution_authority");
-   if(g_tzExecutionAuthority=="")g_tzExecutionAuthority="NONE";
+   g_tzExecutionAuthority=planAuthority;
+   g_tzBreakoutCampaignKey=breakoutCampaign;
    g_tzExecutionHandoffTs=(datetime)StringToInteger(KV(text,"execution_handoff_ts"));
    g_tzLRDirection=KV(text,"liquidity_reversal_direction");
    g_tzLRLabel=KV(text,"liquidity_reversal_label");
@@ -1657,7 +1665,8 @@ bool TZ_ResearchGuards()
    if(g_tzExecutionAuthority!="HTF_CORE_HANDOFF"&&
       g_tzExecutionAuthority!="HTF_ZONE_CONTACT_HANDOFF"&&
       g_tzExecutionAuthority!="HTF_ZONE_SWEEP_HANDOFF"&&
-      g_tzExecutionAuthority!="LIQUIDITY_REVERSAL_HANDOFF")
+      g_tzExecutionAuthority!="LIQUIDITY_REVERSAL_HANDOFF"&&
+      g_tzExecutionAuthority!="STRUCTURAL_BREAKOUT_WATCH")
    {TZ_SetGate("AUTHORITY","NO_CLOUD_EXECUTION_AUTHORITY");return false;}
    MqlTick t;if(!SymbolInfoTick(_Symbol,t)){TZ_SetGate("MARKET","NO_TICK");return false;}double spread=(t.ask-t.bid)/_Point;
    double maxSpread=PaperResearchMode?ResearchMaxSpreadPoints:MaxSpreadPoints;
@@ -2536,7 +2545,7 @@ bool TZ45_ActiveOwnerMatchesCurrentPlan()
    datetime acquired=(datetime)StringToInteger(TZ30_OwnerKV("owner_mirror_acquired_at"));
    if(ownerId==""||ownerId!=g_plan.zone_id||ownerDir!=g_plan.original_direction||acquired<=0)return false;
    if(ownerStatus!="INTERACTING"&&ownerStatus!="REACTION_CONFIRMED"&&ownerStatus!="OBJECTIVE_IN_PROGRESS")return false;
-   if(ownerAuthority!="HTF_CORE_HANDOFF"&&ownerAuthority!="HTF_ZONE_CONTACT_HANDOFF"&&ownerAuthority!="HTF_ZONE_SWEEP_HANDOFF"&&ownerAuthority!="LIQUIDITY_REVERSAL_HANDOFF")return false;
+   if(ownerAuthority!="HTF_CORE_HANDOFF"&&ownerAuthority!="HTF_ZONE_CONTACT_HANDOFF"&&ownerAuthority!="HTF_ZONE_SWEEP_HANDOFF"&&ownerAuthority!="LIQUIDITY_REVERSAL_HANDOFF"&&ownerAuthority!="STRUCTURAL_BREAKOUT_HANDOFF")return false;
    return true;
 }
 
