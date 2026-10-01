@@ -230,7 +230,7 @@ def _zone_contact_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
         "macro_location_latched": True,
         "core_required_for_authority": False,
         "micro_may_complete_outside_core": True,
-        "m1_execution_model": "UNIFIED_MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_BOUNDED_RETEST_OR_MODEL2_ENGULFING",
+        "m1_execution_model": "MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_RETEST_OR_MODEL2_ENGULFING_OR_MODEL3_BREAKOUT_ACCEPTANCE_RETEST",
         "no_chase": True,
     }
 
@@ -378,7 +378,7 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         "target1_open": bool((window or contact).get("target1_open", True)),
         "macro_location_latched": bool(contact or window),
         "micro_may_complete_outside_core": bool(contact or window),
-        "m1_execution_model": "UNIFIED_MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_BOUNDED_RETEST_OR_MODEL2_ENGULFING",
+        "m1_execution_model": "MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_RETEST_OR_MODEL2_ENGULFING_OR_MODEL3_BREAKOUT_ACCEPTANCE_RETEST",
         "no_chase": True,
         "paper_only": True,
     }
@@ -396,30 +396,35 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         analysis.trader_brief += (
             f" PAPER THESIS_OWNER_CONTINUATION={selected.zone_id}: active {selected.original_direction.value} thesis "
             f"{location_text}. The ownership anchor is not a fresh entry by itself. Sequence now waits for "
-            "either Model 1 (M1 liquidity sweep -> micro MSS -> fresh OB/FVG -> pullback into that OB/FVG -> "
-            "closed directional M1 candle) or Model 2 (closed directional M1 engulfing at/in the valid zone)."
+            "Model 1 (M1 liquidity sweep -> micro MSS -> fresh OB/FVG -> pullback -> closed directional M1), "
+            "Model 2 (closed directional M1 engulfing at/in the valid zone; no separate MSS), or Model 3 "
+            "(qualified boundary break -> acceptance -> retest -> closed directional M1; no separate MSS)."
         )
     elif contact:
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: the published institutional envelope was contacted "
             f"({contact.get('contact_basis') or 'ZONE_CONTACT'}). M15 validates zone health only. "
-            "M1 execution now has two direct models. Model 1: liquidity sweep -> micro MSS -> fresh "
-            "OB/FVG -> pullback into that OB/FVG -> closed directional M1 candle. Model 2: a closed "
-            "directional M1 engulfing pattern formed at/in the valid zone. Tactical-core touch, OTE, "
-            "ATR displacement and M15 sweep/reclaim are not primary-entry requirements."
+            "M1 execution now has three direct models. Model 1: liquidity sweep -> micro MSS -> fresh "
+            "OB/FVG -> pullback -> closed directional M1 candle. Model 2: closed directional M1 engulfing "
+            "with valid-zone context, with no separate MSS. Model 3: qualified boundary break -> acceptance -> "
+            "retest -> closed directional M1, with no separate MSS. Tactical-core touch, OTE and M15 "
+            "sweep/reclaim are not Model 1/2 requirements; Model 3 retains its displacement/retest contract."
         )
     elif window:
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: macro location is already latched. Sequence may use "
-            "Model 1 (M1 sweep -> micro MSS -> OB/FVG retest -> closed directional candle) or Model 2 "
-            "(zone engulfing). Valid P0/R1/R2 sniper cycles may re-arm while the objective and thesis "
+            "Model 1 (M1 sweep -> micro MSS -> OB/FVG retest -> closed directional candle), Model 2 "
+            "(zone engulfing; no separate MSS), or Model 3 (accepted breakout retest; no separate MSS). "
+            "Valid P0/R1/R2 sniper cycles may re-arm while the objective and thesis "
             "risk budget remain open; late chasing remains blocked."
         )
     else:
         analysis.trader_brief += (
             f" PAPER M1_READY={selected.zone_id}: price is interacting with the {selected.source_tf} institutional "
-            "location and M15 health is intact. Sequence waits for either Model 1 (M1 sweep -> micro MSS -> "
-            "OB/FVG retest -> closed directional candle) or Model 2 (zone engulfing) before any simulated entry."
+            "location and M15 health is intact. Sequence waits for Model 1 (M1 sweep -> micro MSS -> "
+            "OB/FVG retest -> closed directional candle), Model 2 (zone engulfing; no separate MSS), or "
+            "Model 3 (qualified breakout -> acceptance -> retest -> closed directional candle; no separate MSS) "
+            "before any simulated entry."
         )
     return selected
 
