@@ -132,7 +132,7 @@ def test_mql_backtest_harness_uses_sidecar_authority_and_does_not_modify_stable_
     assert 'if(IsTester()){RefreshPlan();return;}' in text
     assert 'if(IsTester())\n   {\n      return RefreshPlan();\n   }' in text
     assert 'if(IsTester())return;\n   string p=TZ_StatePrefix();' in text
-    stable = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5").read_text(encoding="utf-8")
+    stable = Path("mt5/stable/InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5").read_text(encoding="utf-8")
     assert "TesterContractFile" not in stable
 
 
