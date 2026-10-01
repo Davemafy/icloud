@@ -609,7 +609,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry to still-open objectives. Zone-acquisition models use the buffered HTF zone-distal SL; institutional breakout uses its confirmed M1 structural stop.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
