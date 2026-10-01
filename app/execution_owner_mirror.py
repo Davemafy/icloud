@@ -60,12 +60,19 @@ def owner_plan_text(now: int) -> str:
     effective_targets, effective_hits = _effective_mirror_targets(owner)
     cap_active = bool(float(owner.get("ownership_objective_cap") or 0.0) > 0)
 
-    campaign_key = (
-        f"{str(owner.get('direction') or '')}|"
-        f"{str(owner.get('source_tf') or '')}|"
-        f"{int(owner.get('source_ts') or 0)}|"
-        f"{int(owner.get('ownership_acquired_at') or 0)}"
-    )
+    authority = str(owner.get("ownership_authority") or "")
+    if authority == "STRUCTURAL_BREAKOUT_HANDOFF":
+        campaign_key = (
+            f"BREAKOUT|{str(owner.get('ownership_analysis_id') or owner.get('latest_analysis_id') or '')}|"
+            f"{str(owner.get('ownership_zone_id') or owner.get('latest_zone_id') or '')}|P0"
+        )
+    else:
+        campaign_key = (
+            f"{str(owner.get('direction') or '')}|"
+            f"{str(owner.get('source_tf') or '')}|"
+            f"{int(owner.get('source_ts') or 0)}|"
+            f"{int(owner.get('ownership_acquired_at') or 0)}"
+        )
     fields = {
         "owner_mirror_contract": OWNER_MIRROR_CONTRACT,
         "owner_mirror_active": "1",
