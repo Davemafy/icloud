@@ -212,6 +212,7 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
             "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
+            "STRUCTURAL_BREAKOUT_HANDOFF",
         }
     )
     return ready, authority, meta
