@@ -174,6 +174,7 @@ def _paper_ai_fallback_allows(analysis: Analysis, zone: Zone) -> bool:
         "HTF_ZONE_CONTACT_HANDOFF",
         "HTF_ZONE_SWEEP_HANDOFF",
         "LIQUIDITY_REVERSAL_HANDOFF",
+        "STRUCTURAL_BREAKOUT_WATCH",
     }
 
 
