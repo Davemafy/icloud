@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import SETTINGS
 from .dashboard_view import compact_dashboard_html
 from .execution_owner_mirror import owner_plan_text, recover_owner_from_sequence_heartbeat
-from .db import audit, init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_analysis, save_feedback, save_heartbeat, save_snapshot
+from .db import analysis_by_id, audit, init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_analysis, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
 from .journal import build_trades, export_csv_text, performance_summary, system_status
 from .models import Feedback, Heartbeat, MarketSnapshot
@@ -25,7 +25,7 @@ from .scheduler import scheduler_loop, scheduler_status
 from .security import require_api_key
 from .service import active_analysis, run_analysis
 from .target_revalidation import target_ladder_truth
-from .thesis_ownership_policy import acquire_execution_ownership
+from .thesis_ownership_policy import acquire_execution_ownership, apply_thesis_ownership
 from .sniper_contract_parity import evaluate_sequence_parity, plan_contract_from_text, sequence_contract_from_details
 from .sniper_validation_ledger import build_validation_ledger, export_validation_csv
 from .backtest_jobs import BacktestJobError, run_replay_job, start_replay_job, replay_job_status, replay_job_result
@@ -432,7 +432,7 @@ def feedback(f: Feedback):
     # reinterpret MT5-history recovery runtime versions as original execution
     # versions; provenance stays explicit in the stored payload.
     event = str(f.event or "").upper()
-    if event in {"ENTRY_OPENED", "POSITION_MARK", "POSITION_EXIT", "TP_HIT", "SL_HIT", "TRADE_CLOSED"}:
+    if event in {"ENTRY_OPENED", "BREAKOUT_EXECUTION_OPENED", "POSITION_MARK", "POSITION_EXIT", "TP_HIT", "SL_HIT", "TRADE_CLOSED"}:
         raw = f.details
         if isinstance(raw, dict):
             details = dict(raw)
@@ -450,23 +450,21 @@ def feedback(f: Feedback):
         f = f.model_copy(update={"details": details})
     breakout_owner_acquired = False
     if event == "BREAKOUT_EXECUTION_OPENED":
-        analysis = active_analysis()
+        source_analysis = analysis_by_id(str(f.analysis_id or ""))
         snapshot = latest_snapshot()
-        if (
-            analysis is not None
-            and snapshot is not None
-            and str(f.analysis_id or "") == str(analysis.analysis_id or "")
-            and str(f.zone_id or "")
-        ):
+        if source_analysis is not None and snapshot is not None and str(f.zone_id or ""):
             owner = acquire_execution_ownership(
-                analysis,
+                source_analysis,
                 snapshot,
                 "STRUCTURAL_BREAKOUT_HANDOFF",
                 str(f.zone_id),
                 float(f.price or 0.0),
             )
             if owner is not None:
-                save_analysis(analysis)
+                current = active_analysis()
+                if current is not None:
+                    apply_thesis_ownership(current, snapshot)
+                    save_analysis(current)
                 breakout_owner_acquired = True
                 audit(
                     int(f.ts),
@@ -477,8 +475,9 @@ def feedback(f: Feedback):
             audit(
                 int(f.ts),
                 "thesis.execution_owner.breakout_failed",
-                f"analysis={f.analysis_id} zone={f.zone_id} active_analysis={getattr(analysis, 'analysis_id', '') if analysis else ''}",
+                f"analysis={f.analysis_id} zone={f.zone_id} reason=SOURCE_ANALYSIS_OR_OWNER_UNAVAILABLE",
             )
+            raise HTTPException(status_code=409, detail="BREAKOUT_OWNER_NOT_ACQUIRED")
 
     save_feedback(f)
     return {
