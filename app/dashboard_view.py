@@ -517,7 +517,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls=ownerMatch ? 'ok' : 'blue';
       meta=ownerMatch
         ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
-        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro structure shift → causal OB/FVG → bounded retest → CLOSED M1 directional confirmation. Model 2: recent-zone engulfing is only a pattern candidate and must still prove a CLOSED M1 micro structure shift before entry. Model 3: institutional boundary breakout → displacement → acceptance → retest → CLOSED M1 micro structure shift → directional confirmation. M15 validates zone health; M1 structure remains mandatory for every execution family.';
+        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro structure shift → causal OB/FVG → bounded retest → CLOSED M1 directional confirmation. Model 2: recent-zone CLOSED directional engulfing → entry; no separate M1 micro-structure shift. Model 3: institutional boundary breakout → displacement → acceptance → retest → CLOSED directional M1 confirmation; no separate M1 micro-structure shift. M15 validates zone health; each sniper family uses its own confirmation contract.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -637,7 +637,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
         const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
         const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_MICRO_SHIFT','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
-        const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_M1_MICRO_SHIFT','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
+        const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
         const continuationWait=['CONTINUATION_M1_SHIFT','CONTINUATION_OB_FVG','CONTINUATION_PD_PULLBACK','CONTINUATION_POST_RETEST_M1_SHIFT'].includes(seqStage);
         seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':((sniperWait||breakoutWait||continuationWait)?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
         seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
@@ -680,7 +680,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       const targetExpired=seqStage==='TARGET'&&seqReason.includes('POST_HANDOFF_OBJECTIVE_ALREADY_TRADED');
       const limitReached=seqStage==='THESIS'&&seqReason.includes('REENTRY_LIMIT_REACHED');
       const simplePrimaryWait=['M1_SWEEP','M1_MICRO_MSS','M1_MICRO_SHIFT','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
-      const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_M1_MICRO_SHIFT','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
+      const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
       const continuationWait=['CONTINUATION_M1_SHIFT','CONTINUATION_OB_FVG','CONTINUATION_PD_PULLBACK','CONTINUATION_POST_RETEST_M1_SHIFT'].includes(seqStage);
       const forming=simplePrimaryWait||breakoutWait||continuationWait||['SWEEP','FLIP_SWEEP','MSS_BOS','FLIP_MSS_BOS','DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
       const hold=['SAFETY','RISK','TARGET','DUPLICATE','AUTHORITY','DATA','MARKET','BAR','BREAKOUT_NO_CHASE','BREAKOUT_REGIME'].includes(seqStage);
@@ -710,11 +710,11 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(simplePrimaryWait){
         state='M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Unified Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains parallel but cannot bypass the same M1 structure-shift rule. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+'Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains a parallel independent trigger and does not require that shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
       }else if(breakoutWait){
         state='BREAKOUT SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Model 3 is progressing through institutional boundary break → acceptance → retest → CLOSED M1 micro structure shift → directional confirmation. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
+        meta=checklist+'Model 3 is progressing through institutional boundary break → displacement → acceptance → retest → CLOSED directional M1 confirmation. No separate Model-1 micro-structure shift is required. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
       }else if(continuationWait){
         state='CONTINUATION RE-ENTRY FORMING';
         cls='blue';

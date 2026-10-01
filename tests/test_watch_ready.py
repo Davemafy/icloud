@@ -144,7 +144,7 @@ def test_envelope_contact_promotes_zone_contact_handoff_without_core():
     assert window["zone_contact_confirmed"] is True
     assert window["core_now"] is False
     assert window["core_required_for_authority"] is False
-    assert window["m1_execution_model"] == "UNIFIED_MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_BOUNDED_RETEST_OR_MODEL2_ENGULFING"
+    assert window["m1_execution_model"] == "MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_RETEST_OR_MODEL2_ENGULFING_OR_MODEL3_BREAKOUT_ACCEPTANCE_RETEST"
 
 
 def test_promote_sets_selected_zone_and_m1_ready_marker():
@@ -365,6 +365,8 @@ def test_confirmed_a_thesis_can_continue_from_same_core_after_second_touch():
     assert "execution_role:THESIS_CONTINUATION" in z.notes
     assert "PAPER THESIS_OWNER_CONTINUATION=Z1" in a.trader_brief
     assert "not a fresh entry by itself" in a.trader_brief
+    assert "Model 2" in a.trader_brief and "no separate MSS" in a.trader_brief
+    assert "Model 3" in a.trader_brief
     assert "PAPER M1_READY=Z1: active BUY thesis" not in a.trader_brief
 
 

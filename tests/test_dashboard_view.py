@@ -70,9 +70,9 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
         "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner",
         "Model 1: M1 liquidity sweep", "M1 micro structure shift", "causal OB/FVG",
         "bounded retest", "CLOSED M1 directional confirmation",
-        "Model 2: recent-zone engulfing", "must still prove a CLOSED M1 micro structure shift",
-        "Model 3: institutional boundary breakout", "M15 validates zone health",
-        "M1 structure remains mandatory for every execution family",
+        "Model 2: recent-zone CLOSED directional engulfing", "no separate M1 micro-structure shift",
+        "Model 3: institutional boundary breakout", "displacement", "acceptance", "retest",
+        "each sniper family uses its own confirmation contract",
         "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor",
         "ownership anchor is not itself a fresh entry signal"
     ]:
@@ -238,17 +238,20 @@ def test_static_checklist_separates_macro_authority_from_fresh_m1_location():
     assert "m1_handoff_ready:'M1 location handoff active'" not in html
 
 
-def test_dashboard_sequence_362_truth_and_reconstruction_telemetry():
+def test_dashboard_sequence_363_truth_and_reconstruction_telemetry():
     from pathlib import Path
     html = Path("static/index.html").read_text(encoding="utf-8")
     for needle in [
-        "Universal rule:",
-        "every entry family requires a CLOSED M1 micro structure shift",
+        "Model-specific confirmation:",
+        "only Model 1 requires a CLOSED M1 micro-structure shift",
+        "Model 2 — Recent-zone engulfing",
+        "No separate M1 micro-structure shift is required",
         "Model 3 — Institutional breakout",
-        "Direct breakout-candle chasing is disabled",
+        "Direct breakout-candle chasing remains disabled",
         "R1/R2 continuation",
     ]:
         assert needle in html
+    assert "every entry family requires a CLOSED M1 micro structure shift" not in html
     cleaned = compact_dashboard_html('<div class="card"><h3>Readiness</h3><div class="kpi" id="jScore">0/6</div><div class="muted">Process checklist — not a prediction.</div></div><h2>Live trading journal</h2></body>')
     for needle in [
         "trace_contact_ts",
@@ -258,8 +261,10 @@ def test_dashboard_sequence_362_truth_and_reconstruction_telemetry():
         "reconstructed pre-handoff",
         "BREAKOUT SEQUENCE FORMING",
         "CONTINUATION RE-ENTRY FORMING",
-        "BREAKOUT_M1_MICRO_SHIFT",
+        "Model 2 engulfing remains a parallel independent trigger",
+        "No separate Model-1 micro-structure shift is required",
         "CONTINUATION_POST_RETEST_M1_SHIFT",
     ]:
         assert needle in cleaned
+    assert "BREAKOUT_M1_MICRO_SHIFT" not in cleaned
     assert "Sequence 3.61 checks" not in cleaned

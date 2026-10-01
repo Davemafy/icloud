@@ -173,24 +173,27 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
     for BUY. Mitigation count is telemetry only and cannot remove the reserve. While Level 1 is valid, Level 2
     remains plotted context; a fresh analysis requalifies it before any promotion. Do not manufacture a reserve
     if no second independent institutional source qualifies.
-13. M1 cannot redefine the HTF zone. PRIMARY execution has TWO direct M1 models.
+13. M1 cannot redefine the HTF zone. PRIMARY execution has THREE direct M1 models.
     MODEL 1: price contacts the published institutional envelope -> M1 MICRO liquidity sweep -> M1 MICRO MSS
     (internal 1-minute structure, not M5/M15/HTF structure) -> causal M1 OB or FVG from that MSS leg ->
     bounded retest -> latest CLOSED M1 candle in trade direction -> entry. The causal M1 OB/FVG may form
     immediately outside the HTF envelope; the zone grants location authority and the M1 leg grants timing.
     MODEL 2: a CLOSED directional M1 real-body engulfing pattern with recent valid-zone context -> entry.
-    Model 2 does not need a separate sweep/MSS chain.
-    Model 1 and Model 2 may re-arm for R1/R2 while the same thesis remains valid, the objective remains open,
+    Model 2 does NOT require a separate M1 micro-structure shift.
+    MODEL 3: a qualified institutional boundary breakout -> CLOSED displacement break -> acceptance -> retest ->
+    latest CLOSED directional M1 confirmation -> entry. Model 3 does NOT require a separate M1 micro-structure shift.
+    Direct breakout-candle chasing is disabled; the retest and no-chase guard remain mandatory.
+    Models 1, 2 and 3 may re-arm for R1/R2 while the same thesis remains valid, the objective remains open,
     and any existing position is flat or protected. M15 validates zone health/accepted invalidation only.
-    Tactical-core touch, M15 sweep/reclaim, displacement-ATR thresholds, dealing-range construction and OTE
-    are NOT mandatory primary sniper gates. Initial SL for both models, including same-thesis R1/R2 cycles,
-    belongs beyond the full institutional zone with the configured buffer.
+    Tactical-core touch, M15 sweep/reclaim, dealing-range construction and OTE are NOT mandatory Model 1/2 gates.
+    Model 3 retains its own displacement/acceptance/retest contract. Initial SL for zone-protected sniper entries,
+    including same-thesis R1/R2 cycles, belongs beyond the full institutional zone with the configured buffer.
 14. When there is NO acquired thesis owner, a valid PRIMARY BUY and PRIMARY SELL are independent execution
     candidates. The zone currently at a qualifying M1 handoff location may receive execution authority even
     when it is counter to D1. D1 remains context and a tie-breaker; it must not monopolize authority merely
     because the D1-aligned zone was pre-selected. After one side earns a valid handoff and ownership, normal
     thesis ownership blocks the opposite side until release. Countertrend authority never bypasses spread/news/
-    snapshot safety, target-direction checks, actual-entry minimum-RR, risk sizing, or the two M1 sniper models.
+    snapshot safety, target-direction checks, actual-entry minimum-RR, risk sizing, or the three M1 sniper models.
 
 This contract comes from the user's institutional XAU framework: identify the MOST IMPORTANT levels where
 price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15 structure,

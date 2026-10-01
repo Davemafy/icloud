@@ -143,7 +143,7 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
         continuation and directional_match and regime["name"] in {"TREND", "EXPANSION"}
     )
     # Breakout watch may arm before expansion. This is observation permission only;
-    # Sequence still requires closed break, acceptance, retest and M1 micro shift.
+    # Sequence still requires closed break, acceptance, retest and closed directional confirmation; no separate Model-1 MSS.
     allow_breakout = bool(
         selected and directional_match
         and regime["name"] in {"COMPRESSION", "RANGE", "TREND", "EXPANSION"}
@@ -174,7 +174,9 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
             "alternative_model_requires_closed_m1_reaction": True,
             "alternative_model_first_entry_uses_zone_distal_stop": True,
             "alternative_model_min_rr_fail_closed": True,
-            "all_execution_models_require_m1_micro_structure_shift": True,
+            "model1_requires_m1_micro_structure_shift": True,
+            "model2_engulfing_requires_separate_m1_micro_structure_shift": False,
+            "model3_breakout_requires_separate_m1_micro_structure_shift": False,
             "breakout_requires_closed_displacement": True,
             "breakout_requires_acceptance_and_retest": True,
             "breakout_direct_candle_entry_disabled": True,

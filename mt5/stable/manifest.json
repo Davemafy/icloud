@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.2",
+  "release": "6.4.3",
   "repository": "Davemafy/icloud",
-  "ref": "35d138f658de993005cc8dfec1c3e568dcea584a",
+  "ref": "1833419fe16bde065d923fc56d6ffc3c09db9212",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.62",
+  "sequence_ea_version": "3.63",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -237,7 +237,10 @@
     "causal_displacement_ob_fvg_continuation",
     "institutional_breakout_acceptance_retest",
     "breakout_compression_range_watch",
-    "universal_m1_micro_structure_shift_all_models",
+    "model_specific_sniper_confirmation_contract",
+    "model1_m1_micro_structure_shift_required",
+    "model2_engulfing_no_separate_mss_required",
+    "model3_breakout_no_separate_mss_required",
     "breakout_direct_entry_disabled",
     "breakout_reduced_campaign_risk"
   ],
@@ -252,11 +255,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_62_ComprehensiveEntryEngineRepair_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
       "requires_reload": true,
-      "sha256": "b0c168776fbcc6e9159f12656eb287de18584d4efa17275c1afa950a392bbbdb"
+      "sha256": "02b22cc120deb168dbc3d1a2384e3f65c0db96683842c62755873e3bae93ea0c"
     }
   ],
   "support_files": [
