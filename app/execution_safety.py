@@ -396,8 +396,9 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["zone_sweep_confirmed"] = "0"
     kv["core_required_for_authority"] = (
         "0"
-        if contact_handoff_ready
-        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"})
+        if breakout_watch_ready
+        or contact_handoff_ready
+        or (owner_continuation_ready and owner_authority in {"HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF", "STRUCTURAL_BREAKOUT_HANDOFF"})
         else "1"
     )
     kv["liquidity_handoff_ready"] = "1" if liquidity_handoff_ready else "0"
