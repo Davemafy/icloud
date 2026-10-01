@@ -60,6 +60,7 @@ def test_plan_exports_active_owner_for_mt5_local_mirror(tmp_path, monkeypatch):
     assert "owner_mirror_contract=MT5_EXECUTION_OWNER_MIRROR_V1" in text
     assert "owner_mirror_active=1" in text
     assert "owner_mirror_zone_id=Z1" in text
+    assert "owner_mirror_campaign_key=SELL|H4>H1|777|1120" in text
     assert "owner_mirror_status=OBJECTIVE_IN_PROGRESS" in text
     assert "owner_mirror_target1_hit_at=1200" in text
     assert "owner_mirror_target2=85.0" in text
