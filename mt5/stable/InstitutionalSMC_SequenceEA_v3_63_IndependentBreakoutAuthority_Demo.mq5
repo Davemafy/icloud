@@ -2372,16 +2372,21 @@ bool TZ36_NearestDirectionalTarget(bool flip,bool buy,double entry,double &targe
    return target>0;
 }
 
-bool TZ36_TargetAlreadyTradedSinceHandoff(MqlRates &r[],bool buy,double target)
+bool TZ36_TargetAlreadyTradedSince(MqlRates &r[],bool buy,double target,datetime anchorTs)
 {
-   if(g_tzExecutionHandoffTs<=0||target<=0)return false;
+   if(anchorTs<=0||target<=0)return false;
    for(int i=1;i<ArraySize(r);i++)
    {
-      if(r[i].time<g_tzExecutionHandoffTs)break;
+      if(r[i].time<anchorTs)break;
       if(buy&&r[i].high>=target)return true;
       if(!buy&&r[i].low<=target)return true;
    }
    return false;
+}
+
+bool TZ36_TargetAlreadyTradedSinceHandoff(MqlRates &r[],bool buy,double target)
+{
+   return TZ36_TargetAlreadyTradedSince(r,buy,target,g_tzExecutionHandoffTs);
 }
 
 bool TZ36_MinRRValid(double entry,double sl,double target,double &rr,double &required)
@@ -2529,6 +2534,59 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       (long)now,TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),entry,details);
    string response;
    TZ_Post("/mt5/feedback",body,response);
+}
+
+void TZ63_SaveBreakoutOwnerPending()
+{
+   if(IsTester())return;
+   string file="TradeZone\\breakout_owner_pending.txt";
+   if(g_tzBreakoutOwnerPendingBody==""){FileDelete(file);return;}
+   FolderCreate("TradeZone");
+   int h=FileOpen(file,FILE_WRITE|FILE_TXT|FILE_ANSI);
+   if(h==INVALID_HANDLE)return;
+   FileWriteString(h,g_tzBreakoutOwnerPendingBody);
+   FileClose(h);
+}
+
+void TZ63_LoadBreakoutOwnerPending()
+{
+   if(IsTester())return;
+   int h=FileOpen("TradeZone\\breakout_owner_pending.txt",FILE_READ|FILE_TXT|FILE_ANSI);
+   if(h==INVALID_HANDLE)return;
+   g_tzBreakoutOwnerPendingBody=FileReadString(h);
+   FileClose(h);
+}
+
+bool TZ63_TryBreakoutOwnerHandoff(bool force=false)
+{
+   if(IsTester()||g_tzBreakoutOwnerPendingBody=="")return true;
+   datetime now=TimeTradeServer();if(now<=0)now=TimeCurrent();
+   if(!force&&now-g_tzBreakoutOwnerLastAttempt<5)return false;
+   g_tzBreakoutOwnerLastAttempt=now;
+   string response="";
+   if(!TZ_Post("/mt5/feedback",g_tzBreakoutOwnerPendingBody,response))return false;
+   g_tzBreakoutOwnerPendingBody="";
+   TZ63_SaveBreakoutOwnerPending();
+   TZ31_RefreshCloudState(true);
+   return true;
+}
+
+void TZ63_QueueBreakoutOwnerHandoff(string tag,double entry,string pdType)
+{
+   if(IsTester()||tag!="B0"||g_tzExecutionAuthority!="STRUCTURAL_BREAKOUT_WATCH"||
+      g_tzCandidateModel!="INSTITUTIONAL_BREAKOUT")return;
+   datetime now=TimeTradeServer();if(now<=0)now=TimeCurrent();
+   string details=StringFormat(
+      "{\"candidate_model\":\"INSTITUTIONAL_BREAKOUT\",\"tag\":\"B0\","
+      "\"pd_type\":\"%s\",\"campaign_id\":\"%s\"}",
+      TZ_JsonEscape(pdType),TZ_JsonEscape(g_tzBreakoutCampaignKey));
+   g_tzBreakoutOwnerPendingBody=StringFormat(
+      "{\"ts\":%I64d,\"event\":\"BREAKOUT_EXECUTION_OPENED\","
+      "\"analysis_id\":\"%s\",\"zone_id\":\"%s\","
+      "\"price\":%.5f,\"details\":%s}",
+      (long)now,TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),entry,details);
+   TZ63_SaveBreakoutOwnerPending();
+   TZ63_TryBreakoutOwnerHandoff(true);
 }
 
 bool TZ45_ActiveOwnerMatchesCurrentPlan()
