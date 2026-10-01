@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.3.43"
+    assert manifest["release"] == "6.3.44"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.50"
+    assert manifest["sequence_ea_version"] == "3.51"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_50_SniperPD_Engulfing_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
