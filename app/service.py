@@ -462,7 +462,8 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
             )
         )
         if paper_ai_fallback:
-            _activate_paper_ai_fallback(a, authority, "AI_PROVIDER_UNAVAILABLE")
+            fallback_authority = authority if authority != "NONE" else ("STRUCTURAL_BREAKOUT_WATCH" if breakout_watch_selected else "NONE")
+            _activate_paper_ai_fallback(a, fallback_authority, "AI_PROVIDER_UNAVAILABLE")
         elif selected and not execution_selected:
             # Structural map approval and live execution handoff are separate
             # authorities. A valid published A+/A/B+ map must remain approved
