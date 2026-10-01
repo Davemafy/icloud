@@ -425,11 +425,19 @@ async def run_analysis(reason: str = "MANUAL", *, snapshot=None, as_of_ts: int |
     overlay = build_execution_overlay(s, a, reason)
     a.execution_policy = {**a.execution_policy, "multi_model": overlay}
     a.trader_brief += " " + regime_brief(overlay)
+    selected_zone = next((z for z in a.zones if z.zone_id == a.selected_zone_id), None)
+    breakout_watch_selected = bool(
+        selected_zone is not None
+        and selected_zone.setup_type == "CONTINUATION"
+        and execution_grade_eligible(selected_zone)
+        and str(getattr(selected_zone.state, "value", selected_zone.state)) == "ACTIVE"
+        and bool(dict(overlay.get("models") or {}).get("institutional_breakout"))
+    )
     try:
         ok, summary, risks, provider = await validator(a, s)
         a.ai_provider = provider
         selected = bool(a.selected_zone_id)
-        execution_selected = bool(authority != "NONE" and selected)
+        execution_selected = bool((authority != "NONE" or breakout_watch_selected) and selected)
         a.ai_approved = bool(ok and execution_selected)
         if execution_selected:
             if summary:
