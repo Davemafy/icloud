@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.44",
+  "release": "6.3.45",
   "repository": "Davemafy/icloud",
-  "ref": "30ed7b8c403b79fd520100bd60b23d658cd8ce33",
+  "ref": "d88833b80e31cd42fef0089a952f4b946b570196",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.51",
+  "sequence_ea_version": "3.52",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -214,7 +214,10 @@
     "model1_no_ote_gate",
     "model2_no_mss_requirement",
     "nearest_m1_micro_swing_mss",
-    "micro_mss_one_bar_internal_pivot"
+    "micro_mss_one_bar_internal_pivot",
+    "m1_sniper_trace_telemetry",
+    "sweep_mss_pd_pullback_debug_truth",
+    "databridge_unchanged_for_sequence_trace"
   ],
   "files": [
     {
@@ -227,11 +230,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_51_MicroSwingMSS_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
       "requires_reload": true,
-      "sha256": "95c2ac468136ff990e0cd72625146246134337df4e2f6c75e7580507751b64af"
+      "sha256": "674b5c0a79f13080277985427dac267c913ec08128f08d28653e6134df6c2f36"
     }
   ],
   "support_files": [
