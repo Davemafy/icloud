@@ -345,3 +345,65 @@ def test_reaction_without_live_core_contact_does_not_inflate_after_contact_rate(
     assert out["summary"]["reaction_confirmed_after_live_contact"] == 0
     assert out["summary"]["reaction_confirmed_without_live_core_contact"] == 1
     assert out["summary"]["reaction_rate_after_contact_pct"] is None
+
+
+def test_trade_event_with_zone_id_never_leaks_to_sibling_zone_in_same_analysis(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    sell = _zone()
+    buy = sell.model_copy(deep=True)
+    buy.zone_id = "PZ_H4H1_BUY_15"
+    buy.original_direction = Direction.BUY
+    buy.flip_direction = Direction.SELL
+    buy.source_ts = 91
+    buy.core_low = 4145.27
+    buy.core_high = 4156.15
+    buy.zone_low = 4139.13
+    buy.zone_high = 4156.15
+
+    analysis = Analysis(
+        analysis_id="A_SHARED",
+        generated_at=100,
+        snapshot_at=100,
+        overall_bias=Direction.SELL,
+        zones=[sell, buy],
+        selected_zone_id=buy.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO analyses(ts,analysis_id,payload,ai_ok) VALUES(?,?,?,?)",
+            (100, analysis.analysis_id, analysis.model_dump_json(), 1),
+        )
+        for pub, rx, zone in (("PUB_SELL","RX_SELL",sell),("PUB_BUY","RX_BUY",buy)):
+            conn.execute(
+                """
+                INSERT INTO zone_publications(
+                    publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                    zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                    first_published_at,last_seen_at,publication_qualified_mitigations,
+                    publication_raw_core_contacts,live_core_touched_at,status
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    pub,rx,pub + "_SIG","A_SHARED","A_SHARED",zone.zone_id,zone.original_direction.value,
+                    "H4>H1",zone.source_ts,zone.core_low,zone.core_high,zone.zone_low,zone.zone_high,
+                    100,200,0,0,0,"PUBLISHED",
+                ),
+            )
+
+        conn.execute(
+            "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
+            (150,"ENTRY_OPENED","A_SHARED",buy.zone_id,4153.43,'{"position_id":9001,"setup":"PRIMARY","grade":"B+"}'),
+        )
+        conn.execute(
+            "INSERT INTO feedback(ts,event,analysis_id,zone_id,price,details) VALUES(?,?,?,?,?,?)",
+            (170,"TRADE_CLOSED","A_SHARED",buy.zone_id,4160.46,'{"position_id":9001,"setup":"PRIMARY","grade":"B+"}'),
+        )
+
+    out = ledger.build_validation_ledger(limit=10)
+    rows = {row["zone_id"]: row for row in out["rows"]}
+    assert rows[buy.zone_id]["execution_state"] == "CLOSED"
+    assert rows[sell.zone_id]["execution_state"] == "NO_ENTRY"
+    assert out["summary"]["executed_publications"] == 1
