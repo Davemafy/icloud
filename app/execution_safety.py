@@ -378,6 +378,10 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     )
     kv["execution_guard_contract"] = EXECUTION_GUARD_CONTRACT
     kv["execution_authority"] = authority
+    kv["breakout_watch_ready"] = "1" if breakout_watch_ready else "0"
+    kv["breakout_watch_reason"] = str(breakout_watch_meta.get("reason") or "")
+    kv["breakout_watch_regime"] = str(breakout_watch_meta.get("regime") or "")
+    kv["breakout_watch_direction"] = str(breakout_watch_meta.get("direction") or "")
     kv["core_interaction_basis"] = (
         "PUBLISHED_INSTITUTIONAL_ENVELOPE_CONTACT" if contact_handoff_ready
         else "TACTICAL_CORE_OR_LATCHED_CORE_REACTION"
