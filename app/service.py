@@ -116,6 +116,7 @@ def _stamp_execution_authority(a: Analysis, ready_zone, liquidity_handoff: dict)
             "HTF_ZONE_CONTACT_HANDOFF",
             "HTF_ZONE_SWEEP_HANDOFF",
             "LIQUIDITY_REVERSAL_HANDOFF",
+            "STRUCTURAL_BREAKOUT_HANDOFF",
         }
         and owner_zone_id
         and owner_zone_id == str(a.selected_zone_id or "")
