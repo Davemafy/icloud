@@ -230,7 +230,7 @@ def _zone_contact_state(zone: Zone, snapshot: MarketSnapshot) -> dict[str, Any]:
         "macro_location_latched": True,
         "core_required_for_authority": False,
         "micro_may_complete_outside_core": True,
-        "m1_execution_model": "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING",
+        "m1_execution_model": "UNIFIED_MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_BOUNDED_RETEST_OR_MODEL2_ENGULFING",
         "no_chase": True,
     }
 
@@ -378,7 +378,7 @@ def _mark_ready(analysis: Analysis, selected: Zone, snapshot: MarketSnapshot, th
         "target1_open": bool((window or contact).get("target1_open", True)),
         "macro_location_latched": bool(contact or window),
         "micro_may_complete_outside_core": bool(contact or window),
-        "m1_execution_model": "MODEL1_SWEEP_MICRO_MSS_OBFVG_PULLBACK_CLOSE_OR_MODEL2_ENGULFING",
+        "m1_execution_model": "UNIFIED_MODEL1_MICRO_SWEEP_MSS_CAUSAL_PD_BOUNDED_RETEST_OR_MODEL2_ENGULFING",
         "no_chase": True,
         "paper_only": True,
     }
