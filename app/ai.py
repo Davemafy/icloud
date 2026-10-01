@@ -174,11 +174,12 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
     remains plotted context; a fresh analysis requalifies it before any promotion. Do not manufacture a reserve
     if no second independent institutional source qualifies.
 13. M1 cannot redefine the HTF zone. PRIMARY execution has TWO direct M1 models.
-    MODEL 1: price contacts the published institutional envelope -> M1 liquidity sweep -> M1 MICRO MSS
-    (internal 1-minute structure, not M5/M15/HTF structure) -> fresh M1 OB or FVG from that MSS leg ->
-    pullback into that OB/FVG -> CLOSED M1 candle in trade direction -> entry.
-    MODEL 2: a CLOSED directional M1 real-body engulfing pattern formed at/in the valid institutional zone
-    -> entry. Model 2 does not need a separate sweep/MSS chain.
+    MODEL 1: price contacts the published institutional envelope -> M1 MICRO liquidity sweep -> M1 MICRO MSS
+    (internal 1-minute structure, not M5/M15/HTF structure) -> causal M1 OB or FVG from that MSS leg ->
+    bounded retest -> latest CLOSED M1 candle in trade direction -> entry. The causal M1 OB/FVG may form
+    immediately outside the HTF envelope; the zone grants location authority and the M1 leg grants timing.
+    MODEL 2: a CLOSED directional M1 real-body engulfing pattern with recent valid-zone context -> entry.
+    Model 2 does not need a separate sweep/MSS chain.
     Model 1 and Model 2 may re-arm for R1/R2 while the same thesis remains valid, the objective remains open,
     and any existing position is flat or protected. M15 validates zone health/accepted invalidation only.
     Tactical-core touch, M15 sweep/reclaim, displacement-ATR thresholds, dealing-range construction and OTE
