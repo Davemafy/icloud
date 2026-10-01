@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.46",
+  "release": "6.4.0",
   "repository": "Davemafy/icloud",
-  "ref": "74da9c82863f30a9c2285c58028a13df924adc70",
+  "ref": "50dc478ebeef2c97701472f2269651b7ec490790",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.53",
+  "sequence_ea_version": "3.60",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -220,7 +220,16 @@
     "databridge_unchanged_for_sequence_trace",
     "model1_fvg_or_ob_retest_semantics",
     "pd_alternative_retest_selection",
-    "no_fvg_first_deadlock"
+    "no_fvg_first_deadlock",
+    "unified_primary_entry_engine",
+    "single_scanner_execution_diagnostics_parity",
+    "micro_liquidity_sweep",
+    "wick_sweep_without_closeback_gate",
+    "causal_pd_array_outside_htf_zone_allowed",
+    "wick_aware_m1_order_block",
+    "bounded_pd_retest_window",
+    "bounded_directional_confirmation_window",
+    "recent_zone_engulfing_parallel_model"
   ],
   "files": [
     {
@@ -233,11 +242,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_60_UnifiedEntryEngine_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_60_UnifiedEntryEngine_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_60_UnifiedEntryEngine_Demo.mq5",
       "requires_reload": true,
-      "sha256": "4305609bd7a0869138c8c6a8f28681ded50575c9aacbc4f1a3b7271e5e16cb9a"
+      "sha256": "20609400d6026d0cd9a4d459ccf9ddf6c00a6251bd3b5d684db6f6b5499210ac"
     }
   ],
   "support_files": [
