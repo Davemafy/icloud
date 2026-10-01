@@ -70,9 +70,9 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
         "Cloud execution authority ", "Sequence authority ", "matches the active thesis owner",
         "Model 1: M1 liquidity sweep", "M1 micro structure shift", "causal OB/FVG",
         "bounded retest", "CLOSED M1 directional confirmation",
-        "Model 2: recent-zone engulfing", "must still prove a CLOSED M1 micro structure shift",
-        "Model 3: institutional boundary breakout", "M15 validates zone health",
-        "M1 structure remains mandatory for every execution family",
+        "Model 2: recent-zone CLOSED directional engulfing", "no separate M1 micro-structure shift",
+        "Model 3: institutional boundary breakout", "displacement", "acceptance", "retest",
+        "each sniper family uses its own confirmation contract",
         "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor",
         "ownership anchor is not itself a fresh entry signal"
     ]:
