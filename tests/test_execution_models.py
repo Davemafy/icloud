@@ -33,4 +33,8 @@ def test_overlay_keeps_orderflow_disabled_without_centralized_feed():
     o=build_execution_overlay(s,a,"TEST")
     assert o["rules"]["htf_location_remains_authority"] is True
     assert o["models"]["order_flow_imbalance"] is False
+    assert "institutional_breakout" in o["models"]
+    assert o["rules"]["all_execution_models_require_m1_micro_structure_shift"] is True
+    assert o["rules"]["breakout_requires_acceptance_and_retest"] is True
+    assert o["parameters"]["breakout_risk_multiplier"] <= 1.0
     assert o["parameters"]["alternate_model_risk_multiplier"] <= 1.0
