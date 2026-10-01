@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.3.45",
+  "release": "6.3.46",
   "repository": "Davemafy/icloud",
-  "ref": "d88833b80e31cd42fef0089a952f4b946b570196",
+  "ref": "74da9c82863f30a9c2285c58028a13df924adc70",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.52",
+  "sequence_ea_version": "3.53",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -217,7 +217,10 @@
     "micro_mss_one_bar_internal_pivot",
     "m1_sniper_trace_telemetry",
     "sweep_mss_pd_pullback_debug_truth",
-    "databridge_unchanged_for_sequence_trace"
+    "databridge_unchanged_for_sequence_trace",
+    "model1_fvg_or_ob_retest_semantics",
+    "pd_alternative_retest_selection",
+    "no_fvg_first_deadlock"
   ],
   "files": [
     {
@@ -230,11 +233,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_52_SniperTrace_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_53_PDAlternatives_Demo.mq5",
       "requires_reload": true,
-      "sha256": "674b5c0a79f13080277985427dac267c913ec08128f08d28653e6134df6c2f36"
+      "sha256": "4305609bd7a0869138c8c6a8f28681ded50575c9aacbc4f1a3b7271e5e16cb9a"
     }
   ],
   "support_files": [
