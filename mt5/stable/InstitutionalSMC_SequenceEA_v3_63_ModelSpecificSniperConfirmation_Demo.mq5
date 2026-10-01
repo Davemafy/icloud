@@ -4,8 +4,9 @@
 
 // Research wrapper around the validated v3.21 execution core.
 // DEMO/PAPER ONLY. Real accounts remain hard-blocked.
-// v3.50 implements the two user-defined primary execution models inside a valid
-// premium/discount institutional zone.
+// v3.50 established the original two user-defined primary execution models inside
+// a valid premium/discount institutional zone. v3.63 preserves those models and
+// makes the institutional breakout family an explicit third sniper model.
 //
 // MODEL 1: M1 liquidity sweep -> M1 MICRO MSS -> fresh M1 OB/FVG from the MSS leg
 // -> pullback into that OB/FVG -> CLOSED M1 candle in thesis direction -> entry.
@@ -18,9 +19,11 @@
 //
 // All three models may re-arm for R1/R2 while the thesis remains valid and risk budget
 // remains. Existing positions must be flat or protected before another sniper cycle.
-// M15 validates zone health/invalidation only. No M5/M15 MSS, OTE, ATR displacement,
-// dealing-range or fixed-dollar runway gate is required for these primary sniper cycles.
-// Initial SL for zone-protected sniper models, including their R1/R2 cycles, remains beyond the FULL
+// M15 validates zone health/invalidation only. Models 1 and 2 do not require M5/M15
+// MSS, OTE, dealing-range construction or an ATR-displacement threshold. Model 3
+// deliberately keeps its own displacement-break, acceptance and retest contract.
+// Fixed-dollar runway is not a primary sniper gate. Initial SL for zone-protected
+// sniper models, including their R1/R2 cycles, remains beyond the FULL
 // institutional zone with the existing buffer. Actual-entry minimum RR still applies.
 //
 // v3.63 model-specific sniper confirmation correction:
@@ -940,13 +943,13 @@ void TZ28_EvaluateAcceptedFlip()
          break;
       }
 
-      int flipShiftIdx=-1;double flipShiftLevel=0.0;string flipShiftReason="";
-      if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,flipShiftReason,flipShiftIdx,flipShiftLevel))
-      {g_tzExecutionAuthority="NONE";TZ_SetGate("M1_MICRO_SHIFT","FLIP_"+flipShiftReason);break;}
+      int flipShiftIdx=-1;double flipShiftLevel=0.0;string flipConfirmReason="";
+      if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,flipConfirmReason,flipShiftIdx,flipShiftLevel))
+      {g_tzExecutionAuthority="NONE";TZ_SetGate("M1_MICRO_SHIFT","FLIP_"+flipConfirmReason);break;}
 
-      // Authority is observation permission only. Accepted-zone flip execution still
-      // uses the selected model's own confirmation contract: Model 1 keeps its M1 shift,
-      // while Model 2 engulfing and Model 3 breakout do not inherit that extra gate.
+      // Accepted-zone flip remains a separate execution family with its own
+      // breaker/value-reaction safety checks below. The shared dispatcher must not
+      // turn an engulfing or institutional-breakout signal into a Model-1 MSS requirement.
       g_tzExecutionAuthority="ACCEPTED_ZONE_FLIP_HANDOFF";
       double entry=sig.buy?tk.ask:tk.bid;
       int flipReactionIdx=-1;string flipConfirmationReason="";
@@ -2681,9 +2684,9 @@ void Evaluate()
    }
 
 
-   int universalShiftIdx=-1;double universalShiftLevel=0.0;string universalShiftReason="";
-   if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,universalShiftReason,universalShiftIdx,universalShiftLevel))
-   {TZ_SetGate("M1_MICRO_SHIFT",universalShiftReason);return;}
+   int modelShiftIdx=-1;double modelShiftLevel=0.0;string modelConfirmReason="";
+   if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,modelConfirmReason,modelShiftIdx,modelShiftLevel))
+   {TZ_SetGate("M1_MICRO_SHIFT",modelConfirmReason);return;}
 
    double entry=sig.buy?tk.ask:tk.bid;
    int valueReactionIdx=-1;
