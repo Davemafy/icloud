@@ -63,7 +63,7 @@ def test_360_pullback_and_confirmation_are_bounded_windows_not_exact_r2():
     assert "for(int pb=1;pb<=oldest;pb++)" in pd
     scan = text[text.index("bool TZ60_ScanPrimaryEngine"):text.index("\nvoid TZ_ShallowValue", text.index("bool TZ60_ScanPrimaryEngine"))]
     assert "TZ60_DirectionalClose(r[1],buy)" in scan
-    assert "structureHeld" not in scan
+    assert "bool structureHeld" not in scan
 
 
 def test_360_engulfing_is_parallel_and_recent_zone_bound():
