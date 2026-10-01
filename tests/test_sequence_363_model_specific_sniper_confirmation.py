@@ -25,7 +25,9 @@ def test_363_version_and_model_specific_contract():
 def test_363_model1_keeps_closed_m1_micro_shift():
     text = _text()
     scan = text[text.index("bool TZ60_ScanPrimaryEngine"):text.index("bool TZ62_FindPostEventMicroShift")]
-    assert 'if(!TZ60_FindMicroMSS' in scan or "M1_MICRO_MSS" in scan
+    assert "TZ60_FindNearestMicroSwing(r,sw,buy,microDepth,ms,mss)" in scan
+    assert "bool broke=buy?(r[j].close>mss):(r[j].close<mss)" in scan
+    assert "if(br<2)continue" in scan
     assert "causal" in scan.lower()
     assert "TZ60_FindRetestedCausalPD" in scan
     gate = text[text.index("bool TZ63_ModelSpecificConfirmationReady"):text.index("bool TZ62_BuildDisplacementContinuation")]
