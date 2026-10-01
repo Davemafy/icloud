@@ -498,7 +498,7 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["owner_target_progress_applied"] = "1" if bool(owner_meta.get("locked")) and str(owner_meta.get("owner_zone_id") or "") == zone.zone_id else "0"
     kv["next_open_target"] = f"{float(exported_original[0] if exported_original else 0.0):.5f}"
     kv["original_target_direction_valid"] = "1" if original_valid else "0"
-    kv["live_target_direction_valid"] = "1" if (not handoff_ready or bool(live_valid)) else "0"
+    kv["live_target_direction_valid"] = "1" if (not (handoff_ready or breakout_watch_ready) or bool(live_valid)) else "0"
     kv["target_revalidation_contract"] = TARGET_REVALIDATION_CONTRACT
     kv["target_revalidation_enforced"] = "1" if target_truth_enforced else "0"
     kv["target_revalidation_status"] = str(target_truth.get("status") or "UNAVAILABLE")
@@ -534,11 +534,11 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     target_authority_safe = bool(
         not target_truth_enforced or target_truth.get("authority_safe")
     )
-    if not handoff_ready:
+    if not handoff_ready and not breakout_watch_ready:
         guard_reasons.append("NO_EXECUTION_HANDOFF")
     if not original_valid:
         guard_reasons.append("NO_DIRECTIONALLY_VALID_ORIGINAL_TARGET")
-    if handoff_ready and not live_valid:
+    if (handoff_ready or breakout_watch_ready) and not live_valid:
         guard_reasons.append("LIVE_TARGET_DIRECTION_INVALID")
     if handoff_ready and target_truth_enforced and not target_authority_safe:
         target_reason = "TARGET_REMAP_REQUIRED_AT_ACTIVATION"
@@ -553,9 +553,12 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
         kv["zone_sweep_handoff_ready"] = "0"
         kv["liquidity_handoff_ready"] = "0"
 
-    if handoff_ready and original_valid and live_valid and target_authority_safe:
+    if (handoff_ready or breakout_watch_ready) and original_valid and live_valid and target_authority_safe:
         kv["ea_mode"] = "DUAL_BRANCH"
-        if owner_continuation_ready:
+        if breakout_watch_ready:
+            kv["setup_type"] = "CONTINUATION"
+            kv["execution_role"] = "STRUCTURAL_BREAKOUT_WATCH"
+        elif owner_continuation_ready:
             kv["setup_type"] = "CONTINUATION"
             kv["execution_role"] = "THESIS_CONTINUATION"
         elif thesis_bplus_override:
