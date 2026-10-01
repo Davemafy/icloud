@@ -204,3 +204,29 @@ def test_owner_macro_authority_does_not_masquerade_as_fresh_m1_location(monkeypa
     assert journal["checks"]["fresh_m1_location_ready"] is False
     assert journal["sequence_debug"]["fresh_m1_location_ready"] is False
     assert journal["readiness_score"].endswith("/10")
+
+
+def test_journal_displays_persisted_acquisition_anchor_without_changing_execution_truth(monkeypatch):
+    zone = _zone()
+    analysis = _analysis(zone)
+    snapshot = _snapshot()
+    _patch_common(monkeypatch, analysis, snapshot, "HTF_CORE_HANDOFF")
+    monkeypatch.setattr(main, "_dashboard_persisted_owner_anchor", lambda _zone_id: (4258.55, 900))
+    monkeypatch.setattr(
+        main,
+        "active_plan_text",
+        lambda *_args, **_kwargs: (
+            "ea_mode=DUAL_BRANCH\n"
+            "execution_authority=HTF_CORE_HANDOFF\n"
+            "owner_continuation_ready=1\n"
+            "usable_runway_ok=1\n"
+            "separation_guard=PASS\n"
+        ),
+    )
+
+    journal = main._journal_snapshot()
+    assert journal["target_activation_reference"] == 4258.55
+    assert journal["target_activation_reference_basis"] == "PERSISTED_OWNERSHIP_ACQUISITION_ANCHOR"
+    assert journal["target_ownership_acquired_at"] == 900
+    # Execution authority remains sourced from the final plan/Sequence path.
+    assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
