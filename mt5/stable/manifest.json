@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.4",
+  "release": "6.4.5",
   "repository": "Davemafy/icloud",
-  "ref": "a214aa1564966d6a59f6491ce7055f47b3bf795e",
+  "ref": "f344d669f4e0ffd52d9a1317be5ceb61fc56ad3e",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.64",
+  "sequence_ea_version": "3.65",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -248,7 +248,11 @@
     "deepest_objective_runner_tp",
     "near_target_high_water_lock",
     "completed_objective_runner_ratchet",
-    "cost_aware_break_even"
+    "cost_aware_break_even",
+    "owner_target_completion_import",
+    "consumed_objective_skip_on_reentry",
+    "late_stage_owner_zone_reacquisition",
+    "reentry_cap_preserved_across_rerank"
   ],
   "files": [
     {
@@ -261,11 +265,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
       "requires_reload": true,
-      "sha256": "33b883e45f10e370002da651d590550d7e2c7e6f7b8470a21fb1d494a0e48d72"
+      "sha256": "38a4a49ed39c9445630d0a672295a68064e4295f6971c4e7509e958bb18ed168"
     }
   ],
   "support_files": [
