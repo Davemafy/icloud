@@ -2718,6 +2718,11 @@ void Evaluate()
    {
       TZ28_ArmAcceptedFlip();
       g_tzExecutionAuthority="NONE";
+      if(g_tzFlipPlanStored)
+      {
+         TZ28_EvaluateAcceptedFlip();
+         return;
+      }
       TZ_SetGate("INVALIDATION_PENDING","M15_ACCEPTED_INVALIDATION_OWNER_SUSPENDED");
       return;
    }
