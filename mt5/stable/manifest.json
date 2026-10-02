@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.3",
+  "release": "6.4.4",
   "repository": "Davemafy/icloud",
-  "ref": "1833419fe16bde065d923fc56d6ffc3c09db9212",
+  "ref": "a214aa1564966d6a59f6491ce7055f47b3bf795e",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.63",
+  "sequence_ea_version": "3.64",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -242,7 +242,13 @@
     "model2_engulfing_no_separate_mss_required",
     "model3_breakout_no_separate_mss_required",
     "breakout_direct_entry_disabled",
-    "breakout_reduced_campaign_risk"
+    "breakout_reduced_campaign_risk",
+    "objective_aware_profit_protection",
+    "tp1_majority_profit_capture",
+    "deepest_objective_runner_tp",
+    "near_target_high_water_lock",
+    "completed_objective_runner_ratchet",
+    "cost_aware_break_even"
   ],
   "files": [
     {
@@ -255,11 +261,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_63_ModelSpecificSniperConfirmation_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_64_ObjectiveAwareProfitProtection_Demo.mq5",
       "requires_reload": true,
-      "sha256": "02b22cc120deb168dbc3d1a2384e3f65c0db96683842c62755873e3bae93ea0c"
+      "sha256": "33b883e45f10e370002da651d590550d7e2c7e6f7b8470a21fb1d494a0e48d72"
     }
   ],
   "support_files": [
