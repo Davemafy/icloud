@@ -3,9 +3,10 @@ from __future__ import annotations
 from .config import SETTINGS
 from .db import connect
 from .models import Direction, MarketSnapshot
+from .mitigation_audit import _accepted_invalidation
 from .thesis_ownership_policy import active_owner_snapshot
 
-HARD_RELEASE_CONTRACT = "STALE_THESIS_HARD_RELEASE_V6519"
+HARD_RELEASE_CONTRACT = "ACTIVE_OWNER_ACCEPTED_INVALIDATION_V65128"
 HARD_DISTANCE_M15_ATR = 0.50
 
 
@@ -31,6 +32,18 @@ def hard_release_stale_thesis(snapshot: MarketSnapshot) -> bool:
 
     last = snapshot.xau_m15[-1]
     prev = snapshot.xau_m15[-2]
+
+    # Use the same canonical M15 acceptance contract as zone formation/mitigation.
+    # This applies even while the frozen owner is still present in the current map:
+    # an unfinished liquidity objective can never protect an accepted-invalidated thesis.
+    accepted, accepted_reason = _accepted_invalidation(
+        Direction.SELL if sell else Direction.BUY,
+        float(owner.get("zone_low") or 0.0),
+        float(owner.get("zone_high") or 0.0),
+        list(snapshot.xau_m15),
+        len(snapshot.xau_m15) - 1,
+        list(snapshot.xau_m15),
+    )
     last_close = float(last.close)
     prev_close = float(prev.close)
     beyond_last = last_close > boundary if sell else last_close < boundary
@@ -40,11 +53,15 @@ def hard_release_stale_thesis(snapshot: MarketSnapshot) -> bool:
     m15a = max(float(snapshot.atr_m15 or 0.0), float(snapshot.point or 0.01), 1e-9)
     distance = (last_close - boundary) if sell else (boundary - last_close)
     hard_distance = beyond_last and distance >= HARD_DISTANCE_M15_ATR * m15a
-    if not (two_closes or hard_distance):
+    if not (accepted or two_closes or hard_distance):
         return False
 
     now = int(snapshot.sent_at)
-    reason = "STALE_OWNER_TWO_M15_CLOSES_BEYOND_STORED_INVALIDATION" if two_closes else "STALE_OWNER_HARD_M15_DISTANCE_BEYOND_STORED_INVALIDATION"
+    reason = (
+        f"ACTIVE_OWNER_{accepted_reason}" if accepted
+        else "STALE_OWNER_TWO_M15_CLOSES_BEYOND_STORED_INVALIDATION" if two_closes
+        else "STALE_OWNER_HARD_M15_DISTANCE_BEYOND_STORED_INVALIDATION"
+    )
     with connect() as db:
         db.execute(
             """
