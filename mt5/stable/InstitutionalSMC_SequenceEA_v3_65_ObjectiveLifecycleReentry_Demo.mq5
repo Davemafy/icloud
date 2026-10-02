@@ -2218,6 +2218,10 @@ bool TZ62_ConfirmBoundaryBreakout(MqlRates &r[],double a,bool buy,double rangeLo
    sig.valid=false;if(br<3||a<=0)return false;
    double band=MathMax(_Point*5.0,a*BreakoutBoundaryBandATR),breakBuf=MathMax(_Point*5.0,a*0.05);
    bool broke=buy?(r[br].close>boundary+breakBuf):(r[br].close<boundary-breakBuf);
+   // Direction lock: opposite displacement belongs to invalidation/flip observation,
+   // never to this thesis' Model-3 progression.
+   bool oppositeBreak=buy?(r[br].close<rangeLo-breakBuf):(r[br].close>rangeHi+breakBuf);
+   if(oppositeBreak){stage="BREAKOUT_DIRECTION_CONFLICT";return false;}
    if(!broke||!StrongDisp(r,br,a,BreakoutMinBreakATR,buy)){stage="BREAKOUT_DISPLACEMENT";return false;}
    bool accepted=false,failed=false;int accOldest=MathMax(1,br-MathMax(1,BreakoutAcceptanceBars));
    for(int j=br-1;j>=accOldest;j--){bool rejectedBack=buy?(r[j].close<boundary-band):(r[j].close>boundary+band);if(rejectedBack){failed=true;break;}bool held=buy?(r[j].close>=boundary):(r[j].close<=boundary);if(held)accepted=true;}
@@ -2708,6 +2712,15 @@ void Evaluate()
    // Capture an accepted invalidation against the OLD plan only when that plan is
    // not a currently acquired non-terminal thesis owner. An active owner has
    // priority over dormant flip/reclaim alternatives until the owner is released.
+   // Accepted M15 invalidation outranks sticky owner/objective persistence. Capture
+   // the failed owner geometry first; invalidation itself is never an entry.
+   if(M15Acceptance())
+   {
+      TZ28_ArmAcceptedFlip();
+      g_tzExecutionAuthority="NONE";
+      TZ_SetGate("INVALIDATION_PENDING","M15_ACCEPTED_INVALIDATION_OWNER_SUSPENDED");
+      return;
+   }
    if(!TZ45_ActiveOwnerMatchesCurrentPlan())TZ28_ArmAcceptedFlip();
 
    if(!TZ31_RefreshCloudState(false)){TZ_SetGate("PLAN","PLAN_REFRESH_FAILED");return;}
