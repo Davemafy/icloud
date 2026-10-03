@@ -3,6 +3,7 @@ from app.execution_owner_mirror import owner_plan_text
 from app.models import Analysis, Bar, Direction, Grade, Heartbeat, MarketSnapshot, Zone, ZoneState
 from app.target_revalidation import target_ladder_truth
 import app.thesis_ownership_policy as ownership
+import app.scheduler as scheduler
 from app.zone_reaction_lifecycle import register_analysis_zones, update_zone_reactions
 
 
@@ -379,3 +380,32 @@ def test_cap_completion_uses_only_post_cap_evidence_not_historical_best(tmp_path
     assert row["last_reason"] == "OPPOSING_ZONE_OWNER_OBJECTIVE_CAP_REACHED"
     assert int(row["objective_complete_at"]) == 10_900
     assert int(row["ownership_objective_cap_reached_at"]) == 10_900
+
+
+def test_scheduler_retries_missing_owner_cap_when_sequence_recovers_flat(monkeypatch):
+    buy = _zone("BUY_OWNER", Direction.BUY, 111)
+    sell = _zone("SELL_OPPOSING", Direction.SELL, 222)
+    analysis = _current(buy, sell)
+    analysis.selected_zone_id = buy.zone_id
+    snap = _snapshot(ts=10_000, mid=105.0)
+
+    owner = {
+        "reaction_key": "BUY|H1|111",
+        "ownership_zone_id": buy.zone_id,
+        "latest_zone_id": buy.zone_id,
+        "direction": "BUY",
+        "ownership_objective_cap": 0.0,
+    }
+    monkeypatch.setattr(scheduler, "latest_analysis", lambda ai_required=False: analysis)
+    monkeypatch.setattr(scheduler, "active_owner_snapshot", lambda now: owner)
+    monkeypatch.setattr(scheduler, "_sequence_flat_fresh", lambda now: True)
+
+    refresh = scheduler._owner_cap_reconciliation_refresh(snap, 10_000)
+
+    assert refresh["owner_zone_id"] == buy.zone_id
+    assert refresh["opposing_zone_id"] == sell.zone_id
+    assert refresh["candidate_cap"] == 109.7
+    assert "existing=0.00000" in refresh["signature"]
+
+    owner["ownership_objective_cap"] = 109.7
+    assert scheduler._owner_cap_reconciliation_refresh(snap, 10_001) == {}
