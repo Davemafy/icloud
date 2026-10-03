@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "38a4a49ed39c9445630d0a672295a68064e4295f6971c4e7509e958bb18ed168",
+    SEQ: "bf29142e8c88e534c86795393680e48430ed04ae09a13be838227109ff0bc3b8",
     BRIDGE: "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
@@ -29,11 +29,14 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.65"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.65"' in seq
+    assert '#property version   "3.66"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.66"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
+    assert "M15_ACCEPTED_INVALIDATION_OWNER_SUSPENDED" in seq
+    assert "BREAKOUT_DIRECTION_CONFLICT" in seq
+    assert "TZ28_EvaluateAcceptedFlip();" in seq
     assert '#property version "1.58"' in bridge
     assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
     assert '#define TZ_SEQUENCE_EXPECTED "' in bridge  # installer patches this to manifest sequence_ea_version
@@ -42,10 +45,10 @@ def test_release_payload_versions_and_parity_wiring():
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.4.5"
-    assert manifest["ref"] == "f344d669f4e0ffd52d9a1317be5ceb61fc56ad3e"
+    assert manifest["release"] == "6.4.6"
+    assert manifest["ref"] == "0844b2f422482ebdae3b7c7df8fb343e5034aaa5"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.65"
+    assert manifest["sequence_ea_version"] == "3.66"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]

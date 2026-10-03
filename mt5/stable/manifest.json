@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.5",
+  "release": "6.4.6",
   "repository": "Davemafy/icloud",
-  "ref": "f344d669f4e0ffd52d9a1317be5ceb61fc56ad3e",
+  "ref": "0844b2f422482ebdae3b7c7df8fb343e5034aaa5",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.65",
+  "sequence_ea_version": "3.66",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -252,7 +252,11 @@
     "owner_target_completion_import",
     "consumed_objective_skip_on_reentry",
     "late_stage_owner_zone_reacquisition",
-    "reentry_cap_preserved_across_rerank"
+    "reentry_cap_preserved_across_rerank",
+    "accepted_owner_invalidation_suspends_execution_authority",
+    "accepted_owner_invalidation_persisted_flip_evaluation",
+    "model3_opposite_break_direction_conflict",
+    "sequence_366_truth_overlay"
   ],
   "files": [
     {
@@ -265,11 +269,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_65_ObjectiveLifecycleReentry_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
       "requires_reload": true,
-      "sha256": "38a4a49ed39c9445630d0a672295a68064e4295f6971c4e7509e958bb18ed168"
+      "sha256": "bf29142e8c88e534c86795393680e48430ed04ae09a13be838227109ff0bc3b8"
     }
   ],
   "support_files": [
