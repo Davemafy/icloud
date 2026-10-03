@@ -81,6 +81,20 @@ def test_live_buy_thesis_overrides_new_sell_ranking(monkeypatch):
         overall_bias=Direction.SELL,
         zones=[sell, buy],
         selected_zone_id="SELL_ZONE",
+        execution_policy={
+            "public_zone_map": {
+                "buy": {
+                    "audit_zone_id": "STALE_BUY_ZONE",
+                    "core_low": 1.0,
+                    "core_high": 2.0,
+                    "low": 0.0,
+                    "high": 3.0,
+                    "mitigation_audit": {"stale": True},
+                },
+                "sell": {"audit_zone_id": "SELL_ZONE"},
+                "map_count": 2,
+            }
+        },
     )
     monkeypatch.setattr(policy, "_active_owner_row", lambda now: _owner())
 
@@ -95,6 +109,15 @@ def test_live_buy_thesis_overrides_new_sell_ranking(monkeypatch):
     assert meta["ownership_authority"] == "HTF_CORE_HANDOFF"
     assert meta["continuation_authority"] is True
     assert "thesis_owner:BUY:REACTION_CONFIRMED" in buy.notes
+    public_buy = analysis.execution_policy["public_zone_map"]["buy"]
+    assert public_buy["audit_zone_id"] == "BUY_ZONE"
+    assert public_buy["core_low"] == buy.core_low
+    assert public_buy["core_high"] == buy.core_high
+    assert public_buy["low"] == buy.zone_low
+    assert public_buy["high"] == buy.zone_high
+    assert public_buy["source_ts"] == buy.source_ts
+    assert public_buy["mitigation_audit"] == buy.mitigation_audit
+    assert public_buy["owner_projection_contract"] == "FROZEN_OWNER_PUBLIC_MAP_IDENTITY_V65129"
 
 
 def test_live_thesis_without_current_owner_zone_fails_closed(monkeypatch):
