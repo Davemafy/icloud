@@ -275,13 +275,22 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     return t || {};
   }
 
-  function nextObjective(t){
+  function nextObjective(t,j){
+    // The journal backend already reconciles target-hit timestamps, owner best
+    // price and any active opposing-zone lifecycle cap. Prefer that canonical
+    // value so this read-only context panel cannot disagree with the beginner
+    // target-ladder truth below it.
+    const journalNext=Number(j?.next_open_thesis_objective);
+    if(Number.isFinite(journalNext) && journalNext>0)return journalNext;
+
     const dir=String(t?.direction||'').toUpperCase();
     const best=Number(t?.best_price);
     const haveBest=Number.isFinite(best) && best>0;
     for(const key of ['target1','target2','target3']){
       const target=Number(t?.[key]);
       if(!Number.isFinite(target) || target<=0)continue;
+      const hitAt=Number(t?.[key+'_hit_at']||0);
+      if(Number.isFinite(hitAt) && hitAt>0)continue;
       const reached=haveBest && (
         (dir==='SELL' && best<=target) ||
         (dir==='BUY' && best>=target)
@@ -407,7 +416,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       if(thesis.opposite_execution_blocked===true){
         parts.push('All non-owner/opposite zones are WATCH ONLY until the acquired thesis is released.');
       }
-      const objective=nextObjective(thesis);
+      const objective=nextObjective(thesis,j);
       if(objective!==null){
         parts.push('Next open thesis objective '+Number(objective).toLocaleString(undefined,{maximumFractionDigits:3})+'.');
       }

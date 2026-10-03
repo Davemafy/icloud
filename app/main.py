@@ -1003,15 +1003,15 @@ def _journal_snapshot():
 
     finalized_mode = str(final_plan.get("ea_mode") or "")
     finalized_authority = str(final_plan.get("execution_authority") or "NONE")
+    # The finalized execution_authority is the canonical macro handoff truth.
+    # Per-model readiness flags are diagnostic implementation details and can
+    # legitimately be absent/stale after a sticky owner is restored at read time.
+    # Requiring both duplicated signals made the dashboard report
+    # "Macro thesis / handoff authority NO" while Cloud and Sequence both carried
+    # HTF_*_HANDOFF. WATCH_ONLY/NONE still fails closed.
     finalized_handoff = bool(
         finalized_mode == "DUAL_BRANCH"
         and finalized_authority != "NONE"
-        and (
-            str(final_plan.get("core_handoff_ready") or "") == "1"
-            or str(final_plan.get("zone_sweep_handoff_ready") or "") == "1"
-            or str(final_plan.get("liquidity_handoff_ready") or "") == "1"
-            or str(final_plan.get("owner_continuation_ready") or "") == "1"
-        )
     )
     map_m1_ready = bool(z and readiness == "M1_READY")
 
