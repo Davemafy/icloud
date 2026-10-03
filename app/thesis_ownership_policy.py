@@ -8,7 +8,7 @@ from .execution_ownership_migration import ensure_execution_ownership_schema
 from .models import Analysis, Direction, MarketSnapshot, Zone, ZoneState
 from .liquidity_reversal_handoff import INTERZONE_TRANSIT_REASON, interzone_transit_guard
 from .liquidity_objective_policy import opposing_zone_front_run_cap
-from .risk_matrix import execution_grade_eligible
+from .risk_matrix import execution_grade_eligible, original_risk_pct, zone_risk_context
 
 THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65108"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
@@ -555,6 +555,116 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
     }
 
 
+def _sync_owner_public_map(analysis: Analysis, owner_zone: Zone) -> None:
+    """Keep public_zone_map identity/geometry aligned with a frozen thesis owner.
+
+    apply_thesis_ownership may replace a freshly ranked same-side zone with the
+    exact zone that originally acquired execution authority. public_zone_map is
+    side-keyed and was built before that replacement, so leaving it untouched
+    creates two competing zone identities in the same analysis payload. The AI
+    validator and dashboard then see stale geometry/mitigation telemetry even
+    though analysis.zones correctly contains the owner. This is display/contract
+    synchronization only; it never changes the frozen owner geometry or authority.
+    """
+    policy = dict(analysis.execution_policy or {})
+    zone_map = dict(policy.get("public_zone_map") or {})
+    side = owner_zone.original_direction.value.lower()
+    entry = dict(zone_map.get(side) or {})
+
+    def note_text(prefix: str, fallback: str = "") -> str:
+        for raw in list(owner_zone.notes or []):
+            text = str(raw)
+            if text.startswith(prefix):
+                return text.split(":", 1)[1]
+        return fallback
+
+    def note_int(prefix: str, fallback: int = 0) -> int:
+        raw = note_text(prefix, "")
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            return int(fallback)
+
+    def note_float(prefix: str, fallback: float = 0.0) -> float:
+        raw = note_text(prefix, "")
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(fallback)
+
+    structural_grade = note_text("structural_grade:", owner_zone.grade.value)
+    current_grade = note_text("current_execution_grade:", owner_zone.grade.value)
+    live_touch = note_int("live_core_touched_at:", 0)
+    publication_status = note_text(
+        "publication_execution_status:",
+        "LIVE_CONTACT_CONFIRMED" if live_touch else "RETEST_ONLY_NO_LIVE_CONTACT",
+    )
+
+    # zone_id is intentionally not exported by the cleaned public map because
+    # DataBridge treats literal zone_id fields as renderable zone records.
+    entry.pop("zone_id", None)
+    entry.update(
+        {
+            "audit_zone_id": owner_zone.zone_id,
+            "direction": owner_zone.original_direction.value,
+            "flip_direction": owner_zone.flip_direction.value,
+            "setup_type": owner_zone.setup_type,
+            "state": str(owner_zone.core_method or "").split("|", 1)[0],
+            "source_tf": owner_zone.source_tf,
+            "source_ts": int(owner_zone.source_ts or 0),
+            "structural_grade": structural_grade,
+            "grade": current_grade,
+            "current_execution_grade": current_grade,
+            "grade_degrade_reason": note_text("grade_degrade_reason:", "NONE"),
+            "structural_aplus_missing": note_text("structural_aplus_missing:", "NONE"),
+            "structural_a_missing": note_text("structural_a_missing:", "NONE"),
+            "grade_location_score": note_float(
+                "grade_location_score:", float(owner_zone.location_score or 0.0)
+            ),
+            "grade_source_strength": note_float("grade_source_strength:", 0.0),
+            "low": float(owner_zone.zone_low),
+            "high": float(owner_zone.zone_high),
+            "core_low": float(owner_zone.core_low),
+            "core_high": float(owner_zone.core_high),
+            "touches": int(owner_zone.touch_count),
+            "qualified_mitigations": note_int(
+                "qualified_mitigations:", int(owner_zone.touch_count)
+            ),
+            "raw_core_touch_episodes": note_int(
+                "raw_core_touch_episodes:", int(owner_zone.touch_count)
+            ),
+            "mitigation_audit": dict(owner_zone.mitigation_audit or {}),
+            "mitigation_expected_approach_side": str(
+                (owner_zone.mitigation_audit or {}).get("expected_approach_side") or ""
+            ),
+            "mitigation_counting_stopped": bool(
+                (owner_zone.mitigation_audit or {}).get("counting_stopped")
+            ),
+            "confluences": list(owner_zone.confluences or []),
+            "execution_grade_eligible": bool(execution_grade_eligible(owner_zone)),
+            "risk_context": zone_risk_context(owner_zone),
+            "base_risk_pct": float(original_risk_pct(owner_zone)),
+            "geometry_published_at": note_int("geometry_published_at:", 0),
+            "publication_qualified_mitigations": note_int(
+                "publication_qualified_mitigations:", 0
+            ),
+            "publication_raw_core_contacts": note_int(
+                "publication_raw_core_contacts:", 0
+            ),
+            "live_core_touched_at": live_touch,
+            "live_core_touch_basis": note_text("live_core_touch_basis:", ""),
+            "live_core_touch_price": note_float("live_core_touch_price:", 0.0),
+            "publication_execution_status": publication_status,
+            "owner_projection": True,
+            "owner_projection_contract": "FROZEN_OWNER_PUBLIC_MAP_IDENTITY_V65129",
+        }
+    )
+    zone_map[side] = entry
+    zone_map["map_count"] = len(list(analysis.zones or []))
+    policy["public_zone_map"] = zone_map
+    analysis.execution_policy = policy
+
+
 def _handoff_reaction_instance(
     db,
     analysis: Analysis,
@@ -973,6 +1083,8 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     policy["active_thesis"] = _owner_meta(owner, owner_zone)
     analysis.execution_policy = policy
     _reconcile_owner_objective_cap(analysis, snapshot, owner, owner_zone)
+    if owner_zone is not None:
+        _sync_owner_public_map(analysis, owner_zone)
 
     if owner_zone is None:
         analysis.selected_zone_id = ""
