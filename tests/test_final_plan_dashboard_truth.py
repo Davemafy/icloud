@@ -230,3 +230,26 @@ def test_journal_displays_persisted_acquisition_anchor_without_changing_executio
     assert journal["target_ownership_acquired_at"] == 900
     # Execution authority remains sourced from the final plan/Sequence path.
     assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
+
+
+def test_finalized_authority_is_macro_handoff_truth_even_without_duplicate_ready_flags(monkeypatch):
+    zone = _zone()
+    analysis = _analysis(zone)
+    snapshot = _snapshot()
+    _patch_common(monkeypatch, analysis, snapshot, "HTF_CORE_HANDOFF")
+    monkeypatch.setattr(
+        main,
+        "active_plan_text",
+        lambda *_args, **_kwargs: (
+            "ea_mode=DUAL_BRANCH\n"
+            "execution_authority=HTF_CORE_HANDOFF\n"
+            "usable_runway_ok=1\n"
+            "separation_guard=PASS\n"
+        ),
+    )
+
+    journal = main._journal_snapshot()
+
+    assert journal["checks"]["m1_handoff_ready"] is True
+    assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
+    assert journal["sequence_debug"]["cloud_ea_mode"] == "DUAL_BRANCH"
