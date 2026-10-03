@@ -27,7 +27,19 @@ def _payload(a: Analysis, s: MarketSnapshot) -> dict[str, Any]:
         "overall_bias": a.overall_bias.value,
         "primary_liquidity": a.primary_liquidity,
         "spread_points": s.spread_points,
-        "guards": a.guards,
+        # Live spread is an order-time guard. Keep structural/data guards in the
+        # AI contract, but do not invite the validator to erase a valid acquired
+        # thesis merely because execution is temporarily too expensive.
+        "guards": [
+            g for g in a.guards
+            if not str(g).startswith("SPREAD_HIGH:")
+        ],
+        "runtime_safety": {
+            "spread_points": float(s.spread_points),
+            "max_spread_points": float(SETTINGS.max_spread_points),
+            "spread_safe": bool(s.spread_points <= SETTINGS.max_spread_points),
+            "spread_semantics": "ORDER_BLOCK_ONLY_NOT_STRUCTURAL_MAP_INVALIDATION",
+        },
         "execution_policy": a.execution_policy,
         "zones": [
             {
@@ -194,13 +206,19 @@ Validate the prompt-driven PAPER/DEMO zone map with these rules:
     because the D1-aligned zone was pre-selected. After one side earns a valid handoff and ownership, normal
     thesis ownership blocks the opposite side until release. Countertrend authority never bypasses spread/news/
     snapshot safety, target-direction checks, actual-entry minimum-RR, risk sizing, or the three M1 sniper models.
+15. LIVE SPREAD SEPARATION: spread above the configured execution threshold is a transient ORDER-TIME
+    safety hold, not a structural-zone failure and not a reason to erase an already acquired thesis owner.
+    The deterministic /mt5/plan live_block and Sequence SAFETY gate enforce the spread threshold immediately
+    before execution. Do not reject this structural/ownership validation solely because current spread is high.
+    A stale/incomplete market snapshot remains a data-quality concern and may still fail validation.
 
 This contract comes from the user's institutional XAU framework: identify the MOST IMPORTANT levels where
 price is most likely to react, reverse or continue TODAY, while following visible D1/H4/H1/M15 structure,
 liquidity, source candles, displacement, FVG, mitigation, ATR/spread/news and DXY confirmation.
 
-Reject validation only when a published primary breaks these rules or supplied safety guards. A reserve
-zone in execution_policy is context-only and must not be treated as an active execution zone. Do not reapply
+Reject validation only when a published primary breaks these rules or supplied STRUCTURAL/DATA guards.
+Transient live spread is deliberately excluded from structural rejection because downstream live_block/Sequence
+safety owns that order-time check. A reserve zone in execution_policy is context-only and must not be treated as an active execution zone. Do not reapply
 old broad fixed-width geometry, tiny exact-candle envelopes, mandatory two-sided primary output, or mandatory
 multi-confluence filters that are not in this prompt-driven contract.
 
