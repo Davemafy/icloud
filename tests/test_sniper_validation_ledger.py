@@ -464,3 +464,91 @@ def test_canonical_ledger_keeps_first_publication_after_more_than_old_raw_window
     assert row["publication_observation_count"] == 650
     assert row["execution_state"] == "CLOSED"
     assert out["summary"]["executed_publications"] == 1
+
+
+def test_ledger_reconciles_analysis_scoped_owner_instance_and_frozen_publication_truth(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    zone = _zone()
+    frozen = zone.model_copy(deep=True)
+    frozen.notes = [
+        *list(frozen.notes or []),
+        "geometry_published_at:100",
+        "publication_qualified_mitigations:0",
+        "publication_raw_core_contacts:1",
+        "live_core_touched_at:120",
+        "live_core_touch_basis:LIVE_QUOTE_OVERLAP",
+        "live_core_touch_price:4365.00000",
+    ]
+
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO zone_publications(
+                publication_key,reaction_key,geometry_signature,first_analysis_id,latest_analysis_id,
+                zone_id,direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,
+                first_published_at,last_seen_at,publication_qualified_mitigations,
+                publication_raw_core_contacts,live_core_touched_at,status
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "PUB_OWNER_NEW","RX_BASE","SIG_OWNER_NEW","A_NEW","A_NEW",
+                zone.zone_id,"SELL","H4>H1",90,zone.core_low,zone.core_high,
+                zone.zone_low,zone.zone_high,200,260,0,1,0,"PUBLISHED",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO zone_reactions(
+                reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+                direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+                first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+                target1,target2,target3,runner,target1_hit_at,target2_hit_at,target3_hit_at,
+                objective_complete_at,invalidated_at,best_price,mfe_price,last_reason,
+                ownership_acquired_at,ownership_authority,ownership_analysis_id,ownership_anchor_price,
+                ownership_zone_id,ownership_zone_payload
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "RX_BASE","A_NEW","A_NEW",zone.zone_id,zone.zone_id,"SELL","H4>H1",90,
+                zone.core_low,zone.core_high,zone.zone_low,zone.zone_high,"A+","ARMED",
+                200,260,0,0,
+                zone.original_target1,zone.original_target2,zone.original_target3,zone.original_runner,
+                0,0,0,0,0,zone.core_low,0.0,"ZONE_PUBLISHED",
+                0,"","",0.0,"","",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO zone_reactions(
+                reaction_key,first_analysis_id,latest_analysis_id,first_zone_id,latest_zone_id,
+                direction,source_tf,source_ts,core_low,core_high,zone_low,zone_high,grade,status,
+                first_seen_at,last_seen_at,core_touched_at,reaction_confirmed_at,
+                target1,target2,target3,runner,target1_hit_at,target2_hit_at,target3_hit_at,
+                objective_complete_at,invalidated_at,best_price,mfe_price,last_reason,
+                ownership_acquired_at,ownership_authority,ownership_analysis_id,ownership_anchor_price,
+                ownership_zone_id,ownership_zone_payload
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "RX_BASE|OWN|A_OWNER","A_OWNER","A_OWNER",zone.zone_id,zone.zone_id,
+                "SELL","H4>H1",90,zone.core_low,zone.core_high,zone.zone_low,zone.zone_high,
+                "A+","OBJECTIVE_IN_PROGRESS",100,260,120,140,
+                zone.original_target1,zone.original_target2,zone.original_target3,zone.original_runner,
+                170,0,0,0,0,4339.5,30.0,"LIQUIDITY_OBJECTIVE_PROGRESS",
+                145,"HTF_CORE_HANDOFF","A_OWNER",4365.0,zone.zone_id,frozen.model_dump_json(),
+            ),
+        )
+
+    out = ledger.build_validation_ledger(limit=10)
+
+    assert out["summary"]["publications"] == 1
+    assert out["summary"]["live_contacts"] == 1
+    assert out["summary"]["reaction_confirmed"] == 1
+    row = out["rows"][0]
+    assert row["published_at"] == 100
+    assert row["live_core_touched_at"] == 120
+    assert row["lifecycle_status"] == "OBJECTIVE_IN_PROGRESS"
+    assert row["handoff_authority"] == "HTF_CORE_HANDOFF"
+    assert row["handoff_at"] == 145
+    assert row["outcome"] == "OBJECTIVE_PROGRESS"
+    assert row["reaction_key"] == "RX_BASE|OWN|A_OWNER"
