@@ -268,3 +268,11 @@ def test_dashboard_sequence_363_truth_and_reconstruction_telemetry():
         assert needle in cleaned
     assert "BREAKOUT_M1_MICRO_SHIFT" not in cleaned
     assert "Sequence 3.61 checks" not in cleaned
+
+
+def test_owner_context_panel_prefers_canonical_journal_next_objective():
+    cleaned = compact_dashboard_html('<h2>Live trading journal</h2></body>')
+    assert "function nextObjective(t,j)" in cleaned
+    assert "j?.next_open_thesis_objective" in cleaned
+    assert "t?.[key+'_hit_at']" in cleaned
+    assert "const objective=nextObjective(thesis,j);" in cleaned
