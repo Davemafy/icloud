@@ -5,10 +5,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 
 from .config import SETTINGS
-from .db import audit, latest_analysis, latest_snapshot
+from .db import audit, latest_analysis, latest_snapshot, latest_heartbeats
 from .institutional_two_zone import primary_zone_approaching, primary_zone_interacting
 from .engine import atr
 from .liquidity_reversal_handoff import detect_liquidity_reversal_handoff
+from .liquidity_objective_policy import opposing_zone_front_run_cap
 from .prompt_contract import prompt_snapshot_complete
 from .runtime_version_truth import install_runtime_version_truth_policy
 from .thesis_hard_release import hard_release_stale_thesis
@@ -30,6 +31,7 @@ _thesis_state_latch: str = ""
 _liquidity_reversal_latch: str = ""
 _wrong_side_context_latch: set[str] = set()
 _market_drift_latch: str = ""
+_owner_cap_reconcile_latch: str = ""
 
 
 def _parse_hhmm(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
@@ -90,6 +92,7 @@ def scheduler_status() -> dict:
         "liquidity_reversal_latch": _liquidity_reversal_latch or None,
         "wrong_side_context_latch_count": len(_wrong_side_context_latch),
         "market_drift_latch": _market_drift_latch or None,
+        "owner_cap_reconcile_latch": _owner_cap_reconcile_latch or None,
         "market_drift_reanalysis_h1_atr": float(getattr(SETTINGS, "market_drift_reanalysis_h1_atr", 2.0)),
         "market_drift_reanalysis_min_age_minutes": int(getattr(SETTINGS, "market_drift_reanalysis_min_age_minutes", 10)),
         "market_drift_structural_cadence": "NEW_CLOSED_H1_ONLY",
@@ -221,6 +224,78 @@ def _wrong_side_context_ids(snap) -> set[str]:
     return out
 
 
+
+def _sequence_flat_fresh(now_utc: int) -> bool:
+    rows = latest_heartbeats(30)
+    hb = next(
+        (x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"),
+        None,
+    )
+    if hb is None:
+        return False
+    hb_ts = int(hb.get("ts") or 0)
+    if hb_ts <= 0 or int(now_utc) - hb_ts > 45:
+        return False
+    payload = hb.get("payload") if isinstance(hb.get("payload"), dict) else {}
+    details = dict(payload.get("details") or {}) if isinstance(payload, dict) else {}
+    try:
+        return int(details.get("open_positions") or 0) == 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _owner_cap_reconciliation_refresh(snap, now_utc: int) -> dict:
+    """Request one fresh analysis when a flat owner needs a new opposing-zone cap.
+
+    Cap reconciliation intentionally waits for fresh Sequence flat-position truth.
+    If the opposing primary is first published while Sequence heartbeat truth is
+    unavailable (for example during a Cloud deploy), the original analysis safely
+    defers the cap. Without a later trigger that deferred state can persist even
+    after Sequence is healthy. This detector is read-only and only schedules a
+    normal analysis retry; run_analysis remains the sole writer/authority.
+    """
+    if not SETTINGS.paper_only or not _sequence_flat_fresh(now_utc):
+        return {}
+    analysis = latest_analysis(ai_required=False)
+    owner = active_owner_snapshot(int(now_utc))
+    if analysis is None or owner is None:
+        return {}
+
+    owner_id = str(owner.get("ownership_zone_id") or owner.get("latest_zone_id") or "")
+    direction = str(owner.get("direction") or "").upper()
+    owner_zone = next(
+        (
+            z for z in list(getattr(analysis, "zones", []) or [])
+            if str(getattr(z, "zone_id", "") or "") == owner_id
+        ),
+        None,
+    )
+    if owner_zone is None:
+        return {}
+
+    candidate, meta = opposing_zone_front_run_cap(owner_zone, analysis, snap)
+    if candidate is None or meta is None:
+        return {}
+
+    existing = float(owner.get("ownership_objective_cap") or 0.0)
+    proposed = float(candidate)
+    stricter = bool(
+        existing <= 0
+        or (direction == "BUY" and proposed < existing - 1e-9)
+        or (direction == "SELL" and proposed > existing + 1e-9)
+    )
+    if not stricter:
+        return {}
+
+    opposing_id = str(meta.get("zone_id") or "")
+    return {
+        "signature": f"{owner.get('reaction_key','')}|{opposing_id}|{proposed:.5f}|existing={existing:.5f}",
+        "owner_zone_id": owner_id,
+        "opposing_zone_id": opposing_id,
+        "candidate_cap": proposed,
+    }
+
+
 def _latest_closed_h1_ts(snap) -> int:
     """Latest causally closed H1 bar in the snapshot."""
     sent_at = int(getattr(snap, "sent_at", 0) or 0)
@@ -349,7 +424,7 @@ def _liquidity_reversal_signature(snap) -> str:
 
 
 async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> None:
-    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch, _wrong_side_context_latch, _market_drift_latch
+    global _last_snapshot_seen, _thesis_state_latch, _liquidity_reversal_latch, _wrong_side_context_latch, _market_drift_latch, _owner_cap_reconcile_latch
     tz = safe_zoneinfo(SETTINGS.timezone_name)
     startup_analysis_pending = True
     while True:
@@ -414,6 +489,14 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                 if not drift_sig:
                     _market_drift_latch = ""
 
+                owner_cap = _owner_cap_reconciliation_refresh(snap, now_utc)
+                owner_cap_sig = str(owner_cap.get("signature") or "")
+                owner_cap_changed = bool(
+                    owner_cap_sig and owner_cap_sig != _owner_cap_reconcile_latch
+                )
+                if not owner_cap_sig:
+                    _owner_cap_reconcile_latch = ""
+
                 refresh_reason = ""
                 if hard_released:
                     refresh_reason = "STALE_THESIS_HARD_RELEASE"
@@ -421,6 +504,11 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
                     refresh_reason = f"ACTIVE_THESIS_STATE:{thesis_sig or 'RELEASED'}"
                 elif lr_changed:
                     refresh_reason = f"LIQUIDITY_REVERSAL_HANDOFF:{lr_sig}"
+                elif owner_cap_changed:
+                    refresh_reason = (
+                        f"OWNER_OBJECTIVE_CAP_RECONCILE:{owner_cap.get('owner_zone_id','')}:"
+                        f"{owner_cap.get('opposing_zone_id','')}:{float(owner_cap.get('candidate_cap') or 0.0):.5f}"
+                    )
                 elif new_wrong_side_ids:
                     refresh_reason = f"WRONG_SIDE_CONTEXT_REQUALIFY:{','.join(sorted(new_wrong_side_ids)[:2])}"
                 elif new_m1_ids:
@@ -440,6 +528,8 @@ async def scheduler_loop(run_analysis: Callable[[str], Awaitable[object]]) -> No
 
                 if drift_sig and (drift_changed or ran_analysis):
                     _market_drift_latch = drift_sig
+                if owner_cap_sig and (owner_cap_changed or ran_analysis):
+                    _owner_cap_reconcile_latch = owner_cap_sig
 
             if len(_last_keys) > 300:
                 cutoff = (now.date() - timedelta(days=7)).isoformat()
