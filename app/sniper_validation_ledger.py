@@ -236,6 +236,157 @@ def _canonicalize_publications(rows: list[dict], limit: int) -> list[dict]:
     return ordered[:limit]
 
 
+
+def _zone_validation_sample_key(zone: Zone) -> str:
+    return "|".join(
+        (
+            zone.original_direction.value,
+            str(zone.source_tf or ""),
+            str(int(zone.source_ts or 0)),
+            f"{float(zone.core_low or 0.0):.5f}",
+            f"{float(zone.core_high or 0.0):.5f}",
+        )
+    )
+
+
+def _owner_lifecycle_by_sample() -> dict[str, dict]:
+    """Return the authoritative acquired lifecycle row per canonical source/core.
+
+    Execution handoffs can create analysis-scoped reaction instances whose key is
+    suffixed with |OWN|..., while zone_publications keeps the base reaction key.
+    Joining only on exact reaction_key therefore made a live owner appear ARMED
+    in the research ledger. Prefer a nonterminal acquired instance for the same
+    canonical source/core; otherwise retain the most recent acquired instance.
+    """
+    ensure_execution_ownership_schema()
+    with connect() as db:
+        rows = db.execute(
+            """
+            SELECT reaction_key,latest_zone_id,direction,source_tf,source_ts,status,
+                   core_low,core_high,zone_low,zone_high,grade,core_touched_at,
+                   reaction_confirmed_at,target1,target2,target3,target1_hit_at,
+                   target2_hit_at,target3_hit_at,objective_complete_at,invalidated_at,
+                   best_price,mfe_price,last_reason,first_seen_at,last_seen_at,
+                   ownership_acquired_at,ownership_authority,ownership_analysis_id,
+                   ownership_anchor_price,ownership_zone_id,ownership_zone_payload
+            FROM zone_reactions
+            WHERE ownership_acquired_at>0
+            ORDER BY
+                CASE
+                    WHEN invalidated_at=0 AND objective_complete_at=0
+                     AND status IN ('INTERACTING','REACTION_CONFIRMED','OBJECTIVE_IN_PROGRESS')
+                    THEN 0 ELSE 1
+                END,
+                ownership_acquired_at DESC,
+                last_seen_at DESC
+            """
+        ).fetchall()
+    out: dict[str, dict] = {}
+    for raw in rows:
+        row = dict(raw)
+        key = _validation_sample_key(row)
+        if key not in out:
+            out[key] = row
+    return out
+
+
+def _overlay_owner_lifecycle(publications: list[dict]) -> list[dict]:
+    """Reconcile canonical publication rows with persisted owner-instance truth.
+
+    This is observation-only. It never changes zone_publications or zone_reactions.
+    The frozen owner payload can also restore an earlier exact publication/contact
+    timestamp when later reanalysis created a new publication row for the same
+    source/core.
+    """
+    owners = _owner_lifecycle_by_sample()
+    if not owners:
+        return publications
+
+    lifecycle_fields = (
+        "core_touched_at",
+        "reaction_confirmed_at",
+        "target1",
+        "target2",
+        "target3",
+        "target1_hit_at",
+        "target2_hit_at",
+        "target3_hit_at",
+        "objective_complete_at",
+        "invalidated_at",
+        "best_price",
+        "mfe_price",
+        "last_reason",
+        "ownership_acquired_at",
+        "ownership_authority",
+        "ownership_analysis_id",
+        "ownership_anchor_price",
+        "ownership_zone_id",
+    )
+
+    for row in publications:
+        key = _validation_sample_key(row)
+        owner = owners.get(key)
+        if owner is None:
+            continue
+
+        row["reaction_key"] = str(owner.get("reaction_key") or row.get("reaction_key") or "")
+        row["lifecycle_status"] = str(owner.get("status") or row.get("lifecycle_status") or "")
+        row["lifecycle_grade"] = str(owner.get("grade") or row.get("lifecycle_grade") or "")
+        for field in lifecycle_fields:
+            row[field] = owner.get(field)
+
+        payload = str(owner.get("ownership_zone_payload") or "")
+        if not payload:
+            continue
+        try:
+            frozen = Zone.model_validate_json(payload)
+        except Exception:
+            continue
+        if _zone_validation_sample_key(frozen) != key:
+            continue
+
+        frozen_published = _note_int(frozen, "geometry_published_at:", 0)
+        current_published = int(row.get("first_published_at") or 0)
+        if frozen_published > 0 and (current_published <= 0 or frozen_published < current_published):
+            row["first_published_at"] = frozen_published
+            row["publication_qualified_mitigations"] = _note_int(
+                frozen,
+                "publication_qualified_mitigations:",
+                int(row.get("publication_qualified_mitigations") or 0),
+            )
+            row["publication_raw_core_contacts"] = _note_int(
+                frozen,
+                "publication_raw_core_contacts:",
+                int(row.get("publication_raw_core_contacts") or 0),
+            )
+
+        frozen_touch = _note_int(frozen, "live_core_touched_at:", 0)
+        current_touch = int(row.get("live_core_touched_at") or 0)
+        if frozen_touch > 0 and (current_touch <= 0 or frozen_touch < current_touch):
+            row["live_core_touched_at"] = frozen_touch
+            row["live_core_touch_basis"] = _note_text(
+                frozen, "live_core_touch_basis:", str(row.get("live_core_touch_basis") or "")
+            )
+            try:
+                row["live_core_touch_price"] = float(
+                    _note_text(
+                        frozen,
+                        "live_core_touch_price:",
+                        str(row.get("live_core_touch_price") or 0.0),
+                    )
+                    or 0.0
+                )
+            except (TypeError, ValueError):
+                pass
+            row["status"] = "LIVE_CONTACT_CONFIRMED"
+
+    return sorted(
+        publications,
+        key=lambda row: int(row.get("first_published_at") or 0),
+        reverse=True,
+    )
+
+
 def _publication_rows(limit: int) -> list[dict]:
     ensure_execution_ownership_schema()
     ensure_zone_publication_schema()
@@ -283,7 +434,8 @@ def _publication_rows(limit: int) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    return _canonicalize_publications([dict(row) for row in rows], limit)
+    canonical = _canonicalize_publications([dict(row) for row in rows], limit)
+    return _overlay_owner_lifecycle(canonical)
 
 
 def build_validation_ledger(limit: int = 50) -> dict:
