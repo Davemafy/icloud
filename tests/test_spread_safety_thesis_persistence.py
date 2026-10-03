@@ -1,4 +1,5 @@
 from app import db
+import app.ai as ai
 import app.institutional_two_zone as zones
 from app.models import Analysis, Direction, Grade, MarketSnapshot, Zone, ZoneState
 from app.service import _acquire_final_ownership
@@ -103,3 +104,26 @@ def test_high_spread_does_not_prevent_persistent_handoff_ownership(tmp_path, mon
     assert owner is not None
     assert owner["ownership_zone_id"] == zone.zone_id
     assert analysis.execution_policy["active_thesis"]["locked"] is True
+
+
+def test_ai_payload_treats_high_spread_as_runtime_order_hold():
+    snap = _high_spread_snapshot()
+    zone = _zone()
+    analysis = Analysis(
+        analysis_id="A_AI_SPREAD",
+        generated_at=snap.sent_at,
+        snapshot_at=snap.sent_at,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        guards=["SPREAD_HIGH:59.0", "STRUCTURAL_TEST_GUARD"],
+    )
+
+    payload = ai._payload(analysis, snap)
+
+    assert "SPREAD_HIGH:59.0" not in payload["guards"]
+    assert "STRUCTURAL_TEST_GUARD" in payload["guards"]
+    assert payload["runtime_safety"]["spread_safe"] is False
+    assert payload["runtime_safety"]["spread_semantics"] == "ORDER_BLOCK_ONLY_NOT_STRUCTURAL_MAP_INVALIDATION"
+    assert "LIVE SPREAD SEPARATION" in ai.SYSTEM
