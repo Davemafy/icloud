@@ -566,6 +566,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const tracePdTs=Number(seq.trace_pd_ts||0);
     const tracePullbackTs=Number(seq.trace_pullback_ts||0);
     const traceConfirmTs=Number(seq.trace_confirm_ts||0);
+    const orderFlowMode=Number(seq.orderflow_proxy_mode||0);
+    const orderFlowFeed=String(seq.orderflow_proxy_feed||'');
+    const orderFlowState=String(seq.orderflow_proxy_state||'UNAVAILABLE');
+    const orderFlowScore=Number(seq.orderflow_proxy_score||0);
+    const orderFlowDeltaNorm=Number(seq.orderflow_proxy_delta_norm||0);
+    const orderFlowAbsorption=seq.orderflow_proxy_absorption===true;
+    const orderFlowDivergence=seq.orderflow_proxy_divergence===true;
+    const orderFlowExpansion=seq.orderflow_proxy_expansion===true;
     const tracePrice=(v)=>v?Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:5}):'—';
     const traceTime=(v)=>v?new Date(Number(v)*1000).toLocaleString():'—';
     const traceParts=[];
@@ -576,7 +584,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     if(tracePdLow||tracePdHigh)traceParts.push((tracePdType||'PD')+' '+tracePrice(tracePdLow)+'–'+tracePrice(tracePdHigh)+(tracePdTs?' formed @ '+traceTime(tracePdTs):''));
     if(tracePullbackTs)traceParts.push('PD pullback touched @ '+traceTime(tracePullbackTs));
     if(traceConfirmTs)traceParts.push('Directional close @ '+traceTime(traceConfirmTs));
-    const traceText=traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'';
+    const orderFlowFlags=[];
+    if(orderFlowAbsorption)orderFlowFlags.push('absorption');
+    if(orderFlowDivergence)orderFlowFlags.push('divergence');
+    if(orderFlowExpansion)orderFlowFlags.push('delta expansion');
+    const orderFlowText=orderFlowMode>0
+      ? ' Order-flow proxy: '+orderFlowState+' • score '+orderFlowScore.toFixed(2)+' • Δ-proxy '+orderFlowDeltaNorm.toFixed(2)+(orderFlowFlags.length?' • '+orderFlowFlags.join(', '):'')+' • '+(orderFlowFeed||'CFD_TICK_VOLUME_PROXY')+' (broker CFD tick-volume proxy; NOT centralized COMEX bid/ask delta).'
+      : '';
+    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText;
 
     if(seqOnline && seqOpen>0){
       state='IN TRADE • MANAGING';
