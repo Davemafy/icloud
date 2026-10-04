@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.6"
+    assert manifest["release"] == "6.4.7"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.66"
+    assert manifest["sequence_ea_version"] == "3.67"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -188,5 +188,11 @@ def test_professional_release_contract_is_self_consistent():
         "accepted_owner_invalidation_persisted_flip_evaluation",
         "model3_opposite_break_direction_conflict",
         "sequence_366_truth_overlay",
+        "m1_cfd_tick_volume_orderflow_proxy",
+        "orderflow_proxy_absorption_divergence_expansion",
+        "orderflow_proxy_telemetry_only_default",
+        "orderflow_proxy_never_claims_centralized_delta",
+        "orderflow_proxy_optional_contradiction_veto",
+        "sequence_367_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))
