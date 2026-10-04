@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.6",
+  "release": "6.4.7",
   "repository": "Davemafy/icloud",
-  "ref": "0844b2f422482ebdae3b7c7df8fb343e5034aaa5",
+  "ref": "722f94e0db50df6584f90c8fc757f662fc9636bd",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.66",
+  "sequence_ea_version": "3.67",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -256,7 +256,13 @@
     "accepted_owner_invalidation_suspends_execution_authority",
     "accepted_owner_invalidation_persisted_flip_evaluation",
     "model3_opposite_break_direction_conflict",
-    "sequence_366_truth_overlay"
+    "sequence_366_truth_overlay",
+    "m1_cfd_tick_volume_orderflow_proxy",
+    "orderflow_proxy_absorption_divergence_expansion",
+    "orderflow_proxy_telemetry_only_default",
+    "orderflow_proxy_never_claims_centralized_delta",
+    "orderflow_proxy_optional_contradiction_veto",
+    "sequence_367_truth_overlay"
   ],
   "files": [
     {
@@ -269,11 +275,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_66_AcceptedInvalidationFlipAuthority_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
       "requires_reload": true,
-      "sha256": "bf29142e8c88e534c86795393680e48430ed04ae09a13be838227109ff0bc3b8"
+      "sha256": "9c79f8a74d47da25d39974cb6d26971c932070edf7be71ee61f65aaafadc8720"
     }
   ],
   "support_files": [
