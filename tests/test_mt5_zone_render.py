@@ -139,6 +139,38 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis(monkeypatc
     assert d["zone3_published_at"] == "300"
 
 
+def test_next_objective_prefers_explicit_hit_timestamps_when_best_price_is_stale():
+    buy = _zone(
+        "BUY_OWNER", "BUY",
+        4133.77, 4182.65, 4181.44, 4182.65,
+        "M1_READY|THESIS_CONTINUATION", "A+", "H4>H1", 100, 0,
+    )
+    a = SimpleNamespace(
+        analysis_id="A_OWNER_TARGET_TRUTH",
+        generated_at=300,
+        selected_zone_id="BUY_OWNER",
+        zones=[buy],
+        execution_policy={
+            "active_thesis": {
+                "locked": True,
+                "direction": "BUY",
+                "status": "OBJECTIVE_IN_PROGRESS",
+                "owner_zone_id": "BUY_OWNER",
+                "best_price": 4144.49,
+                "target1": 4183.74,
+                "target2": 4192.92,
+                "target3": 4282.60304,
+                "target1_hit_at": 260,
+                "target2_hit_at": 280,
+                "target3_hit_at": 0,
+            }
+        },
+    )
+
+    d = _kv(mt5_zone_render_text(a, current_mid=4138.60))
+    assert d["active_thesis_next_objective"] == "4282.60304"
+
+
 def test_next_objective_uses_best_price_for_sell_progress(monkeypatch):
     sell = _zone("SELL_1", "SELL", 4346.88, 4368.28, 4359.54, 4368.28, "ARMED|PROMPT", "A+", "H4>H1", 100, 0)
     monkeypatch.setattr(
