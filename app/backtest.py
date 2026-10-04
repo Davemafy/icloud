@@ -454,7 +454,7 @@ async def generate_v659(
     # Cloud 6.5.130 keeps the same historical map/replay contract. The live
     # M1 trace addition is observation-only and does not redefine historical HTF zoning data.
     backtest_contract_cloud = "6.5.110"
-    compatible_runtime_clouds = {"6.5.110", "6.5.111", "6.5.112", "6.5.113", "6.5.114", "6.5.115", "6.5.120", "6.5.121", "6.5.122", "6.5.123", "6.5.124", "6.5.125", "6.5.126", "6.5.127", "6.5.128", "6.5.129", "6.5.130", "6.5.131"}
+    compatible_runtime_clouds = {"6.5.110", "6.5.111", "6.5.112", "6.5.113", "6.5.114", "6.5.115", "6.5.120", "6.5.121", "6.5.122", "6.5.123", "6.5.124", "6.5.125", "6.5.126", "6.5.127", "6.5.128", "6.5.129", "6.5.130", "6.5.131", "6.5.132"}
     if SETTINGS.app_version not in compatible_runtime_clouds:
         raise RuntimeError(
             f"BACKTEST_VERSION_DRIFT: expected compatible Cloud {sorted(compatible_runtime_clouds)}, "
