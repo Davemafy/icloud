@@ -63,8 +63,8 @@ def test_367_sequence_state_heartbeat_and_entry_audit_emit_proxy_truth():
         assert needle in text
 
     audit = text[text.index("void TZ36_SendEntryDecisionAudit"):text.index("\nbool TZ45_ActiveOwnerMatchesCurrentPlan", text.index("void TZ36_SendEntryDecisionAudit"))]
-    assert '"orderflow_proxy_feed"' in audit
-    assert '"orderflow_proxy_state"' in audit
+    assert '\\\"orderflow_proxy_feed\\\"' in audit
+    assert '\\\"orderflow_proxy_state\\\"' in audit
     assert "g_tzOrderFlowProxyScore" in audit
 
 
