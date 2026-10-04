@@ -77,6 +77,12 @@ def _effective_thesis_targets(thesis: dict[str, Any]) -> list[float]:
 
 
 def _next_objective(thesis: dict[str, Any]) -> float:
+    """Return the next still-open frozen owner objective.
+
+    Target-hit timestamps are lifecycle truth and outrank a stale/partial best-price
+    snapshot. best_price remains a compatibility fallback for historical owners that
+    predate explicit hit timestamps.
+    """
     direction = _value(thesis.get("direction")).upper()
     try:
         best = float(thesis.get("best_price") or 0.0)
@@ -84,23 +90,31 @@ def _next_objective(thesis: dict[str, Any]) -> float:
         best = 0.0
 
     next_frozen = 0.0
-    for key in ("target1", "target2", "target3"):
+    for idx, key in enumerate(("target1", "target2", "target3"), start=1):
         try:
             target = float(thesis.get(key) or 0.0)
         except (TypeError, ValueError):
             target = 0.0
         if target <= 0:
             continue
-        reached = bool(
+
+        try:
+            hit_at = int(thesis.get(f"target{idx}_hit_at") or 0)
+        except (TypeError, ValueError):
+            hit_at = 0
+
+        reached_by_price = bool(
             best > 0
             and (
                 (direction == "SELL" and best <= target)
                 or (direction == "BUY" and best >= target)
             )
         )
-        if not reached:
-            next_frozen = target
-            break
+        if hit_at > 0 or reached_by_price:
+            continue
+
+        next_frozen = target
+        break
 
     try:
         cap = float(thesis.get("ownership_objective_cap") or 0.0)
