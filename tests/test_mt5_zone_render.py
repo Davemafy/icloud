@@ -139,7 +139,33 @@ def test_render_feed_contains_primary_core_envelope_and_active_thesis(monkeypatc
     assert d["zone3_published_at"] == "300"
 
 
-def test_next_objective_prefers_explicit_hit_timestamps_when_best_price_is_stale():
+def test_next_objective_prefers_explicit_hit_timestamps_when_best_price_is_stale(monkeypatch):
+    owner = {
+        "reaction_key": "BUY|H4>H1|100",
+        "latest_zone_id": "BUY_OWNER",
+        "ownership_zone_id": "BUY_OWNER",
+        "direction": "BUY",
+        "source_tf": "H4>H1",
+        "source_ts": 100,
+        "status": "OBJECTIVE_IN_PROGRESS",
+        "ownership_acquired_at": 250,
+        "ownership_authority": "HTF_CORE_HANDOFF",
+        "ownership_analysis_id": "A_OWNER_TARGET_TRUTH",
+        "ownership_anchor_price": 4144.49,
+        "target1": 4183.74,
+        "target2": 4192.92,
+        "target3": 4282.60304,
+        "best_price": 4144.49,
+        "mfe_price": 0.0,
+        "target1_hit_at": 260,
+        "target2_hit_at": 280,
+        "target3_hit_at": 0,
+        "objective_complete_at": 0,
+        "invalidated_at": 0,
+        "last_reason": "LIQUIDITY_OBJECTIVE_PROGRESS",
+    }
+    monkeypatch.setattr(ownership, "active_owner_snapshot", lambda now: owner)
+
     buy = _zone(
         "BUY_OWNER", "BUY",
         4133.77, 4182.65, 4181.44, 4182.65,
