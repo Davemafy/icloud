@@ -30,7 +30,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Institutional SMC AI Cloud")
     # Release truth is code-authoritative so a stale Railway APP_VERSION variable
     # cannot make a new deployment report an old cloud version.
-    app_version: str = "6.5.132"
+    app_version: str = "6.5.133"
     timezone_name: str = os.getenv("TIMEZONE_NAME", "Africa/Lagos")
     api_key: str = os.getenv("CLOUD_EA_API_KEY", "change-me")
     db_path: str = os.getenv("DB_PATH", "/data/smc_cloud.db")
@@ -83,14 +83,17 @@ class Settings:
     news_post_revalidate_minutes: int = _i("NEWS_POST_REVALIDATE_MINUTES", 10)
 
     research_validation_initial_capital: float = _f("RESEARCH_VALIDATION_INITIAL_CAPITAL", 10000.0)
-    research_risk_pct_trend_a_plus: float = _f("RESEARCH_RISK_PCT_TREND_A_PLUS", 1.00)
-    research_risk_pct_trend_a: float = _f("RESEARCH_RISK_PCT_TREND_A", 0.75)
-    research_risk_pct_countertrend_a_plus: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A_PLUS", 0.50)
-    research_risk_pct_countertrend_a: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A", 0.25)
-    # B+ is an executable reduced-risk grade under the Master Sniper contract.
-    # It still requires every normal structural, M15, M1, AI and safety gate.
-    research_risk_pct_b_plus: float = _f("RESEARCH_RISK_PCT_B_PLUS", 0.25)
-    research_risk_epoch: str = os.getenv("RESEARCH_RISK_EPOCH", "MASTER_SNIPER_CONTEXT_GRADE_10000_V5_BPLUS_EXEC")
+    # DEMO/PAPER campaign risk contract. This is the maximum nominal risk budget
+    # for one thesis across P0 + R1 + R2; model multipliers may only reduce it.
+    research_campaign_risk_cap_pct: float = _f("RESEARCH_CAMPAIGN_RISK_CAP_PCT", 0.30)
+    research_risk_pct_trend_a_plus: float = _f("RESEARCH_RISK_PCT_TREND_A_PLUS", 0.300)
+    research_risk_pct_trend_a: float = _f("RESEARCH_RISK_PCT_TREND_A", 0.225)
+    research_risk_pct_countertrend_a_plus: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A_PLUS", 0.150)
+    research_risk_pct_countertrend_a: float = _f("RESEARCH_RISK_PCT_COUNTERTREND_A", 0.075)
+    # B+ remains executable only at reduced risk and still requires every normal
+    # structural, M15, M1, AI and safety gate.
+    research_risk_pct_b_plus: float = _f("RESEARCH_RISK_PCT_B_PLUS", 0.100)
+    research_risk_epoch: str = os.getenv("RESEARCH_RISK_EPOCH", "MASTER_SNIPER_CONTEXT_GRADE_10000_V6_THESIS_CAP_030")
 
     m15_single_accept_body_fraction: float = _f("M15_SINGLE_ACCEPT_BODY_FRACTION", 0.60)
     m15_single_accept_body_atr: float = _f("M15_SINGLE_ACCEPT_BODY_ATR", 0.40)
