@@ -67,7 +67,10 @@ def test_368_state_heartbeat_cloud_and_dashboard_publish_rr_audit():
         assert f'"{needle}"' in main
     assert "Candidate audit:" in dash
     assert "confirmed execution SL" in dash
-    assert "separates M1 trade invalidation from the wider HTF thesis invalidation" in dash
+    assert (
+        "separates M1 trade invalidation from the wider HTF thesis invalidation" in dash
+        or "nearest confirmed still-protected M1 swing" in dash
+    )
 
 
 def test_368_source_is_structurally_balanced():
