@@ -190,7 +190,9 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
     under the thesis risk cap. Flip/liquidity-reversal branches keep their explicit gates unless they use
     one of these sniper-family confirmations.
     """
-    meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    policy = dict(analysis.execution_policy or {})
+    meta = dict(policy.get("active_thesis") or {})
+    late_stage = dict(policy.get("late_stage_reacquisition") or {})
     authority = str(meta.get("ownership_authority") or "")
     if not SETTINGS.paper_only or not bool(analysis.approved):
         return False, authority, meta
@@ -200,8 +202,18 @@ def _active_owner_continuation(analysis: Analysis, zone: Zone) -> tuple[bool, st
         fallback = dict((analysis.execution_policy or {}).get("paper_ai_fallback") or {})
         if not bool(fallback.get("active")):
             return False, authority, meta
+    late_stage_safe = bool(
+        not late_stage.get("required")
+        or late_stage.get("satisfied")
+    )
+    meta["late_stage_reacquisition_required"] = bool(late_stage.get("required"))
+    meta["late_stage_reacquisition_satisfied"] = bool(late_stage.get("satisfied", True))
+    meta["late_stage_reacquisition_zone_id"] = str(late_stage.get("current_zone_id") or "")
+    meta["late_stage_reacquisition_basis"] = str(late_stage.get("basis") or "")
+
     ready = bool(
-        meta.get("locked")
+        late_stage_safe
+        and meta.get("locked")
         and meta.get("continuation_authority")
         and str(meta.get("status") or "") in THESIS_CONTINUATION_STATUSES
         and str(meta.get("owner_zone_id") or "") == zone.zone_id
@@ -339,6 +351,12 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     kv["core_handoff_ready"] = "1" if core_handoff_ready else "0"
     kv["owner_continuation_ready"] = "1" if owner_continuation_ready else "0"
     kv["owner_continuation_authority"] = owner_authority if owner_continuation_ready else "NONE"
+    late_stage_reacquisition = dict((analysis.execution_policy or {}).get("late_stage_reacquisition") or {})
+    kv["late_stage_reacquisition_required"] = "1" if bool(late_stage_reacquisition.get("required")) else "0"
+    kv["late_stage_reacquisition_satisfied"] = "1" if bool(late_stage_reacquisition.get("satisfied", True)) else "0"
+    kv["late_stage_reacquisition_zone_id"] = str(late_stage_reacquisition.get("current_zone_id") or "")
+    kv["late_stage_reacquisition_state"] = str(late_stage_reacquisition.get("state") or "NOT_REQUIRED")
+    kv["late_stage_reacquisition_basis"] = str(late_stage_reacquisition.get("basis") or "")
     kv["zone_contact_handoff_ready"] = "1" if contact_handoff_ready else "0"
     kv["zone_contact_confirmed"] = "1" if bool(window.get("zone_contact_confirmed")) else "0"
     kv["zone_contact_ts"] = str(int(window.get("contact_ts") or 0))
@@ -487,6 +505,12 @@ def guard_plan_text(text: str, analysis: Analysis | None, snapshot: MarketSnapsh
     target_authority_safe = bool(
         not target_truth_enforced or target_truth.get("authority_safe")
     )
+    late_stage_blocked = bool(
+        late_stage_reacquisition.get("required")
+        and not late_stage_reacquisition.get("satisfied")
+    )
+    if late_stage_blocked:
+        guard_reasons.append("LATE_STAGE_REQUIRES_CURRENT_HTF_LOCATION_REACQUISITION")
     if not handoff_ready:
         guard_reasons.append("NO_EXECUTION_HANDOFF")
     if not original_valid:
