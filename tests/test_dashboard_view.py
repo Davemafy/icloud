@@ -62,7 +62,7 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
         "WAITING FOR M1 CONFIRMATION", "M1 HANDOFF ACTIVE",
         "THESIS OWNER ACTIVE • FRESH M1 REQUIRED", "THESIS OWNER • WAITING FOR FRESH M1 LOCATION",
         "M1 PRIMARY SEQUENCE FORMING", "WAITING FOR RETRACE", "Entry permission: NO",
-        "Readiness checks ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ",
+        "Pre-entry conditions ", "SAFETY BLOCKED", "SAFETY HOLD", "Macro authority ",
         "order permission is suspended", "This is not a location failure.",
         "HTF location/source quality only", "Do not chase the existing move",
         "there is no current M1 location handoff or new-entry authority",
@@ -277,3 +277,23 @@ def test_owner_context_panel_prefers_canonical_journal_next_objective():
     assert "j?.next_open_thesis_objective" in cleaned
     assert "t?.[key+'_hit_at']" in cleaned
     assert "const objective=nextObjective(thesis,j);" in cleaned
+
+
+def test_dashboard_distinguishes_owner_origin_from_current_projection_publication():
+    from pathlib import Path
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "owner_original_geometry_published_at" in html
+    assert "Owner origin geometry published" in html
+    assert "Current owner projection published" in html
+    assert "owner origin " in html
+    assert "current projection " in html
+
+
+def test_dashboard_labels_full_checklist_as_pre_entry_conditions_not_trigger():
+    from pathlib import Path
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "<h3>Pre-entry conditions</h3>" in html
+    assert "Prerequisite checklist — not an M1 trigger or order permission." in html
+    cleaned = compact_dashboard_html(html)
+    assert "Pre-entry conditions " in cleaned
+    assert "This is not an M1 trigger or order permission." in cleaned

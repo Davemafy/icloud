@@ -409,3 +409,50 @@ def test_scheduler_retries_missing_owner_cap_when_sequence_recovers_flat(monkeyp
 
     owner["ownership_objective_cap"] = 109.7
     assert scheduler._owner_cap_reconciliation_refresh(snap, 10_001) == {}
+
+
+def test_live_plan_retry_applies_deferred_flat_owner_cap_once_sequence_truth_is_fresh(tmp_path, monkeypatch):
+    buy, sell, key = _seed_owner(tmp_path, monkeypatch, open_positions=0)
+    snap = _snapshot(ts=10_100, mid=105.0)
+    analysis = _current(buy, sell)
+
+    # The seed heartbeat is now 100 seconds old, so the normal analysis-time
+    # reconciliation must fail closed rather than trusting stale flatness.
+    owner_zone = ownership.apply_thesis_ownership(analysis, snap)
+    assert owner_zone is not None
+    reconcile = analysis.execution_policy["owner_objective_cap_reconciliation"]
+    assert reconcile["state"] == "DEFERRED_SEQUENCE_TRUTH_UNAVAILABLE"
+
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT ownership_objective_cap FROM zone_reactions WHERE reaction_key=?",
+            (key,),
+        ).fetchone()
+    assert float(row["ownership_objective_cap"] or 0.0) == 0.0
+
+    # A fresh heartbeat arrives before the next full analysis cycle. The live-plan
+    # retry must now apply the one-way cap immediately.
+    db.save_heartbeat(
+        Heartbeat(
+            ts=10_100,
+            ea="InstitutionalSMC_SequenceEA",
+            version="3.67",
+            symbol="XAUUSD",
+            details={"open_positions": 0, "restart_safe": True},
+        )
+    )
+    analysis.execution_policy["active_thesis"]["late_stage_reacquisition_required"] = True
+    analysis.execution_policy["active_thesis"]["late_stage_reacquisition_satisfied"] = True
+    ownership.reconcile_live_owner_objective_cap(analysis, snap)
+
+    reconcile = analysis.execution_policy["owner_objective_cap_reconciliation"]
+    assert reconcile["state"] == "APPLIED"
+    assert reconcile["active_cap"] == 109.7
+    assert analysis.execution_policy["active_thesis"]["ownership_objective_cap"] == 109.7
+    assert analysis.execution_policy["active_thesis"]["late_stage_reacquisition_required"] is True
+    assert analysis.execution_policy["active_thesis"]["late_stage_reacquisition_satisfied"] is True
+
+    truth = target_ladder_truth(analysis, owner_zone, snap)
+    assert truth["open_targets"] == [109.7]
+    assert truth["blocked_by_opposing_zone_cap"] == [120.0]
+    assert truth["history_reason"] == "TARGET_LIFECYCLE_OWNER_CAP_RECONCILED"

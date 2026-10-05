@@ -924,6 +924,15 @@ def _journal_snapshot():
         e["details"] = _detail_value(e.get("details", ""))
 
     zone = None
+    owner_meta = dict((a.execution_policy or {}).get("active_thesis") or {}) if a else {}
+    owner_projection = bool(
+        z
+        and owner_meta.get("locked")
+        and str(owner_meta.get("owner_zone_id") or "") == str(z.zone_id)
+    )
+    owner_original_geometry_published_at = int(
+        owner_meta.get("owner_original_geometry_published_at") or 0
+    ) if owner_projection else 0
     if z:
         zone = {
             "zone_id": z.zone_id,
@@ -941,6 +950,8 @@ def _journal_snapshot():
             "grade_location_score": float(_zone_note_text(z, "grade_location_score:", "0") or 0),
             "grade_source_strength": float(_zone_note_text(z, "grade_source_strength:", "0") or 0),
             "geometry_published_at": _zone_note_int(z, "geometry_published_at:", 0),
+            "owner_projection": owner_projection,
+            "owner_original_geometry_published_at": owner_original_geometry_published_at,
             "publication_qualified_mitigations": _zone_note_int(z, "publication_qualified_mitigations:", int(z.touch_count)),
             "publication_raw_core_contacts": _zone_note_int(z, "publication_raw_core_contacts:", int(z.touch_count)),
             "live_core_touched_at": _zone_note_int(z, "live_core_touched_at:", 0),
@@ -1045,6 +1056,23 @@ def _journal_snapshot():
         ),
     }
     target_progress = _journal_target_progress(a, z)
+    # Once ownership is active, target_ladder_truth is the canonical execution
+    # lifecycle, including any one-way opposing-zone owner cap. Do not let the
+    # legacy frozen-target summary advertise a deeper objective through a live
+    # opposing HTF zone.
+    if (
+        target_progress.get("scope") == "ACTIVE_THESIS"
+        and bool(target_truth.get("execution_evaluable"))
+    ):
+        open_targets = [float(x) for x in list(target_truth.get("open_targets") or [])]
+        completed_targets = [float(x) for x in list(target_truth.get("completed_targets") or [])]
+        target_progress = {
+            "next_open": float(target_truth.get("next_open_target") or 0.0) or None,
+            "remaining": open_targets,
+            "completed": completed_targets,
+            "scope": "ACTIVE_THESIS",
+        }
+
     # Before a zone activates, its TP ladder remains a forward PLAN. Historical
     # price travel through those future TP prices does not consume the ladder.
     sequence_debug = _sequence_debug_snapshot()
@@ -1151,6 +1179,8 @@ def _journal_snapshot():
         } if s else None,
         "checks": checks,
         "readiness_score": f"{score}/{len(checks)}",
+        "precondition_score": f"{score}/{len(checks)}",
+        "precondition_label": "PRE_ENTRY_CONDITIONS",
         "map_display_state": _map_display_state(
             z,
             readiness,

@@ -252,7 +252,10 @@ def install_live_ownership_sync() -> None:
         return
 
     from . import dashboard_view, db, engine, mt5_zone_render, scheduler
-    from .thesis_ownership_policy import active_owner_snapshot
+    from .thesis_ownership_policy import (
+        active_owner_snapshot,
+        reconcile_live_owner_objective_cap,
+    )
 
     _ORIGINAL_LATEST_ANALYSIS = db.latest_analysis
 
@@ -288,6 +291,8 @@ def install_live_ownership_sync() -> None:
             analysis,
             int(snapshot.sent_at) if snapshot is not None else None,
         )
+        if snapshot is not None:
+            synced = reconcile_live_owner_objective_cap(synced, snapshot)
         text = _ORIGINAL_ACTIVE_PLAN_TEXT(synced, snapshot)
         reason = _plan_block_reason(synced)
         return _append_guard_reason(text, reason) if reason else text

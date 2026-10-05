@@ -85,10 +85,12 @@ _RECOVERY_SCRIPT = r'''
         const raw=pm.raw_core_touch_episodes??audit.raw_core_contact_episodes_before_invalidation;
         const pub=pm.publication_execution_status||'UNKNOWN';
         const pubAt=pm.geometry_published_at?new Date(Number(pm.geometry_published_at)*1000).toLocaleString():'—';
+        const ownerPubAt=pm.owner_original_geometry_published_at?new Date(Number(pm.owner_original_geometry_published_at)*1000).toLocaleString():'—';
+        const publicationTimeText=pm.owner_projection&&pm.owner_original_geometry_published_at?('owner origin '+ownerPubAt+' • current projection '+pubAt):('published '+pubAt);
         const liveAt=pm.live_core_touched_at?new Date(Number(pm.live_core_touched_at)*1000).toLocaleString():'—';
         const baseQ=pm.publication_qualified_mitigations??'—';
         const baseR=pm.publication_raw_core_contacts??'—';
-        return `<tr><td>${safeEsc(z.zone_id)}</td><td>${safeEsc(z.original_direction)}</td><td>${safeEsc(z.flip_direction)}</td><td>${safeEsc(z.state)}</td><td>${safeNum(z.core_low)}–${safeNum(z.core_high)}<br><span class="muted">${safeEsc(z.core_method||'')}</span></td><td>${safeNum(z.zone_low)}–${safeNum(z.zone_high)}</td><td><b>${safeEsc(sg)}</b></td><td><b>${safeEsc(cg)}</b></td><td>${safeEsc(reason)}<br><span class="muted">A+ gap: ${safeEsc(gap)}</span></td><td><b>${safeEsc(String(pub).replaceAll('_',' '))}</b><br><span class="muted">published ${safeEsc(pubAt)} • baseline ${safeEsc(baseQ)} qualified / ${safeEsc(baseR)} raw • live touch ${safeEsc(liveAt)}</span></td><td>${safeEsc(z.setup_type)}</td><td>${safeEsc(qm)} qualified${raw===undefined?'':(' / '+safeEsc(raw)+' raw')}</td></tr>`;
+        return `<tr><td>${safeEsc(z.zone_id)}</td><td>${safeEsc(z.original_direction)}</td><td>${safeEsc(z.flip_direction)}</td><td>${safeEsc(z.state)}</td><td>${safeNum(z.core_low)}–${safeNum(z.core_high)}<br><span class="muted">${safeEsc(z.core_method||'')}</span></td><td>${safeNum(z.zone_low)}–${safeNum(z.zone_high)}</td><td><b>${safeEsc(sg)}</b></td><td><b>${safeEsc(cg)}</b></td><td>${safeEsc(reason)}<br><span class="muted">A+ gap: ${safeEsc(gap)}</span></td><td><b>${safeEsc(String(pub).replaceAll('_',' '))}</b><br><span class="muted">${safeEsc(publicationTimeText)} • baseline ${safeEsc(baseQ)} qualified / ${safeEsc(baseR)} raw • live touch ${safeEsc(liveAt)}</span></td><td>${safeEsc(z.setup_type)}</td><td>${safeEsc(qm)} qualified${raw===undefined?'':(' / '+safeEsc(raw)+' raw')}</td></tr>`;
       }).join(''):'<tr><td colspan="12" class="muted">No prompt-qualified primary zones.</td></tr>';
     }
 

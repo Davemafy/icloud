@@ -642,3 +642,15 @@ def test_late_stage_reacquisition_fails_closed_when_current_htf_location_is_remo
     assert state["satisfied"] is False
     assert state["state"] == "REQUIRED_WAITING_FOR_CURRENT_HTF_LOCATION"
     assert state["basis"] == "CURRENT_HTF_ZONE_NOT_REACQUIRED"
+
+
+def test_owner_meta_preserves_original_geometry_publication_timestamp():
+    zone = _zone("BUY_OWNER_PUB", Direction.BUY, 111, Grade.A_PLUS)
+    zone.notes = [*list(zone.notes or []), "geometry_published_at:123456"]
+    owner = _owner()
+    owner["ownership_zone_id"] = zone.zone_id
+
+    meta = policy._owner_meta(owner, zone)
+
+    assert meta["owner_projection"] is True
+    assert meta["owner_original_geometry_published_at"] == 123456
