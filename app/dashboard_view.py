@@ -544,6 +544,10 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
     const seqVersion=String(seq.version||'');
+    const opportunitySlot=String(seq.opportunity_slot||'');
+    const primaryEntries=Number(seq.primary_entries||0);
+    const reentries=Number(seq.reentries||0);
+    const reacquisitionSlot=(opportunitySlot.startsWith('R')&&opportunitySlot!=='REENTRY_CAP_REACHED') ? opportunitySlot : (primaryEntries>0 ? ('R'+String(reentries+1)) : '');
     const lastCandidateEntry=Number(seq.last_candidate_entry||0);
     const lastCandidateStop=Number(seq.last_candidate_stop||0);
     const lastCandidateTarget=Number(seq.last_candidate_target||0);
@@ -575,6 +579,12 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const campaignKey=String(seq.campaign_key||'');
     const traceSweep=Number(seq.trace_sweep_price||0);
     const traceSweepTs=Number(seq.trace_sweep_ts||0);
+    const traceSweepScanBars=Number(seq.trace_sweep_scan_bars||0);
+    const traceSweepRejectReason=String(seq.trace_sweep_reject_reason||'');
+    const traceSweepCandidateTs=Number(seq.trace_sweep_candidate_ts||0);
+    const traceSweepCandidateLiquidity=Number(seq.trace_sweep_candidate_liquidity||0);
+    const traceSweepCandidatePrice=Number(seq.trace_sweep_candidate_price||0);
+    const traceSweepCandidateClearance=Number(seq.trace_sweep_candidate_clearance_points||0);
     const traceMss=Number(seq.trace_mss_level||0);
     const traceMssTs=Number(seq.trace_mss_break_ts||0);
     const tracePdType=String(seq.trace_pd_type||'');
@@ -595,8 +605,19 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const traceTime=(v)=>v?new Date(Number(v)*1000).toLocaleString():'—';
     const traceParts=[];
     if(campaignKey)traceParts.push('Campaign '+campaignKey);
+    if(opportunitySlot)traceParts.push('Slot '+opportunitySlot);
     if(traceContactTs)traceParts.push('Zone contact @ '+traceTime(traceContactTs)+(traceReconstructed?' (reconstructed pre-handoff)':''));
     if(traceSweep||traceLiquidity)traceParts.push('Sweep '+tracePrice(traceSweep)+(traceLiquidity?' over liquidity '+tracePrice(traceLiquidity):'')+(traceSweepTs?' @ '+traceTime(traceSweepTs):''));
+    if(traceSweepRejectReason){
+      let rejected='Sweep candidate rejected: '+traceSweepRejectReason.replaceAll('_',' ');
+      if(traceSweepCandidatePrice||traceSweepCandidateLiquidity){
+        rejected+=' • price '+tracePrice(traceSweepCandidatePrice)+' vs liquidity '+tracePrice(traceSweepCandidateLiquidity);
+      }
+      if(traceSweepCandidateTs)rejected+=' @ '+traceTime(traceSweepCandidateTs);
+      if(Number.isFinite(traceSweepCandidateClearance))rejected+=' • clearance '+traceSweepCandidateClearance.toFixed(1)+'pt';
+      if(traceSweepScanBars)rejected+=' • scan '+traceSweepScanBars+' M1 bars';
+      traceParts.push(rejected);
+    }
     if(traceMss)traceParts.push('Micro MSS '+tracePrice(traceMss)+(traceMssTs?' broken @ '+traceTime(traceMssTs):''));
     if(tracePdLow||tracePdHigh)traceParts.push((tracePdType||'PD')+' '+tracePrice(tracePdLow)+'–'+tracePrice(tracePdHigh)+(tracePdTs?' formed @ '+traceTime(tracePdTs):''));
     if(tracePullbackTs)traceParts.push('PD pullback touched @ '+traceTime(tracePullbackTs));
@@ -689,7 +710,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         const sniperWait=['M1_SWEEP','M1_MICRO_MSS','M1_MICRO_SHIFT','M1_OB_FVG','M1_PD_PULLBACK','M1_DIRECTIONAL_CLOSE'].includes(seqStage);
         const breakoutWait=['BREAKOUT_BOUNDARY','BREAKOUT_DISPLACEMENT','BREAKOUT_ACCEPTANCE','BREAKOUT_RETEST','BREAKOUT_DIRECTIONAL_CLOSE'].includes(seqStage);
         const continuationWait=['CONTINUATION_M1_SHIFT','CONTINUATION_OB_FVG','CONTINUATION_PD_PULLBACK','CONTINUATION_POST_RETEST_M1_SHIFT'].includes(seqStage);
-        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':((sniperWait||breakoutWait||continuationWait)?seqStage.replaceAll('_',' '):seqStage.replaceAll('_',' ')))))));
+        const sniperGateLabel=(sniperWait&&reacquisitionSlot)?(reacquisitionSlot+' • '+seqStage.replaceAll('_',' ')):seqStage.replaceAll('_',' ');
+        seqGate.textContent=limitReached?'THESIS ENTRY LIMIT REACHED':(runwayBlock?'ENTRY BLOCKED: RUNWAY':(minRRBlock?'ENTRY BLOCKED: MIN RR':(targetExpired?'ENTRY BLOCKED: OBJECTIVE ALREADY TRADED':(reactionWait?'WAITING FOR CLOSED M1 CONFIRMATION':(valueWait?'WAITING FOR VALUE / RETRACE':((sniperWait||breakoutWait||continuationWait)?sniperGateLabel:seqStage.replaceAll('_',' ')))))));
         seqGate.className='kpi '+(limitReached||runwayBlock||minRRBlock||targetExpired?'warn':((valueWait||reactionWait)?'blue':'warn'));
         seqMeta.textContent='Authority '+seqAuthority+' • model '+seqModel+' • '+(seqReason||'waiting for next micro gate')+' • Entry permission: NO.'+traceText;
       }else{
@@ -758,9 +780,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         cls='warn';
         meta=checklist+'The nearest post-handoff objective already traded after the handoff, so the late entry is expired rather than chased. Entry permission: NO.';
       }else if(simplePrimaryWait){
-        state='M1 PRIMARY SEQUENCE FORMING';
+        const isReacquisition=Boolean(reacquisitionSlot);
+        state=isReacquisition ? (reacquisitionSlot+' ZONE RE-ACQUISITION FORMING') : 'M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains a parallel independent trigger; Sequence 3.70+ may also recover a missed engulfing through a bounded value retest and fresh CLOSED directional rejection. It does not require the Model-1 shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+(isReacquisition
+          ? reacquisitionSlot+' belongs to the same acquired thesis. Sequence 3.71+ is reconstructing the original-zone M1 event chain from its bounded R1/R2 history window: zone contact → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. This does not reset the campaign or loosen the re-entry cap. '
+          : 'Model 1 P0: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. ')+
+          'Model 2 engulfing remains a parallel independent trigger; a missed engulfing may use its bounded value-retest recovery without requiring the Model-1 shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
       }else if(breakoutWait){
         state='BREAKOUT SEQUENCE FORMING';
         cls='blue';
