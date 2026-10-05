@@ -653,7 +653,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
     owner_original_geometry_published_at = 0
     if owner_zone is not None:
-        for raw in list(owner_zone.notes or []):
+        for raw in list(getattr(owner_zone, "notes", []) or []):
             text = str(raw)
             if text.startswith("geometry_published_at:"):
                 try:
