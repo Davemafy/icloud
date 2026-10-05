@@ -18,7 +18,7 @@ def test_368_version_and_execution_stop_contract():
     assert "double buffer=TZ46_ZoneStopBuffer(m1Atr);" in text
     assert "double out=buy?(anchor-buffer):(anchor+buffer);" in text
     assert "M1_CAUSAL_STRUCTURE" in text
-    assert "HTF distal boundary remains thesis invalidation only" in text
+    assert "the HTF distal boundary remains the thesis invalidation boundary, not the order SL" in text
 
 
 def test_368_confirmed_entries_use_m1_stop_before_rr_and_sizing():
