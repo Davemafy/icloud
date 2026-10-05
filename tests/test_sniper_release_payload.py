@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_70_EngulfingRetest_Demo.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_71_ReacquisitionTrace_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "ce7abbdaa3ba41b2c15c6b835dc18e469778e4499253ab1876a65e306634f8c9",
+    SEQ: "81146750a34e34820caacf9a3322141c50bea11bf04c8a4659dcecb9f89bb252",
     BRIDGE: "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
@@ -29,8 +29,8 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.70"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.70"' in seq
+    assert '#property version   "3.71"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.71"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
@@ -49,6 +49,10 @@ def test_release_payload_versions_and_parity_wiring():
     assert 'M1_PROTECTED_SWING_LOW' in seq
     assert 'TZ70_BuildEngulfingRetest' in seq
     assert 'ZONE_ENGULFING_RETEST' in seq
+    assert 'ReacquisitionSweepWindowBars=90' in seq
+    assert 'ReacquisitionSweepToMssMaxBars=45' in seq
+    assert 'opportunity_slot' in seq
+    assert 'trace_sweep_reject_reason' in seq
     assert '#property version "1.58"' in bridge
     assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
     assert '#define TZ_SEQUENCE_EXPECTED "' in bridge  # installer patches this to manifest sequence_ea_version
@@ -57,10 +61,10 @@ def test_release_payload_versions_and_parity_wiring():
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.4.10"
-    assert manifest["ref"] == "e99da440efa84eff0e38e99f110efcfb6a33642f"
+    assert manifest["release"] == "6.4.11"
+    assert manifest["ref"] == "f877b399c4536f55ae1fb9e5327712e4011a691f"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.70"
+    assert manifest["sequence_ea_version"] == "3.71"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
