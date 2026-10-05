@@ -52,12 +52,62 @@ _AI_RULE = """
 
 
 def install_thesis_ai_contract() -> None:
-    """Extend the AI validator with the deterministic thesis-ownership rule."""
+    """Extend the AI validator with thesis ownership and the current risk contract."""
     from . import ai
+
+    # Normalize legacy risk wording in the base AI prompt before appending the
+    # ownership rule. This keeps deterministic Cloud risk and AI validation on
+    # one contract without allowing the AI to set or enlarge lot size.
+    ai.SYSTEM = ai.SYSTEM.replace(
+        "A+, A and B+ are execution grades; B+ uses 0.25% reduced-risk",
+        "A+, A and B+ are execution grades; B+ uses 0.100% reduced-risk",
+    )
+    ai.SYSTEM = ai.SYSTEM.replace(
+        "Base thesis risk is TREND A+=1.00%,\n"
+        "   TREND A=0.75%, COUNTERTREND A+=0.50%, COUNTERTREND A=0.25%, B+=0.25% of non-compounding validation capital\n"
+        "   before entry-share/model multipliers.",
+        "The hard DEMO/PAPER thesis campaign cap is 0.30%. Base thesis risk is TREND A+=0.300%,\n"
+        "   TREND A=0.225%, COUNTERTREND A+=0.150%, COUNTERTREND A=0.075%, B+=0.100% of non-compounding validation capital\n"
+        "   before entry-share/model multipliers. P0/R1/R2 nominal allocations together may not exceed the thesis budget.",
+    )
 
     marker = "13. ACTIVE THESIS OWNERSHIP"
     if marker not in ai.SYSTEM:
         ai.SYSTEM += _AI_RULE
+
+    # ai._payload contains human-readable contract metadata. Wrap it once so
+    # external validation receives the same risk ceiling that deterministic
+    # sizing already enforces.
+    if not getattr(ai, "_tradezone_risk_payload_v65133", False):
+        original_payload = ai._payload
+
+        def _payload_with_current_risk_contract(a, s):
+            payload = original_payload(a, s)
+            rules = dict(payload.get("rules") or {})
+            rules.update(
+                {
+                    "context_grade_risk_contract": (
+                        "Hard thesis cap 0.30%; TREND A+=0.300%, TREND A=0.225%, "
+                        "COUNTERTREND A+=0.150%, COUNTERTREND A=0.075%, B+=0.100% "
+                        "of non-compounding validation capital before entry-share/model multipliers"
+                    ),
+                    "bplus_role": (
+                        "reduced-risk execution grade at 0.100% with all normal "
+                        "M15/M1/AI/safety gates"
+                    ),
+                    "thesis_campaign_risk_cap_pct": 0.30,
+                    "campaign_risk_shares": {"P0": 0.60, "R1": 0.30, "R2": 0.10},
+                    "late_stage_owner_reacquisition": (
+                        "after two completed owner objectives, fresh entries require "
+                        "CURRENT same-direction HTF location reacquisition before M1 confirmation"
+                    ),
+                }
+            )
+            payload["rules"] = rules
+            return payload
+
+        ai._payload = _payload_with_current_risk_contract
+        ai._tradezone_risk_payload_v65133 = True
 
 
 def _zone_reaction_key(zone: Zone) -> str:
