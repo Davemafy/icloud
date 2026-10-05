@@ -145,11 +145,13 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 DEMO / PAPER validation sizing uses a fixed validation-capital anchor rather than upward compounding.
 
 - Validation initial capital = 10,000.
-- TREND A+ base thesis budget = 1.00% of the sizing base.
-- TREND A base thesis budget = 0.75%.
-- COUNTERTREND A+ base thesis budget = 0.50%.
-- COUNTERTREND A base thesis budget = 0.25%.
-- B+ base thesis budget = 0.00%; B+ is WATCH / research context only.
+- Hard thesis campaign ceiling = 0.30% of the sizing base.
+- TREND A+ base thesis budget = 0.300%.
+- TREND A base thesis budget = 0.225%.
+- COUNTERTREND A+ base thesis budget = 0.150%.
+- COUNTERTREND A base thesis budget = 0.075%.
+- B+ base thesis budget = 0.100%; B+ remains an executable reduced-risk grade only when every normal structural, M15, M1, AI and safety gate passes.
+- P0 / R1 / R2 nominal allocations remain 60% / 30% / 10% of the thesis budget. Their combined nominal risk may never exceed 100% of the thesis budget.
 - Sizing base = the lesser of current realized account balance and the 10,000 validation anchor, so losses reduce future size but gains do not compound the experiment.
 - Existing primary/re-entry/flip share multipliers and model-specific reductions still apply inside that base thesis budget and may reduce it, never increase it.
 - Lot calculation must use the actual entry-to-stop monetary loss per lot when available, floor to broker volume step, and return no trade if the calculated size is below broker minimum. It must never round a sub-minimum risk upward.
