@@ -2273,7 +2273,10 @@ bool TZ60_BuildEngulfing(MqlRates &r[],bool buy,bool reentry,Signal &sig)
    sig.valid=false;if(ArraySize(r)<8)return false;
    if(!TZ60_RecentZoneContext(r,MathMax(SniperEngulfContextBars,SniperConfirmMaxBars+3)))return false;
    if(!TZ60_DirectionalClose(r[1],buy))return false;
-   int mx=MathMin(MathMax(1,SniperConfirmMaxBars),ArraySize(r)-3);
+   // Direct Model-2 entry belongs only to the freshly CLOSED engulfing candle.
+   // Older engulfings must use the explicit v3.70 bounded retest recovery path;
+   // they may not be entered late merely because a later candle is directional.
+   int mx=1;
    for(int cur=1;cur<=mx;cur++)
    {
       int prev=cur+1;
@@ -2304,9 +2307,9 @@ bool TZ70_BuildEngulfingRetest(MqlRates &r[],bool buy,bool reentry,Signal &sig,s
    double a=ATR(r,ATRPeriod,1);if(a<=0)return false;
    if(!TZ60_DirectionalClose(r[1],buy))return false;
 
-   int maxEvent=MathMin(MathMax(4,EngulfingRetestMaxBars+2),ArraySize(r)-3);
+   int maxEvent=MathMin(MathMax(2,EngulfingRetestMaxBars+1),ArraySize(r)-3);
    bool sawAnchor=false,sawRetest=false;
-   for(int eng=3;eng<=maxEvent;eng++)
+   for(int eng=2;eng<=maxEvent;eng++)
    {
       int prev=eng+1;
       bool prevOpp=buy?(r[prev].close<r[prev].open):(r[prev].close>r[prev].open);
