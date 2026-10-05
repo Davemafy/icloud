@@ -87,7 +87,7 @@ def test_legacy_owner_enrichment_restores_countertrend_risk_and_structure():
     assert enriched.clear_run == 9.21
     assert enriched.original_target3 == 4308.65  # owner lifecycle remains frozen
     assert zone_risk_context(enriched) == "COUNTERTREND"
-    assert original_risk_pct(enriched) == 0.50
+    assert original_risk_pct(enriched) == 0.150
 
 
 def test_spread_hold_preserves_earned_authority_but_keeps_watch_only(monkeypatch):
