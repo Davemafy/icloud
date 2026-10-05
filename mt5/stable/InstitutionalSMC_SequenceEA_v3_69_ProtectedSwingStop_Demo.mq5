@@ -22,10 +22,10 @@
 // M15 validates zone health/invalidation only. Models 1 and 2 do not require M5/M15
 // MSS, OTE, dealing-range construction or an ATR-displacement threshold. Model 3
 // deliberately keeps its own displacement-break, acceptance and retest contract.
-// Fixed-dollar runway is not a primary sniper gate. v3.68 separates HTF thesis
+// Fixed-dollar runway is not a primary sniper gate. v3.69 separates HTF thesis
 // invalidation from trade-level execution invalidation: after a CLOSED, model-valid
-// M1 confirmation, the order SL sits beyond the causal M1 structural anchor with
-// spread/ATR/broker buffer. The HTF envelope remains the thesis invalidation boundary.
+// M1 confirmation, the order SL sits beyond the nearest confirmed still-protected
+// M1 swing with spread/ATR/broker buffer. The HTF envelope remains the thesis invalidation boundary.
 // A stopped M1 execution does not kill the still-valid HTF thesis; R1/R2 remain
 // available inside the same campaign budget. Actual-entry minimum RR still applies.
 //
@@ -535,13 +535,9 @@ double TZ37_LotsForRisk(bool buy,double entry,double sl,double money)
    return TZ37_FloorVolume(money/perLot);
 }
 
-// v3.46 initial-stop hardening.
-// The first entry belongs to the institutional zone that authorized the thesis.
-// A micro PD-array/signal anchor may improve timing, but it must never tighten the
-// first-entry SL back inside that institutional zone. For first entries only,
-// SELL SL must be above the full zone_high plus a spread/ATR/broker buffer, and
-// BUY SL must be below the full zone_low minus the same buffer. Re-entries retain
-// their local structural stop because they occur only after thesis continuation.
+// Legacy v3.46 helpers retained for compatibility/history. Sequence 3.69 does not
+// use the full-zone distal as normal order-stop authority. TZ46_ZoneStopBuffer()
+// remains the canonical spread/ATR/broker buffer used outside the protected M1 swing.
 double TZ46_ZoneStopBuffer(double m1Atr)
 {
    double point=MathMax(_Point,1e-9);
