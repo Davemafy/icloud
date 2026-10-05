@@ -81,7 +81,11 @@ def execution_grade_eligible(zone: Zone) -> bool:
 
 
 def matrix_payload() -> dict[str, Any]:
-    bplus = float(SETTINGS.research_risk_pct_b_plus)
+    trend_aplus = risk_pct_for_grade(Grade.A_PLUS, RISK_CONTEXT_TREND)
+    trend_a = risk_pct_for_grade(Grade.A, RISK_CONTEXT_TREND)
+    counter_aplus = risk_pct_for_grade(Grade.A_PLUS, RISK_CONTEXT_COUNTERTREND)
+    counter_a = risk_pct_for_grade(Grade.A, RISK_CONTEXT_COUNTERTREND)
+    bplus = risk_pct_for_grade(Grade.B_PLUS, RISK_CONTEXT_TREND)
     return {
         "model": RISK_MODEL,
         "validation_initial_capital": float(SETTINGS.research_validation_initial_capital),
@@ -91,13 +95,13 @@ def matrix_payload() -> dict[str, Any]:
         "campaign_risk_shares": {"P0": 0.60, "R1": 0.30, "R2": 0.10},
         "campaign_risk_rule": "P0_PLUS_R1_PLUS_R2_NOMINAL_RISK_MUST_NOT_EXCEED_THESIS_BUDGET",
         "trend": {
-            "A+": float(SETTINGS.research_risk_pct_trend_a_plus),
-            "A": float(SETTINGS.research_risk_pct_trend_a),
+            "A+": trend_aplus,
+            "A": trend_a,
             "B+": bplus,
         },
         "countertrend": {
-            "A+": float(SETTINGS.research_risk_pct_countertrend_a_plus),
-            "A": float(SETTINGS.research_risk_pct_countertrend_a),
+            "A+": counter_aplus,
+            "A": counter_a,
             "B+": bplus,
         },
         "B+": bplus,
