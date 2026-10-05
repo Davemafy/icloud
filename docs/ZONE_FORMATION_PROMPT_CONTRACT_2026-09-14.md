@@ -185,6 +185,8 @@ Re-entry is different: after a valid primary exists and the position/thesis is p
 
 The Master Sniper location contract remains the authority. Supplemental entry models exist only to capture more valid opportunities after institutional location has already been earned; they never manufacture location or bypass the normal execution chain.
 
+For Model 2 specifically, a valid recent-zone directional engulfing remains executable on its direct closed-candle signal. If that direct entry is missed, Sequence may preserve the engulfed opposite-body as a bounded causal value area. A later retest is valid only when price revisits that band within the configured M1 window, a fresh CLOSED M1 candle rejects/continues in the thesis direction, and the entry is still near value. This recovery path uses the existing P0/R1/R2 campaign slot; it never creates an extra R3 or bypasses the thesis entry cap.
+
 - **Momentum pullback:** continuation BOS/displacement followed by a controlled 30-60% retracement into a fresh M1 PD array.
 - **VWAP-proxy reclaim:** XAUUSD CFD tick-volume-weighted fair-value proxy used only as a continuation confluence, never represented as centralized exchange VWAP or order flow. It still requires BOS/displacement plus a fresh M1 PD array overlapping the reclaim band.
 - **London/NY opening-range breakout/retest:** session opening-range displacement followed by a return to a fresh M1 PD array overlapping the broken opening-range boundary.

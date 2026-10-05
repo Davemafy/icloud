@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.9"
+    assert manifest["release"] == "6.4.10"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.69"
+    assert manifest["sequence_ea_version"] == "3.70"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_69_ProtectedSwingStop_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_70_EngulfingRetest_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -205,5 +205,12 @@ def test_professional_release_contract_is_self_consistent():
         "protected_swing_stop_flip_parity",
         "protected_swing_audit_telemetry",
         "sequence_369_truth_overlay",
+        "model2_engulfing_retest_recovery",
+        "bounded_engulfing_retest_window",
+        "missed_engulfing_recovery_without_reentry_cap_bypass",
+        "engulfing_retest_closed_m1_rejection",
+        "engulfing_retest_no_chase",
+        "protected_swing_stop_engulfing_retest",
+        "sequence_370_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))
