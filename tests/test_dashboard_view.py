@@ -74,7 +74,7 @@ def test_readiness_is_split_into_htf_quality_and_m1_execution_state():
         "Model 3: institutional boundary breakout", "displacement", "acceptance", "retest",
         "each sniper family uses its own confirmation contract",
         "ENTRY_CONFIRMATION", "FLIP_CONFIRMATION", "thesis origin/ownership anchor",
-        "ownership anchor is not itself a fresh entry signal"
+        "ownership anchor is not itself a fresh entry signal", "Late-stage HTF location reacquisition "
     ]:
         assert needle in cleaned
     assert "M1 HANDOFF READY" not in cleaned
@@ -235,6 +235,7 @@ def test_static_checklist_separates_macro_authority_from_fresh_m1_location():
     html = Path("static/index.html").read_text(encoding="utf-8")
     assert "m1_handoff_ready:'Macro thesis / handoff authority active'" in html
     assert "fresh_m1_location_ready:'Fresh M1 entry location active'" in html
+    assert "late_stage_htf_reacquired:'Late-stage current HTF location reacquired'" in html
     assert "m1_handoff_ready:'M1 location handoff active'" not in html
 
 
