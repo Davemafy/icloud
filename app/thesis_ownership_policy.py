@@ -21,13 +21,15 @@ SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS = 45
 LEGACY_OWNER_RELEASE_REASON = "CONTEXT_GRADE_V2_INELIGIBLE_OWNER_FLAT"
 INTERZONE_OWNER_RELEASE_REASON = "PREZONE_LIQUIDITY_OWNER_RELEASED_FOR_INTERZONE_TRANSIT"
 OWNER_OBJECTIVE_CAP_REASON = "ACTIVE_OPPOSING_PRIMARY_FRONT_RUN"
+LATE_STAGE_REACQUISITION_TARGET_COUNT = 2
+LATE_STAGE_REACQUISITION_CONTRACT = "CURRENT_HTF_LOCATION_REACQUISITION_V65133"
 
 _AI_RULE = """
 13. ACTIVE THESIS OWNERSHIP (PAPER/DEMO): zone interaction by itself never owns execution.
     A thesis may lock execution direction only after an explicit deterministic execution handoff has
     been acquired: HTF_CORE_HANDOFF, HTF_ZONE_CONTACT_HANDOFF, legacy HTF_ZONE_SWEEP_HANDOFF,
     or LIQUIDITY_REVERSAL_HANDOFF. A published envelope contact may arm the primary M1 search;
-    it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.25% base risk and still
+    it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.100% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
     thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
     completes. For a flat owner only, a newly qualified active opposing primary may tighten that effective
@@ -39,9 +41,12 @@ _AI_RULE = """
     (2) closed directional M1 real-body engulfing with recent valid-zone context, with no separate MSS;
     (3) qualified institutional boundary breakout -> displacement -> acceptance -> retest -> closed directional M1,
         with no separate MSS and no direct breakout-candle chase.
-    Those same models may re-arm for R1/R2 while thesis/objective/risk budget remain live. M15 validates zone
-    health and accepted invalidation; OTE is not a mandatory Model 1/2 gate and Model 3 keeps its own displacement contract.
-    If an acquired owner disappears from the current map,
+    Those same models may re-arm for R1/R2 while thesis/objective/risk budget remain live. After two owner objectives
+    are already completed, historical ownership alone is no longer sufficient for a fresh entry: the CURRENT freshly
+    ranked same-direction HTF zone must itself be active/execution-grade and either be live-interacting now or already
+    carry a valid M1_READY handoff. The frozen owner remains lifecycle/audit truth; this rule only reacquires fresh entry
+    location and never transfers ownership to the new zone. M15 validates zone health and accepted invalidation; OTE is
+    not a mandatory Model 1/2 gate and Model 3 keeps its own displacement contract. If an acquired owner disappears from the current map,
     fail closed until lifecycle release or safe requalification.
 """
 
@@ -504,6 +509,93 @@ def _enrich_legacy_owner_snapshot(
             f"countertrend={int(bool(enriched.countertrend))}",
         )
     return enriched
+
+
+
+def _owner_completed_target_count(owner: dict[str, Any]) -> int:
+    return sum(
+        1
+        for idx in (1, 2, 3)
+        if int(owner.get(f"target{idx}_hit_at") or 0) > 0
+    )
+
+
+def _late_stage_reacquisition_state(
+    owner: dict[str, Any],
+    current_zone: Zone | None,
+    snapshot: MarketSnapshot,
+) -> dict[str, Any]:
+    """Require current HTF location again after the owner has delivered two objectives.
+
+    The owner remains frozen lifecycle truth. This gate answers a different question:
+    whether a NEW entry is still justified by a CURRENT same-direction institutional
+    location. A live overlap with the current envelope or an already-valid M1_READY
+    state is sufficient to reacquire location; neither condition is an order trigger.
+    """
+    completed = _owner_completed_target_count(owner)
+    required = completed >= LATE_STAGE_REACQUISITION_TARGET_COUNT
+    state: dict[str, Any] = {
+        "contract": LATE_STAGE_REACQUISITION_CONTRACT,
+        "required": required,
+        "completed_targets": completed,
+        "required_after_completed_targets": LATE_STAGE_REACQUISITION_TARGET_COUNT,
+        "satisfied": not required,
+        "state": "NOT_REQUIRED" if not required else "REQUIRED",
+        "current_zone_id": "",
+        "current_zone_source_tf": "",
+        "current_zone_grade": "",
+        "current_zone_state": "",
+        "current_zone_core_low": 0.0,
+        "current_zone_core_high": 0.0,
+        "current_zone_low": 0.0,
+        "current_zone_high": 0.0,
+        "current_zone_live_interaction": False,
+        "current_zone_m1_ready": False,
+        "basis": "OWNER_HAS_FEWER_THAN_TWO_COMPLETED_OBJECTIVES" if not required else "NONE",
+        "frozen_owner_preserved": True,
+        "ownership_transferred": False,
+    }
+    if not required:
+        return state
+    if current_zone is None:
+        state["state"] = "REQUIRED_NO_CURRENT_SAME_DIRECTION_ZONE"
+        state["basis"] = "NO_CURRENT_SAME_DIRECTION_HTF_ZONE"
+        return state
+
+    lo, hi = sorted((float(current_zone.zone_low), float(current_zone.zone_high)))
+    live_interaction = bool(float(snapshot.ask) >= lo and float(snapshot.bid) <= hi)
+    readiness = str(current_zone.core_method or "").split("|", 1)[0]
+    m1_ready = readiness == "M1_READY"
+    structurally_valid = bool(
+        current_zone.state == ZoneState.ACTIVE and execution_grade_eligible(current_zone)
+    )
+    satisfied = bool(structurally_valid and (live_interaction or m1_ready))
+
+    state.update(
+        {
+            "satisfied": satisfied,
+            "state": "SATISFIED" if satisfied else "REQUIRED_WAITING_FOR_CURRENT_HTF_LOCATION",
+            "current_zone_id": current_zone.zone_id,
+            "current_zone_source_tf": current_zone.source_tf,
+            "current_zone_grade": current_zone.grade.value,
+            "current_zone_state": current_zone.state.value,
+            "current_zone_core_low": float(current_zone.core_low),
+            "current_zone_core_high": float(current_zone.core_high),
+            "current_zone_low": float(current_zone.zone_low),
+            "current_zone_high": float(current_zone.zone_high),
+            "current_zone_live_interaction": live_interaction,
+            "current_zone_m1_ready": m1_ready,
+            "basis": (
+                "CURRENT_HTF_ZONE_LIVE_ENVELOPE_INTERACTION"
+                if live_interaction and structurally_valid
+                else "CURRENT_HTF_ZONE_VALID_M1_READY"
+                if m1_ready and structurally_valid
+                else "CURRENT_HTF_ZONE_NOT_REACQUIRED"
+            ),
+        }
+    )
+    return state
+
 
 
 def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any]:
@@ -1047,6 +1139,7 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     policy = dict(analysis.execution_policy or {})
 
     if owner is None:
+        policy.pop("late_stage_reacquisition", None)
         policy["active_thesis"] = {
             "contract": THESIS_OWNERSHIP_CONTRACT,
             "locked": False,
@@ -1059,6 +1152,20 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     previous_selected = analysis.selected_zone_id
     status = str(owner.get("status") or "INTERACTING")
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
+
+    # Capture the CURRENT freshly ranked same-direction zone before replacing it
+    # with the frozen execution owner for lifecycle/display continuity.
+    current_same_direction_zone = next(
+        (z for z in analysis.zones if z.original_direction.value == direction),
+        None,
+    )
+    late_stage_reacquisition = _late_stage_reacquisition_state(
+        owner,
+        current_same_direction_zone,
+        snapshot,
+    )
+    policy["late_stage_reacquisition"] = late_stage_reacquisition
+    analysis.execution_policy = policy
 
     frozen = _ownership_zone_snapshot(owner)
     frozen = _enrich_legacy_owner_snapshot(analysis, owner, frozen)
@@ -1083,6 +1190,24 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
     policy["active_thesis"] = _owner_meta(owner, owner_zone)
     analysis.execution_policy = policy
     _reconcile_owner_objective_cap(analysis, snapshot, owner, owner_zone)
+
+    # Objective-cap reconciliation may refresh active_thesis. Reattach the
+    # independent late-stage location gate afterward so downstream plan safety
+    # cannot mistake historical ownership for fresh entry location.
+    policy = dict(analysis.execution_policy or {})
+    active_meta = dict(policy.get("active_thesis") or {})
+    active_meta.update(
+        {
+            "late_stage_reacquisition_required": bool(late_stage_reacquisition.get("required")),
+            "late_stage_reacquisition_satisfied": bool(late_stage_reacquisition.get("satisfied")),
+            "late_stage_reacquisition_zone_id": str(late_stage_reacquisition.get("current_zone_id") or ""),
+            "late_stage_reacquisition_basis": str(late_stage_reacquisition.get("basis") or ""),
+        }
+    )
+    policy["active_thesis"] = active_meta
+    policy["late_stage_reacquisition"] = late_stage_reacquisition
+    analysis.execution_policy = policy
+
     if owner_zone is not None:
         _sync_owner_public_map(analysis, owner_zone)
 
@@ -1104,6 +1229,20 @@ def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone
         f"thesis_owner:{direction}:{status}",
         *[n for n in owner_zone.notes if not str(n).startswith("thesis_owner:")],
     ]
+
+    if bool(late_stage_reacquisition.get("required")):
+        if bool(late_stage_reacquisition.get("satisfied")):
+            analysis.trader_brief += (
+                f" Late-stage owner location reacquired through current {direction} zone "
+                f"{late_stage_reacquisition.get('current_zone_id','')} "
+                f"({late_stage_reacquisition.get('basis','')}); fresh M1 confirmation is still mandatory."
+            )
+        else:
+            analysis.trader_brief += (
+                f" Late-stage owner preserved, but fresh execution is suspended after "
+                f"{late_stage_reacquisition.get('completed_targets',0)} completed objectives until the CURRENT "
+                f"{direction} HTF zone is reacquired. Historical ownership alone cannot authorize another entry."
+            )
 
     if previous_selected and previous_selected != owner_zone.zone_id:
         analysis.trader_brief += (
