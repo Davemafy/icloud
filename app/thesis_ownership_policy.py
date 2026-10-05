@@ -651,6 +651,16 @@ def _late_stage_reacquisition_state(
 def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any]:
     status = str(owner.get("status") or "INTERACTING")
     direction = str(owner.get("direction") or Direction.NEUTRAL.value)
+    owner_original_geometry_published_at = 0
+    if owner_zone is not None:
+        for raw in list(owner_zone.notes or []):
+            text = str(raw)
+            if text.startswith("geometry_published_at:"):
+                try:
+                    owner_original_geometry_published_at = int(float(text.split(":", 1)[1]))
+                except (TypeError, ValueError):
+                    owner_original_geometry_published_at = 0
+                break
     return {
         "contract": THESIS_OWNERSHIP_CONTRACT,
         "locked": True,
@@ -694,6 +704,8 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
         "ownership_objective_cap_reached_at": int(owner.get("ownership_objective_cap_reached_at") or 0),
         "ownership_objective_cap_reason": str(owner.get("ownership_objective_cap_reason") or ""),
         "frozen_owner_targets_preserved": True,
+        "owner_original_geometry_published_at": owner_original_geometry_published_at,
+        "owner_projection": owner_zone is not None,
     }
 
 
@@ -787,6 +799,7 @@ def _sync_owner_public_map(analysis: Analysis, owner_zone: Zone) -> None:
             "risk_context": zone_risk_context(owner_zone),
             "base_risk_pct": float(original_risk_pct(owner_zone)),
             "geometry_published_at": note_int("geometry_published_at:", 0),
+            "owner_original_geometry_published_at": note_int("geometry_published_at:", 0),
             "publication_qualified_mitigations": note_int(
                 "publication_qualified_mitigations:", 0
             ),
@@ -1177,6 +1190,51 @@ def _reconcile_owner_objective_cap(
         f"current executable quote, not the historical ownership anchor {anchor:.2f}. "
         "No live position target was changed."
     )
+
+
+def reconcile_live_owner_objective_cap(
+    analysis: Analysis,
+    snapshot: MarketSnapshot,
+) -> Analysis:
+    """Re-evaluate the flat-owner opposing-zone cap on every live plan poll.
+
+    Full analysis may run while Sequence heartbeat truth is temporarily stale. In
+    that case the normal reconciliation correctly defers. This idempotent live
+    path retries once fresh Sequence telemetry proves zero open positions, so a
+    newly valid opposing HTF zone cannot be ignored until the next analysis cycle.
+    It may only tighten lifecycle/runway truth; it never mutates live-position TP.
+    """
+    if not SETTINGS.paper_only or analysis is None or snapshot is None:
+        return analysis
+
+    owner = _active_owner_row(int(snapshot.sent_at))
+    if owner is None:
+        return analysis
+
+    previous_meta = dict((analysis.execution_policy or {}).get("active_thesis") or {})
+    owner_zone = _ownership_zone_snapshot(owner)
+    if owner_zone is None:
+        owner_zone = next(
+            (z for z in list(analysis.zones or []) if _matches_owner(z, owner)),
+            None,
+        )
+    _reconcile_owner_objective_cap(analysis, snapshot, owner, owner_zone)
+
+    # Cap application refreshes active_thesis from persisted owner truth. Preserve
+    # independent late-stage-location fields that belong to the current analysis.
+    policy = dict(analysis.execution_policy or {})
+    meta = dict(policy.get("active_thesis") or {})
+    for key in (
+        "late_stage_reacquisition_required",
+        "late_stage_reacquisition_satisfied",
+        "late_stage_reacquisition_zone_id",
+        "late_stage_reacquisition_basis",
+    ):
+        if key in previous_meta:
+            meta[key] = previous_meta[key]
+    policy["active_thesis"] = meta
+    analysis.execution_policy = policy
+    return analysis
 
 
 def apply_thesis_ownership(analysis: Analysis, snapshot: MarketSnapshot) -> Zone | None:
