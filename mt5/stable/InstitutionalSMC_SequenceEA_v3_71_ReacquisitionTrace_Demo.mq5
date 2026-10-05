@@ -2429,7 +2429,8 @@ bool TZ60_ScanPrimaryEngine(
    if(TZ70_BuildEngulfingRetest(r,buy,reentry,sig,engulfRetestStage))
    {model="ZONE_ENGULFING_RETEST";stage="READY";return true;}
 
-   int requestedSweepBars=reentry?MathMax(SweepWindowBars,ReacquisitionSweepWindowBars):SweepWindowBars;
+   int requestedSweepBars=SweepWindowBars;
+   if(reentry&&ReacquisitionSweepWindowBars>requestedSweepBars)requestedSweepBars=ReacquisitionSweepWindowBars;
    int maxSweep=MathMin(requestedSweepBars,ArraySize(r)-12);
    g_tzTraceSweepScanBars=maxSweep;
    int microDepth=MathMax(6,MathMin(SimpleMicroMSSLookbackBars,60));
