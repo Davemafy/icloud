@@ -22,21 +22,21 @@ def test_a_plus_a_and_bplus_authority_is_independent_of_touch_count():
         assert execution_grade_eligible(_zone(grade, 20))
 
 
-def test_bplus_has_reduced_execution_authority_at_point_25_percent():
+def test_bplus_has_reduced_execution_authority_at_point_10_percent():
     assert execution_touch_limit(_zone(Grade.B_PLUS, 0)) > 1_000_000
-    assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.25
-    assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.25
+    assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.10
+    assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.10
     payload = matrix_payload()
     assert payload["bplus_execution_authority"] is True
-    assert payload["B+"] == 0.25
-    assert payload["trend"]["B+"] == 0.25
-    assert payload["countertrend"]["B+"] == 0.25
+    assert payload["B+"] == 0.10
+    assert payload["trend"]["B+"] == 0.10
+    assert payload["countertrend"]["B+"] == 0.10
 
 
 def test_master_sniper_context_grade_risk_budgets_remain_proportional():
-    assert risk_pct_for_grade(Grade.A_PLUS, "TREND") == 1.00
-    assert risk_pct_for_grade(Grade.A, "TREND") == 0.75
-    assert risk_pct_for_grade(Grade.A_PLUS, "COUNTERTREND") == 0.50
-    assert risk_pct_for_grade(Grade.A, "COUNTERTREND") == 0.25
-    assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.25
-    assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.25
+    assert risk_pct_for_grade(Grade.A_PLUS, "TREND") == 0.300
+    assert risk_pct_for_grade(Grade.A, "TREND") == 0.225
+    assert risk_pct_for_grade(Grade.A_PLUS, "COUNTERTREND") == 0.150
+    assert risk_pct_for_grade(Grade.A, "COUNTERTREND") == 0.075
+    assert risk_pct_for_grade(Grade.B_PLUS, "TREND") == 0.10
+    assert risk_pct_for_grade(Grade.B_PLUS, "COUNTERTREND") == 0.10

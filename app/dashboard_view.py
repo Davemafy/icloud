@@ -413,6 +413,15 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         '. Cloud execution authority '+cloudAuthority+
         '. Sequence authority '+sequenceAuthority+'.'
       );
+      if(thesis.late_stage_reacquisition_required===true){
+        const reacquired=thesis.late_stage_reacquisition_satisfied===true;
+        parts.push(
+          'Late-stage HTF location reacquisition '+(reacquired?'SATISFIED':'REQUIRED / NOT SATISFIED')+
+          (thesis.late_stage_reacquisition_zone_id ? ' • current zone '+thesis.late_stage_reacquisition_zone_id : '')+
+          (thesis.late_stage_reacquisition_basis ? ' • '+String(thesis.late_stage_reacquisition_basis).replaceAll('_',' ') : '')+
+          '. Historical ownership remains lifecycle truth but cannot by itself authorize a fresh entry.'
+        );
+      }
       if(thesis.opposite_execution_blocked===true){
         parts.push('All non-owner/opposite zones are WATCH ONLY until the acquired thesis is released.');
       }

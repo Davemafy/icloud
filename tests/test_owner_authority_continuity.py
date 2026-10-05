@@ -178,3 +178,75 @@ def test_observer_does_not_reject_sticky_owner_for_core_not_reached():
     assert features["owner_continuation_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
     assert features["interaction_basis"] == "PERSISTED_THESIS_OWNER"
     assert features["zone_context"] == 1
+
+
+def test_late_stage_owner_without_current_htf_reacquisition_is_watch_only():
+    a = _analysis()
+    a.execution_policy["active_thesis"].update(
+        {
+            "status": "OBJECTIVE_IN_PROGRESS",
+            "target1_hit_at": 1_700,
+            "target2_hit_at": 1_800,
+        }
+    )
+    a.execution_policy["late_stage_reacquisition"] = {
+        "required": True,
+        "satisfied": False,
+        "state": "REQUIRED_WAITING_FOR_CURRENT_HTF_LOCATION",
+        "current_zone_id": "PZ_CURRENT_SELL",
+        "basis": "CURRENT_HTF_ZONE_NOT_REACQUIRED",
+    }
+    service._stamp_execution_authority(a, None, {"active": False})
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "setup_type=CONTINUATION\n"
+        "original_direction=SELL\n"
+        "original_target1=4351.33000\n"
+        "original_target2=4341.13000\n"
+        "original_target3=4320.18000\n"
+    )
+    out = _kv(guard_plan_text(raw, a, _snapshot()))
+
+    assert out["ea_mode"] == "WATCH_ONLY"
+    assert out["execution_authority"] == "NONE"
+    assert out["owner_continuation_ready"] == "0"
+    assert out["late_stage_reacquisition_required"] == "1"
+    assert out["late_stage_reacquisition_satisfied"] == "0"
+    assert "LATE_STAGE_REQUIRES_CURRENT_HTF_LOCATION_REACQUISITION" in out["execution_guard_reason"]
+
+
+def test_late_stage_owner_can_continue_after_current_htf_reacquisition():
+    a = _analysis()
+    a.execution_policy["active_thesis"].update(
+        {
+            "status": "OBJECTIVE_IN_PROGRESS",
+            "target1_hit_at": 1_700,
+            "target2_hit_at": 1_800,
+        }
+    )
+    a.execution_policy["late_stage_reacquisition"] = {
+        "required": True,
+        "satisfied": True,
+        "state": "SATISFIED",
+        "current_zone_id": "PZ_CURRENT_SELL",
+        "basis": "CURRENT_HTF_ZONE_LIVE_ENVELOPE_INTERACTION",
+    }
+    service._stamp_execution_authority(a, None, {"active": False})
+    raw = (
+        "ea_mode=WATCH_ONLY\n"
+        "zone_state=ACTIVE\n"
+        "setup_type=CONTINUATION\n"
+        "original_direction=SELL\n"
+        "original_target1=4351.33000\n"
+        "original_target2=4341.13000\n"
+        "original_target3=4320.18000\n"
+    )
+    out = _kv(guard_plan_text(raw, a, _snapshot()))
+
+    assert out["ea_mode"] == "DUAL_BRANCH"
+    assert out["execution_authority"] == "LIQUIDITY_REVERSAL_HANDOFF"
+    assert out["owner_continuation_ready"] == "1"
+    assert out["late_stage_reacquisition_required"] == "1"
+    assert out["late_stage_reacquisition_satisfied"] == "1"
+    assert out["late_stage_reacquisition_zone_id"] == "PZ_CURRENT_SELL"

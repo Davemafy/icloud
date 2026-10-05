@@ -82,7 +82,7 @@ This is mandatory for the intraday alert map:
 - TREND grades continuation-source quality: HTF authority, displacement/BOS strength, freshness, premium/discount location and supporting FVG/volume evidence.
 - COUNTERTREND grades reversal-location quality: HTF extremity, required structural liquidity inside the envelope, actual sweep/rejection evidence, source response strength, H4>H1 agreement and supporting FVG/volume/PSY evidence.
 - Countertrend is not downgraded merely because D1 points the other way; instead it must satisfy the dedicated reversal rubric.
-- Base thesis risk uses the context x grade matrix before sequence-share/model multipliers: TREND A+ = 1.00%, TREND A = 0.75%, COUNTERTREND A+ = 0.50%, COUNTERTREND A = 0.25%.
+- Base thesis risk uses the context x grade matrix before sequence-share/model multipliers, with a hard 0.30% thesis campaign ceiling: TREND A+ = 0.300%, TREND A = 0.225%, COUNTERTREND A+ = 0.150%, COUNTERTREND A = 0.075%, B+ = 0.100%. P0/R1/R2 nominal allocations together may not exceed the thesis budget.
 - Historical profit after price leaves a zone must never retroactively upgrade that zone's grade. Strong post-reaction momentum validates lifecycle/execution quality and future re-entry research, not the original pre-entry classification.
 - **Zone grade is immutable for the life of an analysis cycle.** Qualified mitigations, raw contacts and touch counts are observation/journal telemetry only. They must never downgrade or upgrade grade, change the context risk allocation, alter ranking, block execution authority, or remove a still-structurally-valid zone.
 - A zone is retired/replaced only by its defined structural invalidation or a new institutional analysis cycle. The lifecycle record preserves the original published grade and telemetry separately.
@@ -145,11 +145,13 @@ The MT5 chart is presentation only; rendering cannot create or authorize zones.
 DEMO / PAPER validation sizing uses a fixed validation-capital anchor rather than upward compounding.
 
 - Validation initial capital = 10,000.
-- TREND A+ base thesis budget = 1.00% of the sizing base.
-- TREND A base thesis budget = 0.75%.
-- COUNTERTREND A+ base thesis budget = 0.50%.
-- COUNTERTREND A base thesis budget = 0.25%.
-- B+ base thesis budget = 0.00%; B+ is WATCH / research context only.
+- Hard thesis campaign ceiling = 0.30% of the sizing base.
+- TREND A+ base thesis budget = 0.300%.
+- TREND A base thesis budget = 0.225%.
+- COUNTERTREND A+ base thesis budget = 0.150%.
+- COUNTERTREND A base thesis budget = 0.075%.
+- B+ base thesis budget = 0.100%; B+ remains an executable reduced-risk grade only when every normal structural, M15, M1, AI and safety gate passes.
+- P0 / R1 / R2 nominal allocations remain 60% / 30% / 10% of the thesis budget. Their combined nominal risk may never exceed 100% of the thesis budget.
 - Sizing base = the lesser of current realized account balance and the 10,000 validation anchor, so losses reduce future size but gains do not compound the experiment.
 - Existing primary/re-entry/flip share multipliers and model-specific reductions still apply inside that base thesis budget and may reduce it, never increase it.
 - Lot calculation must use the actual entry-to-stop monetary loss per lot when available, floor to broker volume step, and return no trade if the calculated size is below broker minimum. It must never round a sub-minimum risk upward.

@@ -49,22 +49,23 @@ def _kv(text: str) -> dict[str, str]:
 
 def test_context_grade_risk_defaults_are_code_authoritative():
     assert SETTINGS.research_validation_initial_capital == 10000.0
-    assert SETTINGS.research_risk_pct_trend_a_plus == 1.00
-    assert SETTINGS.research_risk_pct_trend_a == 0.75
-    assert SETTINGS.research_risk_pct_countertrend_a_plus == 0.50
-    assert SETTINGS.research_risk_pct_countertrend_a == 0.25
-    assert SETTINGS.research_risk_pct_b_plus == 0.25
-    assert SETTINGS.research_risk_epoch == "MASTER_SNIPER_CONTEXT_GRADE_10000_V5_BPLUS_EXEC"
+    assert SETTINGS.research_campaign_risk_cap_pct == 0.30
+    assert SETTINGS.research_risk_pct_trend_a_plus == 0.300
+    assert SETTINGS.research_risk_pct_trend_a == 0.225
+    assert SETTINGS.research_risk_pct_countertrend_a_plus == 0.150
+    assert SETTINGS.research_risk_pct_countertrend_a == 0.075
+    assert SETTINGS.research_risk_pct_b_plus == 0.100
+    assert SETTINGS.research_risk_epoch == "MASTER_SNIPER_CONTEXT_GRADE_10000_V6_THESIS_CAP_030"
 
 
 def test_context_x_grade_matrix_exact_percentages():
     cases = [
-        (_zone(Grade.A_PLUS, countertrend=False), "TREND", 1.00, 0.50),
-        (_zone(Grade.A, countertrend=False), "TREND", 0.75, 0.25),
-        (_zone(Grade.A_PLUS, countertrend=True), "COUNTERTREND", 0.50, 1.00),
-        (_zone(Grade.A, countertrend=True), "COUNTERTREND", 0.25, 0.75),
-        (_zone(Grade.B_PLUS, countertrend=False), "TREND", 0.25, 0.25),
-        (_zone(Grade.B_PLUS, countertrend=True), "COUNTERTREND", 0.25, 0.25),
+        (_zone(Grade.A_PLUS, countertrend=False), "TREND", 0.300, 0.150),
+        (_zone(Grade.A, countertrend=False), "TREND", 0.225, 0.075),
+        (_zone(Grade.A_PLUS, countertrend=True), "COUNTERTREND", 0.150, 0.300),
+        (_zone(Grade.A, countertrend=True), "COUNTERTREND", 0.075, 0.225),
+        (_zone(Grade.B_PLUS, countertrend=False), "TREND", 0.100, 0.100),
+        (_zone(Grade.B_PLUS, countertrend=True), "COUNTERTREND", 0.100, 0.100),
     ]
     for zone, context, original, flip in cases:
         assert zone_risk_context(zone) == context
@@ -90,9 +91,9 @@ def test_bplus_has_first_qualified_mitigation_reduced_risk_authority():
     assert plan["ea_mode"] == "WATCH_ONLY"
     assert plan["grade"] == "B+"
     assert plan["risk_model"] == RISK_MODEL
-    assert plan["grade_risk_pct"] == "0.25"
-    assert plan["original_risk_pct"] == "0.25"
-    assert plan["flip_risk_pct"] == "0.25"
+    assert plan["grade_risk_pct"] == "0.100"
+    assert plan["original_risk_pct"] == "0.100"
+    assert plan["flip_risk_pct"] == "0.100"
     assert plan["bplus_execution_authority"] == "1"
     assert "SNAPSHOT" in plan["separation_guard"]
 
@@ -104,7 +105,7 @@ def test_bplus_touch_count_does_not_remove_grade_authority():
     assert plan["bplus_execution_authority"] == "1"
 
 
-def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
+def test_guard_exports_countertrend_a_reduced_base_risk(monkeypatch):
     zone = _zone(Grade.A, countertrend=True)
     analysis = _analysis(zone)
     snap = _snapshot()
@@ -118,6 +119,22 @@ def test_guard_exports_countertrend_a_quarter_percent_base_risk(monkeypatch):
     assert guarded["execution_authority"] == "HTF_CORE_HANDOFF"
     assert guarded["risk_model"] == RISK_MODEL
     assert guarded["risk_context"] == "COUNTERTREND"
-    assert guarded["grade_risk_pct"] == "0.25"
-    assert guarded["original_risk_pct"] == "0.25"
-    assert guarded["flip_risk_pct"] == "0.75"
+    assert guarded["grade_risk_pct"] == "0.075"
+    assert guarded["original_risk_pct"] == "0.075"
+    assert guarded["flip_risk_pct"] == "0.225"
+
+
+def test_risk_matrix_hard_cap_cannot_be_raised_by_settings(monkeypatch):
+    from dataclasses import replace
+    from app import risk_matrix as risk
+
+    monkeypatch.setattr(
+        risk,
+        "SETTINGS",
+        replace(
+            risk.SETTINGS,
+            research_campaign_risk_cap_pct=5.0,
+            research_risk_pct_trend_a_plus=4.0,
+        ),
+    )
+    assert risk.risk_pct_for_grade(Grade.A_PLUS, "TREND") == 0.30

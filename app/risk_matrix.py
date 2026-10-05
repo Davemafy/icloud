@@ -5,9 +5,10 @@ from typing import Any
 from .config import SETTINGS
 from .models import Direction, Grade, Zone
 
-RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V7_IMMUTABLE_ZONE_GRADE"
+RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V8_THESIS_CAP_030"
 RISK_CONTEXT_TREND = "TREND"
 RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
+HARD_THESIS_CAMPAIGN_RISK_CAP_PCT = 0.30
 
 # Master Sniper execution contract:
 # - The grade published by the institutional analysis is immutable for that
@@ -29,20 +30,32 @@ def opposite_risk_context(context: str) -> str:
 def risk_pct_for_grade(grade: Grade, context: str) -> float:
     context = str(context).upper()
     if grade == Grade.A_PLUS:
-        return float(
+        pct = float(
             SETTINGS.research_risk_pct_countertrend_a_plus
             if context == RISK_CONTEXT_COUNTERTREND
             else SETTINGS.research_risk_pct_trend_a_plus
         )
-    if grade == Grade.A:
-        return float(
+    elif grade == Grade.A:
+        pct = float(
             SETTINGS.research_risk_pct_countertrend_a
             if context == RISK_CONTEXT_COUNTERTREND
             else SETTINGS.research_risk_pct_trend_a
         )
-    if grade == Grade.B_PLUS:
-        return float(SETTINGS.research_risk_pct_b_plus)
-    return 0.0
+    elif grade == Grade.B_PLUS:
+        pct = float(SETTINGS.research_risk_pct_b_plus)
+    else:
+        return 0.0
+
+    # Safety invariant: configuration or deployment overrides may reduce risk,
+    # but can never raise one thesis above the DEMO/PAPER campaign ceiling.
+    return max(
+        0.0,
+        min(
+            pct,
+            float(SETTINGS.research_campaign_risk_cap_pct),
+            HARD_THESIS_CAMPAIGN_RISK_CAP_PCT,
+        ),
+    )
 
 
 def original_risk_pct(zone: Zone) -> float:
@@ -68,20 +81,27 @@ def execution_grade_eligible(zone: Zone) -> bool:
 
 
 def matrix_payload() -> dict[str, Any]:
-    bplus = float(SETTINGS.research_risk_pct_b_plus)
+    trend_aplus = risk_pct_for_grade(Grade.A_PLUS, RISK_CONTEXT_TREND)
+    trend_a = risk_pct_for_grade(Grade.A, RISK_CONTEXT_TREND)
+    counter_aplus = risk_pct_for_grade(Grade.A_PLUS, RISK_CONTEXT_COUNTERTREND)
+    counter_a = risk_pct_for_grade(Grade.A, RISK_CONTEXT_COUNTERTREND)
+    bplus = risk_pct_for_grade(Grade.B_PLUS, RISK_CONTEXT_TREND)
     return {
         "model": RISK_MODEL,
         "validation_initial_capital": float(SETTINGS.research_validation_initial_capital),
         "compounding": False,
         "risk_base_rule": "MIN_VALIDATION_CAPITAL_OR_LIVE_BALANCE",
+        "max_thesis_campaign_risk_pct": HARD_THESIS_CAMPAIGN_RISK_CAP_PCT,
+        "campaign_risk_shares": {"P0": 0.60, "R1": 0.30, "R2": 0.10},
+        "campaign_risk_rule": "P0_PLUS_R1_PLUS_R2_NOMINAL_RISK_MUST_NOT_EXCEED_THESIS_BUDGET",
         "trend": {
-            "A+": float(SETTINGS.research_risk_pct_trend_a_plus),
-            "A": float(SETTINGS.research_risk_pct_trend_a),
+            "A+": trend_aplus,
+            "A": trend_a,
             "B+": bplus,
         },
         "countertrend": {
-            "A+": float(SETTINGS.research_risk_pct_countertrend_a_plus),
-            "A": float(SETTINGS.research_risk_pct_countertrend_a),
+            "A+": counter_aplus,
+            "A": counter_a,
             "B+": bplus,
         },
         "B+": bplus,
@@ -108,7 +128,7 @@ def matrix_payload() -> dict[str, Any]:
             "TREND": "continuation-source structural quality; mitigation telemetry never changes grade",
             "COUNTERTREND": "HTF extremity + structural liquidity sweep/rejection + reversal-response quality; mitigation telemetry never changes grade",
         },
-        "note": "Master Sniper base thesis risk is context x immutable analysis grade before entry-share/model multipliers. Touch/mitigation counts remain journal telemetry only. Only structural invalidation or a new analysis cycle may retire or replace a zone.",
+        "note": "Master Sniper thesis risk is context x immutable analysis grade, hard-capped at 0.30% per campaign before entry-share/model multipliers. P0/R1/R2 shares sum to at most 100% of that thesis budget. Touch/mitigation counts remain journal telemetry only. Only structural invalidation or a new analysis cycle may retire or replace a zone.",
     }
 
 

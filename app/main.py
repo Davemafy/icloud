@@ -1022,6 +1022,8 @@ def _journal_snapshot():
         and finalized_authority != "NONE"
     )
     map_m1_ready = bool(z and readiness == "M1_READY")
+    late_stage_required = str(final_plan.get("late_stage_reacquisition_required") or "0") == "1"
+    late_stage_satisfied = str(final_plan.get("late_stage_reacquisition_satisfied") or "1") == "1"
 
     checks = {
         "fresh_zone": bool(z and execution_touch_limit(z) >= 0 and z.touch_count <= execution_touch_limit(z)),
@@ -1035,6 +1037,7 @@ def _journal_snapshot():
             or bool(target_truth.get("authority_safe"))
         ),
         "m1_handoff_ready": finalized_handoff if final_plan else map_m1_ready,
+        "late_stage_htf_reacquired": bool(not late_stage_required or late_stage_satisfied),
         "live_data_safe": bool(
             s
             and s.spread_points <= SETTINGS.max_spread_points
@@ -1057,6 +1060,11 @@ def _journal_snapshot():
     sequence_debug["cloud_authority"] = cloud_authority
     sequence_debug["cloud_ea_mode"] = finalized_mode or "UNKNOWN"
     sequence_debug["cloud_execution_guard_reason"] = str(final_plan.get("execution_guard_reason") or "")
+    sequence_debug["cloud_late_stage_reacquisition_required"] = late_stage_required
+    sequence_debug["cloud_late_stage_reacquisition_satisfied"] = late_stage_satisfied
+    sequence_debug["cloud_late_stage_reacquisition_zone_id"] = str(final_plan.get("late_stage_reacquisition_zone_id") or "")
+    sequence_debug["cloud_late_stage_reacquisition_state"] = str(final_plan.get("late_stage_reacquisition_state") or "NOT_REQUIRED")
+    sequence_debug["cloud_late_stage_reacquisition_basis"] = str(final_plan.get("late_stage_reacquisition_basis") or "")
     sequence_debug["cloud_separation_guard"] = str(final_plan.get("separation_guard") or "")
     sequence_debug["cloud_usable_runway"] = str(final_plan.get("usable_runway") or "")
     sequence_debug["cloud_required_runway"] = str(final_plan.get("required_runway") or "")
