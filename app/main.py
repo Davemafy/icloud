@@ -1056,6 +1056,23 @@ def _journal_snapshot():
         ),
     }
     target_progress = _journal_target_progress(a, z)
+    # Once ownership is active, target_ladder_truth is the canonical execution
+    # lifecycle, including any one-way opposing-zone owner cap. Do not let the
+    # legacy frozen-target summary advertise a deeper objective through a live
+    # opposing HTF zone.
+    if (
+        target_progress.get("scope") == "ACTIVE_THESIS"
+        and bool(target_truth.get("execution_evaluable"))
+    ):
+        open_targets = [float(x) for x in list(target_truth.get("open_targets") or [])]
+        completed_targets = [float(x) for x in list(target_truth.get("completed_targets") or [])]
+        target_progress = {
+            "next_open": float(target_truth.get("next_open_target") or 0.0) or None,
+            "remaining": open_targets,
+            "completed": completed_targets,
+            "scope": "ACTIVE_THESIS",
+        }
+
     # Before a zone activates, its TP ladder remains a forward PLAN. Historical
     # price travel through those future TP prices does not consume the ladder.
     sequence_debug = _sequence_debug_snapshot()
