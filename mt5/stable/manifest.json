@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.7",
+  "release": "6.4.8",
   "repository": "Davemafy/icloud",
-  "ref": "722f94e0db50df6584f90c8fc757f662fc9636bd",
+  "ref": "c959547a26ce5f13b258219867a142420d30d896",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.67",
+  "sequence_ea_version": "3.68",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -183,9 +183,7 @@
     "canonical_primary_map_count",
     "mt5_watch_only_reason_parity",
     "human_readable_zone_lifecycle_labels",
-    "first_entry_zone_distal_stop_floor",
     "zone_stop_spread_atr_broker_buffer",
-    "zone_stop_min_rr_fail_closed",
     "strategic_multimodel_execution",
     "momentum_pullback_execution",
     "vwap_proxy_reclaim_execution",
@@ -194,14 +192,12 @@
     "strategic_model_reduced_risk",
     "strategic_model_fresh_pd_array",
     "strategic_model_closed_m1_confirmation",
-    "strategic_model_zone_distal_stop",
     "entry_specific_m1_runway_candidate_window",
     "actual_entry_runway_order_gate",
     "rolling_upgrade_runway_compatibility_guard",
     "runway_gate_dashboard_truth",
     "envelope_contact_arms_m1",
     "m15_health_only_for_primary_entry",
-    "zone_distal_buffered_stop",
     "order_time_min_rr_only",
     "absolute_runway_telemetry_only",
     "consumed_targets_skipped",
@@ -210,7 +206,6 @@
     "model1_m1_sweep_micro_mss_ob_fvg_retest",
     "model2_zone_engulfing",
     "sniper_cycle_rearm_r1_r2",
-    "sniper_reentries_zone_distal_stop",
     "model1_no_ote_gate",
     "nearest_m1_micro_swing_mss",
     "micro_mss_one_bar_internal_pivot",
@@ -262,7 +257,13 @@
     "orderflow_proxy_telemetry_only_default",
     "orderflow_proxy_never_claims_centralized_delta",
     "orderflow_proxy_optional_contradiction_veto",
-    "sequence_367_truth_overlay"
+    "sequence_367_truth_overlay",
+    "m1_causal_execution_stop",
+    "htf_thesis_invalidation_separate_from_order_stop",
+    "confirmed_model_execution_stop_buffer",
+    "minimum_rr_uses_actual_m1_trade_structure",
+    "rr_blocker_candidate_audit_telemetry",
+    "sequence_368_truth_overlay"
   ],
   "files": [
     {
@@ -275,11 +276,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_68_M1ExecutionStop_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_68_M1ExecutionStop_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_68_M1ExecutionStop_Demo.mq5",
       "requires_reload": true,
-      "sha256": "9c79f8a74d47da25d39974cb6d26971c932070edf7be71ee61f65aaafadc8720"
+      "sha256": "0448c277c33b4cec6d1400e5b38f3ecdef3401344f7a1d7ba580587b1ebac053"
     }
   ],
   "support_files": [
