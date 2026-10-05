@@ -217,11 +217,11 @@ Target hierarchy:
 Stop logic remains liquidity/structure based, with separate thesis and trade invalidation:
 
 - The full H4/H1 institutional envelope defines thesis invalidation. Closed-M15 accepted invalidation beyond that distal boundary terminates the original thesis and hands control to normal flip/reclaim logic.
-- After a valid CLOSED M1 execution model confirms, the order-level protective stop is placed beyond the causal M1 structural anchor, not automatically beyond the full HTF envelope.
-- SELL execution SL = causal M1 bearish invalidation anchor plus the spread/ATR/broker-stop buffer.
-- BUY execution SL = causal M1 bullish invalidation anchor minus the spread/ATR/broker-stop buffer.
+- After a valid CLOSED M1 execution model confirms, the order-level protective stop is placed beyond the nearest confirmed still-protected M1 swing on the adverse side of entry, not automatically beyond the full HTF envelope and not merely beyond a generic signal anchor.
+- SELL execution SL = nearest confirmed still-protected M1 swing high above entry plus the spread/ATR/broker-stop buffer.
+- BUY execution SL = nearest confirmed still-protected M1 swing low below entry minus the spread/ATR/broker-stop buffer.
 - The buffer is spread/ATR/broker-stop aware. It must be at least 5 broker points and at least 1.5x the live spread in price terms, and it may be widened by the existing M1 ATR stop buffer or broker minimum stop distance.
-- Minimum RR remains fail-closed at the actual entry using this actual execution SL and the deepest still-open valid objective. The system must never invent a tighter stop merely to manufacture acceptable RR.
+- The selected swing must be fully closed before entry and must remain unbreached by all later closed M1 bars. If no valid protected swing exists, execution waits; the system must never invent a tighter stop merely to manufacture acceptable RR. Minimum RR remains fail-closed at the actual entry using this actual execution SL and the deepest still-open valid objective.
 - An execution stop-out does not by itself invalidate the HTF thesis. If the HTF zone remains valid and the campaign risk/re-entry budget is still available, R1/R2 may re-arm only through their normal fresh M1 confirmation.
 
 Session context changes patience, not zone validity:
