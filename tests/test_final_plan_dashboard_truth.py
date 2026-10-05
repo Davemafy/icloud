@@ -128,6 +128,7 @@ def test_journal_uses_final_plan_runway_and_authority(monkeypatch):
     assert journal["checks"]["clear_run"] is True
     assert journal["checks"]["m1_handoff_ready"] is True
     assert journal["checks"]["fresh_m1_location_ready"] is True
+    assert journal["checks"]["late_stage_htf_reacquired"] is True
     assert journal["sequence_debug"]["fresh_m1_location_ready"] is True
     assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
     assert journal["sequence_debug"]["cloud_ea_mode"] == "DUAL_BRANCH"
@@ -203,7 +204,7 @@ def test_owner_macro_authority_does_not_masquerade_as_fresh_m1_location(monkeypa
     assert journal["checks"]["m1_handoff_ready"] is True
     assert journal["checks"]["fresh_m1_location_ready"] is False
     assert journal["sequence_debug"]["fresh_m1_location_ready"] is False
-    assert journal["readiness_score"].endswith("/10")
+    assert journal["readiness_score"].endswith("/11")
 
 
 def test_journal_displays_persisted_acquisition_anchor_without_changing_execution_truth(monkeypatch):
