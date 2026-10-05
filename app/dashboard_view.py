@@ -535,7 +535,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       cls=ownerMatch ? 'ok' : 'blue';
       meta=ownerMatch
         ? checklist+'The acquired thesis still owns direction, but that ownership anchor is not itself a fresh entry signal. A new same-direction M1 location/confirmation and the live Sequence micro-gate are required before any new order.'
-        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro structure shift → causal OB/FVG → bounded retest → CLOSED M1 directional confirmation. Model 2: recent-zone CLOSED directional engulfing → entry; no separate M1 micro-structure shift. Model 3: institutional boundary breakout → displacement → acceptance → retest → CLOSED directional M1 confirmation; no separate M1 micro-structure shift. M15 validates zone health; each sniper family uses its own confirmation contract.';
+        : checklist+'Macro location handoff is active. Model 1: M1 liquidity sweep → M1 micro structure shift → causal OB/FVG → bounded retest → CLOSED M1 directional confirmation. Model 2: recent-zone CLOSED directional engulfing → entry; if the direct entry is missed, a bounded engulfed-body retest plus fresh CLOSED directional rejection may recover the same opportunity. No separate M1 micro-structure shift. Model 3: institutional boundary breakout → displacement → acceptance → retest → CLOSED directional M1 confirmation; no separate M1 micro-structure shift. M15 validates zone health; each sniper family uses its own confirmation contract.';
     }
 
     const seq=j?.sequence_debug||{};
@@ -760,7 +760,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(simplePrimaryWait){
         state='M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
-        meta=checklist+'Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains a parallel independent trigger and does not require that shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
+        meta=checklist+'Model 1: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. Model 2 engulfing remains a parallel independent trigger; Sequence 3.70+ may also recover a missed engulfing through a bounded value retest and fresh CLOSED directional rejection. It does not require the Model-1 shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.';
       }else if(breakoutWait){
         state='BREAKOUT SEQUENCE FORMING';
         cls='blue';
@@ -772,13 +772,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
       }else if(reactionWait){
         state='WAITING FOR M1 CONFIRMATION';
         cls='blue';
-        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING')
+        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING'||seqModel==='ZONE_ENGULFING_RETEST')
           ? 'Sniper model is waiting for its final closed M1 directional confirmation. Entry permission: NO.'
           : 'This non-primary/re-entry model is waiting for its configured closed-M1 confirmation. Entry permission: NO.');
       }else if(valueWait){
         state='WAITING FOR RETRACE';
         cls='blue';
-        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING')
+        meta=checklist+((seqModel==='MASTER_SNIPER_PD_RETEST'||seqModel==='ZONE_ENGULFING'||seqModel==='ZONE_ENGULFING_RETEST')
           ? 'Model 1 is waiting for the OB/FVG pullback after the M1 micro MSS. Entry permission: NO.'
           : 'This non-primary/re-entry model is waiting for its configured value retrace. Entry permission: NO.');
       }else if(forming){
