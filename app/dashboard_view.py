@@ -544,6 +544,12 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
     const seqVersion=String(seq.version||'');
+    const lastCandidateEntry=Number(seq.last_candidate_entry||0);
+    const lastCandidateStop=Number(seq.last_candidate_stop||0);
+    const lastCandidateTarget=Number(seq.last_candidate_target||0);
+    const lastCandidateRR=Number(seq.last_candidate_rr||0);
+    const lastCandidateRRRequired=Number(seq.last_candidate_rr_required||0);
+    const lastCandidateStopBasis=String(seq.last_candidate_stop_basis||'');
     const cloudMode=String(seq.cloud_ea_mode||'UNKNOWN');
     const cloudGuard=String(seq.cloud_execution_guard_reason||'');
     const cloudSeparation=String(seq.cloud_separation_guard||'');
@@ -600,7 +606,14 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const orderFlowText=orderFlowMode>0
       ? ' Order-flow proxy: '+orderFlowState+' • score '+orderFlowScore.toFixed(2)+' • Δ-proxy '+orderFlowDeltaNorm.toFixed(2)+(orderFlowFlags.length?' • '+orderFlowFlags.join(', '):'')+' • '+(orderFlowFeed||'CFD_TICK_VOLUME_PROXY')+' (broker CFD tick-volume proxy; NOT centralized COMEX bid/ask delta).'
       : '';
-    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText;
+    const rrAuditText=(lastCandidateEntry&&lastCandidateStop&&lastCandidateTarget)
+      ? ' Candidate audit: entry '+tracePrice(lastCandidateEntry)+
+        ' • SL '+tracePrice(lastCandidateStop)+
+        ' • target '+tracePrice(lastCandidateTarget)+
+        (lastCandidateRRRequired?' • RR '+lastCandidateRR.toFixed(2)+' / required '+lastCandidateRRRequired.toFixed(2):'')+
+        (lastCandidateStopBasis?' • stop '+lastCandidateStopBasis.replaceAll('_',' '):'')+'.'
+      : '';
+    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText+rrAuditText;
 
     if(seqOnline && seqOpen>0){
       state='IN TRADE • MANAGING';
@@ -642,7 +655,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and buffered zone-distal SL to still-open objectives.';
+            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and its confirmed execution SL to still-open objectives. Sequence 3.68+ separates M1 trade invalidation from the wider HTF thesis invalidation.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
