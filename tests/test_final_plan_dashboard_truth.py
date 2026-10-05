@@ -254,3 +254,61 @@ def test_finalized_authority_is_macro_handoff_truth_even_without_duplicate_ready
     assert journal["checks"]["m1_handoff_ready"] is True
     assert journal["sequence_debug"]["cloud_authority"] == "HTF_CORE_HANDOFF"
     assert journal["sequence_debug"]["cloud_ea_mode"] == "DUAL_BRANCH"
+
+
+def test_journal_prefers_capped_owner_target_truth_over_frozen_deeper_target(monkeypatch):
+    zone = _zone()
+    analysis = _analysis(zone)
+    snapshot = _snapshot()
+    analysis.execution_policy["active_thesis"].update(
+        {
+            "target1": 4285.0,
+            "target2": 4303.32,
+            "target3": 4382.60,
+            "target1_hit_at": 900,
+            "target2_hit_at": 950,
+            "target3_hit_at": 0,
+        }
+    )
+    _patch_common(monkeypatch, analysis, snapshot, "HTF_CORE_HANDOFF")
+    monkeypatch.setattr(
+        main,
+        "target_ladder_truth",
+        lambda *_args, **_kwargs: {
+            "status": "ACTIVE_TARGETS_OPEN",
+            "objectives": [
+                {"label": "TP1", "price": 4285.0, "state": "COMPLETED"},
+                {"label": "TP2", "price": 4303.32, "state": "COMPLETED"},
+                {"label": "TP3", "price": 4382.60, "state": "BLOCKED_BY_OPPOSING_ZONE_CAP"},
+                {"label": "OWNER_CAP", "price": 4310.50, "state": "OPEN"},
+            ],
+            "open_targets": [4310.50],
+            "completed_targets": [4285.0, 4303.32],
+            "behind_activation_targets": [],
+            "next_open_target": 4310.50,
+            "authority_safe": True,
+            "execution_evaluable": True,
+            "history_complete": True,
+            "remap_required": False,
+            "history_reason": "TARGET_LIFECYCLE_OWNER_CAP_RECONCILED",
+            "activation_reference": 4260.0,
+            "activation_reference_basis": "OWNERSHIP_ANCHOR",
+        },
+    )
+    monkeypatch.setattr(
+        main,
+        "active_plan_text",
+        lambda *_args, **_kwargs: (
+            "ea_mode=DUAL_BRANCH\n"
+            "execution_authority=HTF_CORE_HANDOFF\n"
+            "usable_runway_ok=1\n"
+            "separation_guard=PASS\n"
+        ),
+    )
+
+    journal = main._journal_snapshot()
+
+    assert journal["next_open_thesis_objective"] == 4310.50
+    assert journal["remaining_thesis_targets"] == [4310.50]
+    assert journal["completed_thesis_targets"] == [4285.0, 4303.32]
+    assert journal["target_history_reason"] == "TARGET_LIFECYCLE_OWNER_CAP_RECONCILED"
