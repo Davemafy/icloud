@@ -404,7 +404,7 @@ def install_ai_contract_correction() -> None:
 
     ai.SYSTEM = ai.SYSTEM.replace(
         "A+ and A are execution grades; B+ is research context/watch only.",
-        "A+, A and B+ are execution grades when their normal gates pass; B+ uses the dedicated reduced 0.25% authority and is limited to <=1 qualified mitigation.",
+        "A+, A and B+ are execution grades when their normal gates pass; B+ uses the dedicated reduced 0.100% authority and is limited to <=1 qualified mitigation.",
     )
     original_payload = ai._payload
     if getattr(original_payload, "_tradezone_professional_separation", False):
@@ -414,7 +414,7 @@ def install_ai_contract_correction() -> None:
         payload = original_payload(a, s)
         rules = payload.setdefault("rules", {})
         rules["bplus_execution_authority"] = True
-        rules["bplus_role"] = "reduced-risk execution candidate at 0.25% when structurally produced; mitigation count is telemetry only and all normal gates still apply"
+        rules["bplus_role"] = "reduced-risk execution candidate at 0.100% when structurally produced; mitigation count is telemetry only and all normal gates still apply"
         rules["institutional_layers"] = ["MAP_CONTEXT", "EXECUTION_CANDIDATE", "M1_AUTHORIZED"]
         rules["map_location_is_not_execution_authority"] = True
         rules["analysis_history_windows"] = {
