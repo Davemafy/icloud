@@ -428,7 +428,7 @@ def install_ai_contract_correction() -> None:
         rules["dxy_history_authority"] = "DXY is confirmation/confluence only: minimum prompt counts remain mandatory, but extended DXY depth alone cannot veto or manufacture an XAU zone."
         rules["lifecycle_history_is_separate"] = "Mitigation history may retain older M15 bars than the 3-5 trading-day analysis window; it is lifecycle telemetry only and must not change grade, risk, ranking, authority, width or location."
         rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
-        rules["clear_run_semantics"] = "absolute runway is observation only. Primary order quality is checked at the actual M1 entry using the confirmed causal M1 execution SL and a still-open directional objective; Sequence 3.68 keeps the HTF distal boundary as thesis invalidation only and applies minimum RR to the actual trade structure."
+        rules["clear_run_semantics"] = "absolute runway is observation only. Primary order quality is checked at the actual M1 entry using the nearest confirmed still-protected M1 swing plus buffer and a still-open directional objective; Sequence 3.69 keeps the HTF distal boundary as thesis invalidation only and applies minimum RR to the actual trade structure."
         return payload
 
     corrected_payload._tradezone_professional_separation = True

@@ -783,6 +783,8 @@ def _sequence_debug_snapshot() -> dict:
         "last_candidate_rr": float(details.get("last_candidate_rr") or 0.0),
         "last_candidate_rr_required": float(details.get("last_candidate_rr_required") or 0.0),
         "last_candidate_stop_basis": str(details.get("last_candidate_stop_basis") or ""),
+        "last_candidate_swing_level": float(details.get("last_candidate_swing_level") or 0.0),
+        "last_candidate_swing_time": int(float(details.get("last_candidate_swing_time") or 0)),
         "trace_liquidity_level": float(details.get("trace_liquidity_level") or 0.0),
         "trace_contact_ts": int(details.get("trace_contact_ts") or 0),
         "trace_reconstructed_pre_handoff": bool(details.get("trace_reconstructed_pre_handoff")),

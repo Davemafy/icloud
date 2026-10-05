@@ -550,6 +550,8 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const lastCandidateRR=Number(seq.last_candidate_rr||0);
     const lastCandidateRRRequired=Number(seq.last_candidate_rr_required||0);
     const lastCandidateStopBasis=String(seq.last_candidate_stop_basis||'');
+    const lastCandidateSwingLevel=Number(seq.last_candidate_swing_level||0);
+    const lastCandidateSwingTime=Number(seq.last_candidate_swing_time||0);
     const cloudMode=String(seq.cloud_ea_mode||'UNKNOWN');
     const cloudGuard=String(seq.cloud_execution_guard_reason||'');
     const cloudSeparation=String(seq.cloud_separation_guard||'');
@@ -611,7 +613,9 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         ' • SL '+tracePrice(lastCandidateStop)+
         ' • target '+tracePrice(lastCandidateTarget)+
         (lastCandidateRRRequired?' • RR '+lastCandidateRR.toFixed(2)+' / required '+lastCandidateRRRequired.toFixed(2):'')+
-        (lastCandidateStopBasis?' • stop '+lastCandidateStopBasis.replaceAll('_',' '):'')+'.'
+        (lastCandidateStopBasis?' • stop '+lastCandidateStopBasis.replaceAll('_',' '):'')+
+        (lastCandidateSwingLevel?' • swing '+tracePrice(lastCandidateSwingLevel):'')+
+        (lastCandidateSwingTime?' @ '+new Date(lastCandidateSwingTime*1000).toLocaleString():'')+'.'
       : '';
     const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText+rrAuditText;
 
@@ -655,7 +659,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
               (cloudRunwayEntryLimit?' (limit '+cloudRunwayEntryLimit+')':'')+
               '; the actual quote is checked again immediately before order.';
           }else if(cloudRunwayMode==='RR_ONLY_M1_ORDER'){
-            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and its confirmed execution SL to still-open objectives. Sequence 3.68+ separates M1 trade invalidation from the wider HTF thesis invalidation.';
+            runwayText=' Absolute runway is observation only. Sequence '+(seqVersion||'current')+' checks minimum RR from the actual M1 entry and its confirmed execution SL to still-open objectives. Sequence 3.69+ uses the nearest confirmed still-protected M1 swing plus buffer for the order SL, while the wider HTF zone remains thesis invalidation.';
           }else if(cloudRunwayMode==='CONSERVATIVE_CORE_EDGE_COMPAT'){
             runwayText+=' Conservative core-edge compatibility guard remains active until the matching Sequence runtime is loaded.'+
               (cloudConservativeEdgeRunway?' Edge runway '+cloudConservativeEdgeRunway+'.':'');
