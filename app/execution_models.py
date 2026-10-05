@@ -172,7 +172,7 @@ def build_execution_overlay(s: MarketSnapshot, a: Analysis, reason: str) -> dict
             "alternative_model_requires_m1_structure_displacement": True,
             "alternative_model_requires_fresh_pd_array": True,
             "alternative_model_requires_closed_m1_reaction": True,
-            "alternative_model_first_entry_uses_zone_distal_stop": True,
+            "alternative_model_first_entry_uses_causal_m1_stop": True,
             "alternative_model_min_rr_fail_closed": True,
             "model1_requires_m1_micro_structure_shift": True,
             "model2_engulfing_requires_separate_m1_micro_structure_shift": False,
