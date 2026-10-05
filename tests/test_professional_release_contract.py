@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.8"
+    assert manifest["release"] == "6.4.9"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.68"
+    assert manifest["sequence_ea_version"] == "3.69"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_68_M1ExecutionStop_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_69_ProtectedSwingStop_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -197,5 +197,13 @@ def test_professional_release_contract_is_self_consistent():
         "minimum_rr_uses_actual_m1_trade_structure",
         "rr_blocker_candidate_audit_telemetry",
         "sequence_368_truth_overlay",
+        "protected_m1_swing_stop",
+        "nearest_confirmed_adverse_m1_swing",
+        "protected_swing_must_survive_later_closed_bars",
+        "no_protected_swing_no_entry",
+        "protected_swing_stop_all_models",
+        "protected_swing_stop_flip_parity",
+        "protected_swing_audit_telemetry",
+        "sequence_369_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))
