@@ -601,3 +601,44 @@ def test_flat_prezone_owner_releases_while_price_is_inside_lower_buy_origin(tmp_
         ).fetchone()
     assert int(row["ownership_acquired_at"] or 0) == 0
     assert policy.INTERZONE_OWNER_RELEASE_REASON in str(row["last_reason"])
+
+
+def test_late_stage_reacquisition_uses_current_same_direction_htf_location():
+    owner = _owner()
+    owner["target1_hit_at"] = 9_500
+    owner["target2_hit_at"] = 9_600
+
+    current = _zone("BUY_CURRENT", Direction.BUY, 333, Grade.A_PLUS)
+    current.zone_low = 95.0
+    current.zone_high = 105.0
+    current.core_method = "ARMED|TEST"
+
+    state = policy._late_stage_reacquisition_state(owner, current, _snapshot(100.0))
+
+    assert state["required"] is True
+    assert state["completed_targets"] == 2
+    assert state["satisfied"] is True
+    assert state["current_zone_id"] == "BUY_CURRENT"
+    assert state["basis"] == "CURRENT_HTF_ZONE_LIVE_ENVELOPE_INTERACTION"
+    assert state["frozen_owner_preserved"] is True
+    assert state["ownership_transferred"] is False
+
+
+def test_late_stage_reacquisition_fails_closed_when_current_htf_location_is_remote():
+    owner = _owner()
+    owner["target1_hit_at"] = 9_500
+    owner["target2_hit_at"] = 9_600
+
+    current = _zone("BUY_CURRENT_REMOTE", Direction.BUY, 334, Grade.A_PLUS)
+    current.zone_low = 120.0
+    current.zone_high = 130.0
+    current.core_low = 123.0
+    current.core_high = 125.0
+    current.core_method = "ARMED|TEST"
+
+    state = policy._late_stage_reacquisition_state(owner, current, _snapshot(100.0))
+
+    assert state["required"] is True
+    assert state["satisfied"] is False
+    assert state["state"] == "REQUIRED_WAITING_FOR_CURRENT_HTF_LOCATION"
+    assert state["basis"] == "CURRENT_HTF_ZONE_NOT_REACQUIRED"
