@@ -500,7 +500,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     const allKeys=Object.keys(checks);
     const allPassed=allKeys.reduce((n,k)=>n+(checks[k]===true?1:0),0);
-    const checklist=allKeys.length ? ('Readiness checks '+allPassed+'/'+allKeys.length+'. ') : '';
+    const checklist=allKeys.length ? ('Pre-entry conditions '+allPassed+'/'+allKeys.length+'. This is not an M1 trigger or order permission. ') : '';
     const m1=checks.m1_handoff_ready===true;
     const freshM1=checks.fresh_m1_location_ready===true;
     const live=checks.live_data_safe===true;
