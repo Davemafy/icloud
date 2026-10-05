@@ -8,6 +8,7 @@ from .models import Direction, Grade, Zone
 RISK_MODEL = "MASTER_SNIPER_CONTEXT_GRADE_MATRIX_10000_V8_THESIS_CAP_030"
 RISK_CONTEXT_TREND = "TREND"
 RISK_CONTEXT_COUNTERTREND = "COUNTERTREND"
+HARD_THESIS_CAMPAIGN_RISK_CAP_PCT = 0.30
 
 # Master Sniper execution contract:
 # - The grade published by the institutional analysis is immutable for that
@@ -47,7 +48,14 @@ def risk_pct_for_grade(grade: Grade, context: str) -> float:
 
     # Safety invariant: configuration or deployment overrides may reduce risk,
     # but can never raise one thesis above the DEMO/PAPER campaign ceiling.
-    return max(0.0, min(pct, float(SETTINGS.research_campaign_risk_cap_pct)))
+    return max(
+        0.0,
+        min(
+            pct,
+            float(SETTINGS.research_campaign_risk_cap_pct),
+            HARD_THESIS_CAMPAIGN_RISK_CAP_PCT,
+        ),
+    )
 
 
 def original_risk_pct(zone: Zone) -> float:
@@ -79,7 +87,7 @@ def matrix_payload() -> dict[str, Any]:
         "validation_initial_capital": float(SETTINGS.research_validation_initial_capital),
         "compounding": False,
         "risk_base_rule": "MIN_VALIDATION_CAPITAL_OR_LIVE_BALANCE",
-        "max_thesis_campaign_risk_pct": float(SETTINGS.research_campaign_risk_cap_pct),
+        "max_thesis_campaign_risk_pct": HARD_THESIS_CAMPAIGN_RISK_CAP_PCT,
         "campaign_risk_shares": {"P0": 0.60, "R1": 0.30, "R2": 0.10},
         "campaign_risk_rule": "P0_PLUS_R1_PLUS_R2_NOMINAL_RISK_MUST_NOT_EXCEED_THESIS_BUDGET",
         "trend": {
