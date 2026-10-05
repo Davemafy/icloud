@@ -152,7 +152,7 @@ def apply_secondary_zone_policy(analysis: Analysis, snapshot: MarketSnapshot) ->
         reserve_map[direction.value.lower()] = payload
         brief_parts.append(
             f"{direction.value}2={reserve.zone_low:.2f}-{reserve.zone_high:.2f} "
-            f"(core={reserve.core_low:.2f}-{reserve.core_high:.2f},{reserve.source_tf},{reserve.grade.value},{zone_risk_context(reserve)},risk={original_risk_pct(reserve):.2f}%,RESERVE,touches={reserve.touch_count})"
+            f"(core={reserve.core_low:.2f}-{reserve.core_high:.2f},{reserve.source_tf},{reserve.grade.value},{zone_risk_context(reserve)},risk={original_risk_pct(reserve):.3f}%,RESERVE,touches={reserve.touch_count})"
         )
 
     policy = dict(analysis.execution_policy or {})
