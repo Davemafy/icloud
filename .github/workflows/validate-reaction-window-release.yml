@@ -100,6 +100,8 @@ jobs:
               'trace_pd_low',
               'MASTER_SNIPER_PD_',
               'ZONE_ENGULFING',
+              'ZONE_ENGULFING_RETEST',
+              'TZ70_BuildEngulfingRetest',
               'TZ69_ProtectedSwingExecutionStop',
               'TZ69_FindProtectedSwing',
               'TZ46_ZoneStopBuffer',
