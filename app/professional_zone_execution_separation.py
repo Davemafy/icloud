@@ -244,9 +244,10 @@ def entry_specific_runway_candidate(
 def zone_layer(zone: Zone, history_ok: bool, runway_ok: bool = True) -> str:
     """Execution layer is structural/history authority; absolute runway is telemetry only.
 
-    The first-entry quality gate is RR at the actual M1 entry using the zone-distal
-    buffered stop and a live directional objective. A fixed absolute-dollar runway
-    must not erase a valid institutional location before M1 can do its job.
+    The order-quality gate is RR at the actual M1 entry using the confirmed causal
+    M1 execution stop and a live directional objective. The wider HTF zone remains
+    thesis invalidation, not the trade-level SL. A fixed absolute-dollar runway must
+    not erase a valid institutional location before M1 can do its job.
     """
     if not execution_grade_eligible(zone):
         return "MAP_CONTEXT"
@@ -427,7 +428,7 @@ def install_ai_contract_correction() -> None:
         rules["dxy_history_authority"] = "DXY is confirmation/confluence only: minimum prompt counts remain mandatory, but extended DXY depth alone cannot veto or manufacture an XAU zone."
         rules["lifecycle_history_is_separate"] = "Mitigation history may retain older M15 bars than the 3-5 trading-day analysis window; it is lifecycle telemetry only and must not change grade, risk, ranking, authority, width or location."
         rules["spread_safety"] = f"hard execution hold above {float(SETTINGS.max_spread_points):.0f} points; spread never changes zone geometry or thesis map truth"
-        rules["clear_run_semantics"] = "absolute runway is observation only. Primary order quality is checked at the actual M1 entry using the full-zone buffered SL and a still-open directional objective; Sequence 3.49 applies the minimum RR gate and does not require a fixed absolute-dollar runway."
+        rules["clear_run_semantics"] = "absolute runway is observation only. Primary order quality is checked at the actual M1 entry using the confirmed causal M1 execution SL and a still-open directional objective; Sequence 3.68 keeps the HTF distal boundary as thesis invalidation only and applies minimum RR to the actual trade structure."
         return payload
 
     corrected_payload._tradezone_professional_separation = True
