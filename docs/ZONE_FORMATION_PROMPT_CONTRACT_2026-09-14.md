@@ -77,7 +77,7 @@ This is mandatory for the intraday alert map:
 - If no valid BUY exists below/interacting with price, PRIMARY BUY = NONE.
 - If no valid SELL exists above/interacting with price, PRIMARY SELL = NONE.
 - Structural validity is mandatory before ranking.
-- A+, A and B+ are new execution grades. B+ is reduced-risk execution authority at 0.25% and still requires every normal M15/M1/AI/safety gate.
+- A+, A and B+ are execution grades. B+ is reduced-risk execution authority at 0.100% and still requires every normal M15/M1/AI/safety gate.
 - TREND and COUNTERTREND do not use the same qualification rubric.
 - TREND grades continuation-source quality: HTF authority, displacement/BOS strength, freshness, premium/discount location and supporting FVG/volume evidence.
 - COUNTERTREND grades reversal-location quality: HTF extremity, required structural liquidity inside the envelope, actual sweep/rejection evidence, source response strength, H4>H1 agreement and supporting FVG/volume/PSY evidence.
@@ -193,7 +193,7 @@ The Master Sniper location contract remains the authority. Supplemental entry mo
 - A strategic **re-entry** is permitted only while the original thesis is still valid and the normal re-entry contract permits another leg; if positions remain open they must already be protected. It uses the same closed-M1 re-entry confirmation and re-entry cap as ordinary R1/R2.
 - Every strategic model must contain real M1 structure break/displacement and a fresh OB/FVG PD array. A session boundary, momentum retracement band or VWAP proxy by itself is never an entry.
 - Strategic model risk is multiplied by a conservative research factor (`0.75` at this release). This factor may reduce the normal thesis allocation and may never increase it.
-- Strategic first entries inherit the full institutional-zone distal stop floor. If that correct stop destroys minimum RR, the trade is rejected rather than tightening the stop.
+- Strategic first entries use the causal confirmed M1 execution stop with spread/ATR/broker buffer. The wider institutional-zone distal remains thesis invalidation, not the order SL. Minimum RR remains fail-closed against the actual execution stop.
 - Order-flow imbalance remains disabled until an appropriate centralized/depth feed exists.
 
 ## Institutional liquidity objectives
@@ -214,14 +214,15 @@ Target hierarchy:
 8. The cap never rewrites the frozen ownership-zone payload or original objective history, never moves an objective farther away, and never changes a live position target. If positions are open or Sequence position truth is unavailable, reconciliation is deferred.
 9. A newly established owner cap cannot be claimed from pre-cap price history. Only quote/bar evidence at or after the cap-set timestamp may complete it. Reaching the cap completes/releases the owner thesis; it does not grant the opposing side an instant entry.
 
-Stop logic remains liquidity/structure based:
+Stop logic remains liquidity/structure based, with separate thesis and trade invalidation:
 
-- For the FIRST entry of an institutional thesis, the M1 timing anchor may refine entry timing but may never pull the protective stop back inside the full active institutional zone.
-- FIRST SELL entry SL = the farther of (a) the actual M1 BSL sweep extreme plus buffer and (b) the full institutional zone distal high plus buffer.
-- FIRST BUY entry SL = the farther of (a) the actual M1 SSL sweep extreme minus buffer and (b) the full institutional zone distal low minus buffer.
+- The full H4/H1 institutional envelope defines thesis invalidation. Closed-M15 accepted invalidation beyond that distal boundary terminates the original thesis and hands control to normal flip/reclaim logic.
+- After a valid CLOSED M1 execution model confirms, the order-level protective stop is placed beyond the causal M1 structural anchor, not automatically beyond the full HTF envelope.
+- SELL execution SL = causal M1 bearish invalidation anchor plus the spread/ATR/broker-stop buffer.
+- BUY execution SL = causal M1 bullish invalidation anchor minus the spread/ATR/broker-stop buffer.
 - The buffer is spread/ATR/broker-stop aware. It must be at least 5 broker points and at least 1.5x the live spread in price terms, and it may be widened by the existing M1 ATR stop buffer or broker minimum stop distance.
-- If this structurally correct first-entry stop makes minimum RR fail, the trade is rejected. The system must never tighten the SL back inside the zone merely to manufacture acceptable RR.
-- Re-entries after a thesis has already progressed may use their local M1 continuation structure because they are not the original institutional-zone risk event.
+- Minimum RR remains fail-closed at the actual entry using this actual execution SL and the deepest still-open valid objective. The system must never invent a tighter stop merely to manufacture acceptable RR.
+- An execution stop-out does not by itself invalidate the HTF thesis. If the HTF zone remains valid and the campaign risk/re-entry budget is still available, R1/R2 may re-arm only through their normal fresh M1 confirmation.
 
 Session context changes patience, not zone validity:
 
@@ -281,4 +282,4 @@ authority.
 
 ## Future-change rule
 
-When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, places a first-entry protective stop inside the full institutional zone merely because a nearer M1 timing anchor exists, lets a strategic Momentum/VWAP/ORB model manufacture authority without valid location + regime + fresh PD-array + closed-M1 confirmation, or allows a target on the wrong side of the actual candidate entry.
+When zoning, execution-handoff, lifecycle, rendering or target code is modified, compare the proposed behavior against this contract first. Do not restore old behavior that forces two zones, promotes equal highs/equal lows into zones without a valid H4/H1 source, publishes BUY above price, publishes SELL below price, automatically chooses a remote HTF zone over a much nearer equally-valid intraday institutional location, grants execution authority to a Level-2 reserve while Level 1 remains valid, treats outer-envelope contact as primary M1 handoff, removes a structurally valid zone because of a weak TP map, erases a confirmed institutional reaction because a later analysis reselects the primary map, selects targets only because they are the nearest prices, targets through an active opposing institutional zone without requalification, lets a frozen acquired-owner objective ignore a newly qualified opposing primary while the campaign is flat, retroactively completes a newly-created owner cap from pre-cap price history, mutates a live position target during owner-cap reconciliation, confuses the wider HTF thesis invalidation boundary with the confirmed M1 order stop, or invents a non-structural tight stop merely to force RR, lets a strategic Momentum/VWAP/ORB model manufacture authority without valid location + regime + fresh PD-array + closed-M1 confirmation, or allows a target on the wrong side of the actual candidate entry.

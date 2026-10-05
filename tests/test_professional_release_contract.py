@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.7"
+    assert manifest["release"] == "6.4.8"
     assert manifest["data_bridge_version"] == "1.58"
-    assert manifest["sequence_ea_version"] == "3.67"
+    assert manifest["sequence_ea_version"] == "3.68"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_67_OrderFlowProxyTelemetry_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_68_M1ExecutionStop_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -158,10 +158,8 @@ def test_professional_release_contract_is_self_consistent():
         "canonical_primary_map_count",
         "mt5_watch_only_reason_parity",
         "human_readable_zone_lifecycle_labels",
-        "first_entry_zone_distal_stop_floor",
-        "zone_stop_spread_atr_broker_buffer",
-        "zone_stop_min_rr_fail_closed",
-        "strategic_multimodel_execution",
+                "zone_stop_spread_atr_broker_buffer",
+                "strategic_multimodel_execution",
         "momentum_pullback_execution",
         "vwap_proxy_reclaim_execution",
         "opening_range_retest_execution",
@@ -169,8 +167,7 @@ def test_professional_release_contract_is_self_consistent():
         "strategic_model_reduced_risk",
         "strategic_model_fresh_pd_array",
         "strategic_model_closed_m1_confirmation",
-        "strategic_model_zone_distal_stop",
-        "entry_specific_m1_runway_candidate_window",
+                "entry_specific_m1_runway_candidate_window",
         "actual_entry_runway_order_gate",
         "rolling_upgrade_runway_compatibility_guard",
         "runway_gate_dashboard_truth",
@@ -194,5 +191,11 @@ def test_professional_release_contract_is_self_consistent():
         "orderflow_proxy_never_claims_centralized_delta",
         "orderflow_proxy_optional_contradiction_veto",
         "sequence_367_truth_overlay",
+        "m1_causal_execution_stop",
+        "htf_thesis_invalidation_separate_from_order_stop",
+        "confirmed_model_execution_stop_buffer",
+        "minimum_rr_uses_actual_m1_trade_structure",
+        "rr_blocker_candidate_audit_telemetry",
+        "sequence_368_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))

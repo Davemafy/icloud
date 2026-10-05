@@ -56,10 +56,13 @@ jobs:
               'trace_pd_low',
               'MASTER_SNIPER_PD_',
               'ZONE_ENGULFING',
-              'TZ46_InitialZoneProtectedStop',
+              'TZ68_M1ExecutionStop',
+              'TZ46_ZoneStopBuffer',
               'TZ49_OpenDirectionalTargets',
               'TZ49_DeepestDirectionalTarget',
-              'MIN_RR_NOT_MET_TO_DEEPEST_OPEN_OBJECTIVE',
+              'MIN_RR_NOT_MET:RR=',
+              'last_candidate_rr_required',
+              'M1_CAUSAL_STRUCTURE',
               'TZ28_ArmAcceptedFlip',
               'LIQUIDITY_REVERSAL_HANDOFF',
               'MT5_EXECUTION_OWNER_MIRROR_V1',
@@ -75,6 +78,8 @@ jobs:
           assert 'stage="BREAKOUT_M1_MICRO_SHIFT"' not in text
           evaluate=text[text.index('void Evaluate()'):text.index('\nint OnInit()',text.index('void Evaluate()'))]
           assert 'TZ48_EntrySpecificRunwayValid' not in evaluate
+          assert 'TZ46_InitialZoneProtectedStop(sig.buy,microSl,g_plan.zone_low,g_plan.zone_high,a)' not in evaluate
+          assert 'TZ68_M1ExecutionStop(sig.buy,sig.anchor_price,a)' in evaluate
           print(f'Stable Sequence {manifest["sequence_ea_version"]} MQL structural checks OK: {p.name}')
           PY
       - name: Stable EA SHA256
