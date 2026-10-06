@@ -369,6 +369,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const selectedId=String(z.zone_id||'');
     const selectedDir=String(z.direction||'').toUpperCase();
     const selectedTouches=(z.touch_count===0 || z.touch_count) ? String(z.touch_count) : '—';
+    const seqContext=j?.sequence_debug||{};
+    const executionContextType=String(seqContext.execution_context_type||'MAP_PLAN').toUpperCase();
+    const acceptedFlipContext=executionContextType==='ACCEPTED_ZONE_FLIP';
+    const executionContextZone=String(seqContext.execution_context_zone_id||'');
+    const executionContextDir=String(seqContext.execution_context_direction||'').toUpperCase();
+    const executionContextSlot=String(seqContext.execution_context_slot||'');
+    const executionContextAcceptedAt=Number(seqContext.execution_context_accepted_at||0);
     const parts=[];
 
     parts.push('Journal status '+status+'.');
@@ -376,7 +383,20 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     let ownership='NO THESIS OWNER';
     let cls='warn';
-    if(locked){
+    if(acceptedFlipContext){
+      ownership='ACCEPTED-ZONE '+(executionContextDir||'')+' FLIP';
+      cls='blue';
+      parts.push(
+        'Active execution context is the persisted accepted-zone '+(executionContextDir||'opposite-side')+
+        ' flip from failed zone '+(executionContextZone||'—')+
+        (executionContextSlot?' • slot '+executionContextSlot:'')+
+        (executionContextAcceptedAt?' • accepted '+new Date(executionContextAcceptedAt*1000).toLocaleString():'')+
+        '. Its micro gate is independent of the newly ranked current HTF map.'
+      );
+      if(selectedId){
+        parts.push('Current journal/map selection '+selectedId+' ('+(selectedDir||'—')+') is map context only while this accepted-flip execution object is active.');
+      }
+    }else if(locked){
       if(ownerId && selectedId===ownerId){
         ownership='THESIS OWNER MATCH';
         cls='ok';
@@ -544,6 +564,20 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
     const seqVersion=String(seq.version||'');
+    const executionContextType2=String(seq.execution_context_type||'MAP_PLAN').toUpperCase();
+    const acceptedFlipContext2=executionContextType2==='ACCEPTED_ZONE_FLIP';
+    const executionContextZone2=String(seq.execution_context_zone_id||'');
+    const executionContextDirection2=String(seq.execution_context_direction||'').toUpperCase();
+    const executionContextSlot2=String(seq.execution_context_slot||'');
+    const executionContextAcceptedAt2=Number(seq.execution_context_accepted_at||0);
+    const executionContextContractVerified=seq.execution_context_contract_verified===true;
+    const executionContextCoreLow=Number(seq.execution_context_core_low||0);
+    const executionContextCoreHigh=Number(seq.execution_context_core_high||0);
+    const executionContextZoneLow=Number(seq.execution_context_zone_low||0);
+    const executionContextZoneHigh=Number(seq.execution_context_zone_high||0);
+    const executionContextTarget1=Number(seq.execution_context_target1||0);
+    const executionContextTarget2=Number(seq.execution_context_target2||0);
+    const executionContextTarget3=Number(seq.execution_context_target3||0);
     const opportunitySlot=String(seq.opportunity_slot||'');
     const primaryEntries=Number(seq.primary_entries||0);
     const reentries=Number(seq.reentries||0);
@@ -638,7 +672,24 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         (lastCandidateSwingLevel?' • swing '+tracePrice(lastCandidateSwingLevel):'')+
         (lastCandidateSwingTime?' @ '+new Date(lastCandidateSwingTime*1000).toLocaleString():'')+'.'
       : '';
-    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText+rrAuditText;
+    const flipTargets=[executionContextTarget1,executionContextTarget2,executionContextTarget3].filter(v=>v>0).map(v=>tracePrice(v));
+    const executionContextText=acceptedFlipContext2
+      ? ' Accepted-flip context: '+(executionContextDirection2||'—')+
+        ' from failed zone '+(executionContextZone2||'—')+
+        (executionContextSlot2?' • '+executionContextSlot2:'')+
+        (executionContextAcceptedAt2?' • accepted '+traceTime(executionContextAcceptedAt2):'')+
+        ((executionContextZoneLow||executionContextZoneHigh)?' • failed envelope '+tracePrice(executionContextZoneLow)+'–'+tracePrice(executionContextZoneHigh):'')+
+        ((executionContextCoreLow||executionContextCoreHigh)?' • core '+tracePrice(executionContextCoreLow)+'–'+tracePrice(executionContextCoreHigh):'')+
+        (flipTargets.length?' • flip targets '+flipTargets.join(' / '):'')+'.'
+      : '';
+    const parity=seq.sniper_contract_parity||{};
+    const parityMismatches=Array.isArray(parity.mismatches)?parity.mismatches:[];
+    const parityCloud=parity.cloud||{};
+    const paritySequence=parity.sequence||{};
+    const parityText=parityMismatches.length
+      ? ' Mismatch detail: '+parityMismatches.map(k=>k+' [Cloud='+String(parityCloud[k]??'—')+' / Sequence='+String(paritySequence[k]??'—')+']').join(' • ')+'.'
+      : '';
+    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+executionContextText+orderFlowText+rrAuditText;
 
     if(seqOnline && seqOpen>0){
       state='IN TRADE • MANAGING';
@@ -692,10 +743,24 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
             (cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'');
         }
         seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+historyText+' Entry permission: NO.';
+      }else if(acceptedFlipContext2 && !executionContextContractVerified){
+        seqGate.textContent='FLIP CONTRACT HOLD';
+        seqGate.className='kpi bad';
+        seqMeta.textContent='Persisted accepted-flip source '+(executionContextZone2||'—')+' has not passed its own stored sniper-contract verification. Entry permission: NO.'+executionContextText;
+      }else if(acceptedFlipContext2){
+        const flipValue=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+        const flipReaction=seqStage==='FLIP_CONFIRMATION'||seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+        const flipShift=['MSS_BOS','FLIP_MSS_BOS','M1_MICRO_MSS','M1_MICRO_SHIFT'].includes(seqStage);
+        const flipRetest=['FLIP_CANDIDATE','FLIP_RETEST'].includes(seqStage);
+        const flipDisp=['DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
+        seqGate.textContent=(executionContextSlot2?executionContextSlot2+' • ':'')+
+          (flipReaction?'WAITING FOR CLOSED M1 CONFIRMATION':flipValue?'WAITING FOR VALUE / RETRACE':flipRetest?'WAITING FOR FLIP RETEST':flipShift?'WAITING FOR M1 MICRO SHIFT':flipDisp?'WAITING FOR DISPLACEMENT':seqStage.replaceAll('_',' '));
+        seqGate.className='kpi blue';
+        seqMeta.textContent='Execution context ACCEPTED-ZONE '+(executionContextDirection2||'')+' FLIP • source '+(executionContextZone2||'—')+' • '+(seqReason||'waiting for next flip gate')+' • Entry permission: NO.'+traceText;
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
-        seqMeta.textContent='Final Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority='+seqAuthority+'. Gate '+seqStage+' • '+seqReason;
+        seqMeta.textContent='Final Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority='+seqAuthority+'. Gate '+seqStage+' • '+seqReason+'.'+parityText;
       }else if(seqStage==='ORDER_SENT'){
         seqGate.textContent='ORDER SENT';
         seqGate.className='kpi ok';
@@ -741,10 +806,23 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         ? ' Failed history: '+(cloudHistoryFailures||'UNSPECIFIED')+'.'+(cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'')
         : '';
       meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+why+'.'+historyText+' Entry permission: NO.';
+    }else if(seqOnline && acceptedFlipContext2 && seqOpen===0){
+      if(!executionContextContractVerified){
+        state='ACCEPTED-FLIP CONTRACT HOLD';
+        cls='bad';
+        meta=checklist+'The persisted failed-zone flip source is not contract-verified. Entry permission: NO.'+executionContextText;
+      }else{
+        const flipValue=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+        const flipReaction=seqStage==='FLIP_CONFIRMATION'||seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+        state='ACCEPTED-ZONE '+(executionContextDirection2||'')+' FLIP • '+(executionContextSlot2||'');
+        cls='blue';
+        meta=checklist+(flipReaction?'Waiting for the final CLOSED M1 value reaction. ':flipValue?'Waiting for the configured flip value/retrace. ':'Accepted invalidation is preserved; Sequence is progressing the flip-specific retest/confirmation chain. ')+
+          'The current ranked map does not own this gate. Entry permission: NO.'+traceText;
+      }
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
-      meta=checklist+'Final Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
+      meta=checklist+'Final Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'')+parityText;
     }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
       const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
       const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
@@ -784,7 +862,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         state=isReacquisition ? (reacquisitionSlot+' ZONE RE-ACQUISITION FORMING') : 'M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
         meta=checklist+(isReacquisition
-          ? reacquisitionSlot+' belongs to the same acquired thesis. Sequence 3.71+ is reconstructing the original-zone M1 event chain from its bounded R1/R2 history window: zone contact → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. This does not reset the campaign or loosen the re-entry cap. '
+          ? reacquisitionSlot+' belongs to the same acquired thesis. Sequence 3.72+ is reconstructing the original-zone M1 event chain from its bounded R1/R2 history window: zone contact → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. This does not reset the campaign or loosen the re-entry cap. '
           : 'Model 1 P0: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. ')+
           'Model 2 engulfing remains a parallel independent trigger; a missed engulfing may use its bounded value-retest recovery without requiring the Model-1 shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
       }else if(breakoutWait){

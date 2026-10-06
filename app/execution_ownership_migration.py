@@ -33,6 +33,11 @@ _OWNERSHIP_COLUMNS = {
     "ownership_objective_cap_set_at": "INTEGER DEFAULT 0",
     "ownership_objective_cap_reached_at": "INTEGER DEFAULT 0",
     "ownership_objective_cap_reason": "TEXT DEFAULT ''",
+    # Execution-lock release is distinct from lifecycle completion. A terminal
+    # P0/R1/R2 campaign may be flat with its final objective still open; in that
+    # case the thesis remains audit truth but must no longer monopolize new execution.
+    "ownership_execution_released_at": "INTEGER DEFAULT 0",
+    "ownership_execution_release_reason": "TEXT DEFAULT ''",
 }
 
 

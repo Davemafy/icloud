@@ -686,16 +686,44 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
     if not online:
         return "SEQUENCE OFFLINE" if macro_handoff_status else status
 
+    authority = str(seq.get("authority") or "NONE")
+    stage = str(seq.get("gate_stage") or "UNKNOWN").upper()
+    reason = str(seq.get("gate_reason") or "").upper()
+    context_type = str(seq.get("execution_context_type") or "MAP_PLAN").upper()
+    context_verified = bool(seq.get("execution_context_contract_verified"))
+
+    # A terminal flat campaign is an unambiguous stronger blocker than a
+    # point-in-time map parity mismatch. Preserve the true immediate reason.
+    if stage == "THESIS" and "REENTRY_LIMIT_REACHED" in reason:
+        return "THESIS ENTRY LIMIT REACHED"
+
+    # Accepted-zone flip gates belong to the persisted failed-zone contract, not
+    # the newly re-ranked current map contract. Do not overlay current-map parity
+    # on top of a valid persisted flip context.
+    if context_type == "ACCEPTED_ZONE_FLIP":
+        if not context_verified:
+            return "ENTRY BLOCKED: FLIP CONTRACT UNVERIFIED"
+        if stage == "ORDER_SENT":
+            return "ORDER SENT"
+        if stage in {"FLIP_CONFIRMATION", "ENTRY_CONFIRMATION", "REENTRY_CONFIRMATION", "HANDOFF_CONFIRMATION"}:
+            return "WAITING FOR M1 VALUE REACTION"
+        if stage in {"VALUE", "VALUE_PD_ARRAY", "FLIP_VALUE_PD_ARRAY"} or "WAITING_FOR_VALID_VALUE" in reason or "WAITING_FOR_PULLBACK" in reason:
+            return "WAITING FOR VALUE"
+        if stage in {"FLIP_CANDIDATE", "FLIP_RETEST"}:
+            return "WAITING FOR FLIP RETEST"
+        if stage in {"MSS_BOS", "FLIP_MSS_BOS", "M1_MICRO_MSS", "M1_MICRO_SHIFT"}:
+            return "WAITING FOR M1 MICRO SHIFT"
+        if stage in {"DISPLACEMENT", "FLIP_DISPLACEMENT"}:
+            return "WAITING FOR DISPLACEMENT"
+        if authority == "NONE":
+            return "WAITING FOR ACCEPTED-FLIP CONFIRMATION"
+
     parity = dict(seq.get("sniper_contract_parity") or {})
     parity_status = str(parity.get("status") or "")
     if status not in terminal and parity_status == "MISMATCH":
         return "ENTRY BLOCKED: SNIPER CONTRACT MISMATCH"
     if status not in terminal and macro_handoff_status and parity_status in {"UNVERIFIED", "OFFLINE"}:
         return "ENTRY BLOCKED: SNIPER CONTRACT UNVERIFIED"
-
-    authority = str(seq.get("authority") or "NONE")
-    stage = str(seq.get("gate_stage") or "UNKNOWN").upper()
-    reason = str(seq.get("gate_reason") or "").upper()
 
     if authority == "NONE":
         return "WAITING FOR SEQUENCE AUTHORITY" if macro_handoff_status else status
@@ -707,9 +735,6 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return "ENTRY BLOCKED: MIN RR"
     if stage == "TARGET" and "POST_HANDOFF_OBJECTIVE_ALREADY_TRADED" in reason:
         return "ENTRY BLOCKED: OBJECTIVE ALREADY TRADED"
-    if stage == "THESIS" and "REENTRY_LIMIT_REACHED" in reason:
-        return "THESIS ENTRY LIMIT REACHED"
-
     if (
         stage in {"VALUE", "VALUE_PD_ARRAY", "FLIP_VALUE_PD_ARRAY"}
         or "WAITING_FOR_VALID_VALUE" in reason
@@ -776,6 +801,22 @@ def _sequence_debug_snapshot() -> dict:
         "gate_stage": str(details.get("gate_stage") or "UNKNOWN"),
         "gate_reason": str(details.get("gate_reason") or ""),
         "candidate_model": str(details.get("candidate_model") or "NONE"),
+        "execution_context_type": str(details.get("execution_context_type") or "MAP_PLAN"),
+        "execution_context_analysis_id": str(details.get("execution_context_analysis_id") or ""),
+        "execution_context_zone_id": str(details.get("execution_context_zone_id") or ""),
+        "execution_context_direction": str(details.get("execution_context_direction") or ""),
+        "execution_context_source_zone_id": str(details.get("execution_context_source_zone_id") or ""),
+        "execution_context_slot": str(details.get("execution_context_slot") or ""),
+        "execution_context_contract_verified": bool(details.get("execution_context_contract_verified")),
+        "execution_context_contract_fingerprint": str(details.get("execution_context_contract_fingerprint") or ""),
+        "execution_context_accepted_at": int(details.get("execution_context_accepted_at") or 0),
+        "execution_context_core_low": float(details.get("execution_context_core_low") or 0.0),
+        "execution_context_core_high": float(details.get("execution_context_core_high") or 0.0),
+        "execution_context_zone_low": float(details.get("execution_context_zone_low") or 0.0),
+        "execution_context_zone_high": float(details.get("execution_context_zone_high") or 0.0),
+        "execution_context_target1": float(details.get("execution_context_target1") or 0.0),
+        "execution_context_target2": float(details.get("execution_context_target2") or 0.0),
+        "execution_context_target3": float(details.get("execution_context_target3") or 0.0),
         "opportunity_slot": str(details.get("opportunity_slot") or ""),
         "last_execution_model": str(details.get("last_execution_model") or ""),
         "last_candidate_entry": float(details.get("last_candidate_entry") or 0.0),

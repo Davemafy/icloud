@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.11",
+  "release": "6.4.12",
   "repository": "Davemafy/icloud",
-  "ref": "f877b399c4536f55ae1fb9e5327712e4011a691f",
+  "ref": "6384332995a9dfbe324b22d446f01fa39a332356",
   "data_bridge_version": "1.58",
-  "sequence_ea_version": "3.71",
+  "sequence_ea_version": "3.72",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -284,7 +284,13 @@
     "sweep_candidate_rejection_telemetry",
     "explicit_campaign_opportunity_slot",
     "heartbeat_campaign_trace_parity",
-    "sequence_371_truth_overlay"
+    "sequence_371_truth_overlay",
+    "terminal_flat_owner_execution_release",
+    "terminal_flat_release_exact_campaign_guard",
+    "accepted_flip_execution_context_provenance",
+    "accepted_flip_source_contract_truth",
+    "execution_context_dashboard_truth",
+    "sequence_372_truth_overlay"
   ],
   "files": [
     {
@@ -297,11 +303,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_71_ReacquisitionTrace_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_71_ReacquisitionTrace_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_71_ReacquisitionTrace_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_72_ExecutionContext_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_72_ExecutionContext_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_72_ExecutionContext_Demo.mq5",
       "requires_reload": true,
-      "sha256": "81146750a34e34820caacf9a3322141c50bea11bf04c8a4659dcecb9f89bb252"
+      "sha256": "476e2cdb0b2e97df94be1f4647c7ebef630dab4a767bf46208c3f9f223ea2219"
     }
   ],
   "support_files": [
