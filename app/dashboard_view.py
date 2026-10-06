@@ -743,10 +743,24 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
             (cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'');
         }
         seqMeta.textContent='Sequence matches the finalized Cloud plan. Hold reason: '+why+'.'+runwayText+historyText+' Entry permission: NO.';
+      }else if(acceptedFlipContext2 && !executionContextContractVerified){
+        seqGate.textContent='FLIP CONTRACT HOLD';
+        seqGate.className='kpi bad';
+        seqMeta.textContent='Persisted accepted-flip source '+(executionContextZone2||'—')+' has not passed its own stored sniper-contract verification. Entry permission: NO.'+executionContextText;
+      }else if(acceptedFlipContext2){
+        const flipValue=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+        const flipReaction=seqStage==='FLIP_CONFIRMATION'||seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+        const flipShift=['MSS_BOS','FLIP_MSS_BOS','M1_MICRO_MSS','M1_MICRO_SHIFT'].includes(seqStage);
+        const flipRetest=['FLIP_CANDIDATE','FLIP_RETEST'].includes(seqStage);
+        const flipDisp=['DISPLACEMENT','FLIP_DISPLACEMENT'].includes(seqStage);
+        seqGate.textContent=(executionContextSlot2?executionContextSlot2+' • ':'')+
+          (flipReaction?'WAITING FOR CLOSED M1 CONFIRMATION':flipValue?'WAITING FOR VALUE / RETRACE':flipRetest?'WAITING FOR FLIP RETEST':flipShift?'WAITING FOR M1 MICRO SHIFT':flipDisp?'WAITING FOR DISPLACEMENT':seqStage.replaceAll('_',' '));
+        seqGate.className='kpi blue';
+        seqMeta.textContent='Execution context ACCEPTED-ZONE '+(executionContextDirection2||'')+' FLIP • source '+(executionContextZone2||'—')+' • '+(seqReason||'waiting for next flip gate')+' • Entry permission: NO.'+traceText;
       }else if(seqMismatch){
         seqGate.textContent='AUTHORITY MISMATCH';
         seqGate.className='kpi bad';
-        seqMeta.textContent='Final Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority='+seqAuthority+'. Gate '+seqStage+' • '+seqReason;
+        seqMeta.textContent='Final Cloud authority='+String(seq.cloud_authority||'NONE')+' but Sequence authority='+seqAuthority+'. Gate '+seqStage+' • '+seqReason+'.'+parityText;
       }else if(seqStage==='ORDER_SENT'){
         seqGate.textContent='ORDER SENT';
         seqGate.className='kpi ok';
@@ -792,10 +806,23 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         ? ' Failed history: '+(cloudHistoryFailures||'UNSPECIFIED')+'.'+(cloudHistoryMetrics?' Snapshot depth: '+cloudHistoryMetrics+'.':'')
         : '';
       meta=checklist+'Finalized Cloud execution plan is intentionally non-executable: '+why+'.'+historyText+' Entry permission: NO.';
+    }else if(seqOnline && acceptedFlipContext2 && seqOpen===0){
+      if(!executionContextContractVerified){
+        state='ACCEPTED-FLIP CONTRACT HOLD';
+        cls='bad';
+        meta=checklist+'The persisted failed-zone flip source is not contract-verified. Entry permission: NO.'+executionContextText;
+      }else{
+        const flipValue=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
+        const flipReaction=seqStage==='FLIP_CONFIRMATION'||seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION';
+        state='ACCEPTED-ZONE '+(executionContextDirection2||'')+' FLIP • '+(executionContextSlot2||'');
+        cls='blue';
+        meta=checklist+(flipReaction?'Waiting for the final CLOSED M1 value reaction. ':flipValue?'Waiting for the configured flip value/retrace. ':'Accepted invalidation is preserved; Sequence is progressing the flip-specific retest/confirmation chain. ')+
+          'The current ranked map does not own this gate. Entry permission: NO.'+traceText;
+      }
     }else if(seqOnline && seqMismatch){
       state='EXECUTION HOLD';
       cls='bad';
-      meta=checklist+'Final Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'');
+      meta=checklist+'Final Cloud/Sequence authority is not reconciled. Entry permission: NO. '+(seqReason||'')+parityText;
     }else if(seqOnline && seqOpen===0 && seqAuthority!=='NONE'){
       const valueWait=seqStage==='VALUE'||seqStage==='VALUE_PD_ARRAY'||seqStage==='FLIP_VALUE_PD_ARRAY'||seqReason.includes('WAITING_FOR_VALID_VALUE')||seqReason.includes('WAITING_FOR_PULLBACK');
       const reactionWait=seqStage==='ENTRY_CONFIRMATION'||seqStage==='REENTRY_CONFIRMATION'||seqStage==='HANDOFF_CONFIRMATION'||seqStage==='FLIP_CONFIRMATION';
@@ -835,7 +862,7 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         state=isReacquisition ? (reacquisitionSlot+' ZONE RE-ACQUISITION FORMING') : 'M1 PRIMARY SEQUENCE FORMING';
         cls='blue';
         meta=checklist+(isReacquisition
-          ? reacquisitionSlot+' belongs to the same acquired thesis. Sequence 3.71+ is reconstructing the original-zone M1 event chain from its bounded R1/R2 history window: zone contact → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. This does not reset the campaign or loosen the re-entry cap. '
+          ? reacquisitionSlot+' belongs to the same acquired thesis. Sequence 3.72+ is reconstructing the original-zone M1 event chain from its bounded R1/R2 history window: zone contact → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. This does not reset the campaign or loosen the re-entry cap. '
           : 'Model 1 P0: zone interaction → micro-liquidity sweep → CLOSED M1 micro structure shift → causal OB/FVG → bounded retest → directional close. ')+
           'Model 2 engulfing remains a parallel independent trigger; a missed engulfing may use its bounded value-retest recovery without requiring the Model-1 shift. Current gate: '+seqStage.replaceAll('_',' ')+'. Entry permission: NO.'+traceText;
       }else if(breakoutWait){
