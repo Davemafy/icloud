@@ -10,7 +10,7 @@ from .liquidity_reversal_handoff import INTERZONE_TRANSIT_REASON, interzone_tran
 from .liquidity_objective_policy import opposing_zone_front_run_cap
 from .risk_matrix import execution_grade_eligible, original_risk_pct, zone_risk_context
 
-THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65108"
+THESIS_OWNERSHIP_CONTRACT = "INSTITUTIONAL_THESIS_OWNERSHIP_V65139"
 ACTIVE_THESIS_STATUSES = {"INTERACTING", "REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 CONTINUATION_STATUSES = {"REACTION_CONFIRMED", "OBJECTIVE_IN_PROGRESS"}
 EXECUTION_AUTHORITIES = {"HTF_CORE_HANDOFF", "HTF_ZONE_CONTACT_HANDOFF", "HTF_ZONE_SWEEP_HANDOFF", "LIQUIDITY_REVERSAL_HANDOFF"}
@@ -20,7 +20,7 @@ OWNER_MIN_BUFFER_POINTS = 5.0
 SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS = 45
 LEGACY_OWNER_RELEASE_REASON = "CONTEXT_GRADE_V2_INELIGIBLE_OWNER_FLAT"
 INTERZONE_OWNER_RELEASE_REASON = "PREZONE_LIQUIDITY_OWNER_RELEASED_FOR_INTERZONE_TRANSIT"
-OWNER_OBJECTIVE_CAP_REASON = "ACTIVE_OPPOSING_PRIMARY_FRONT_RUN"
+OWNER_OBJECTIVE_CAP_REASON = "ACTIVE_OPPOSING_PRIMARY_FRONT_RUN"\nTERMINAL_FLAT_OWNER_RELEASE_REASON = "TERMINAL_FLAT_CAMPAIGN_ENTRY_CAP_EXHAUSTED"
 LATE_STAGE_REACQUISITION_TARGET_COUNT = 2
 LATE_STAGE_REACQUISITION_CONTRACT = "CURRENT_HTF_LOCATION_REACQUISITION_V65133"
 
@@ -31,8 +31,10 @@ _AI_RULE = """
     or LIQUIDITY_REVERSAL_HANDOFF. A published envelope contact may arm the primary M1 search;
     it is not itself a trade entry. A+, A and B+ are execution grades; B+ uses the reduced 0.100% base risk and still
     requires every normal M15/M1/AI/safety gate. Touch/mitigation telemetry never removes ownership eligibility. Once an eligible qualified handoff has acquired ownership, that
-    thesis remains sticky until M15 accepted invalidation or the deepest effective liquidity objective
-    completes. For a flat owner only, a newly qualified active opposing primary may tighten that effective
+    thesis remains sticky until M15 accepted invalidation, the deepest effective liquidity objective
+    completes, or Sequence proves the exact owner campaign is flat and has exhausted P0/R1/R2.
+    Terminal-flat release removes execution monopoly only; it does not falsify objective completion or erase thesis audit truth.
+    For a flat owner only, a newly qualified active opposing primary may tighten that effective
     destination to the canonical front-run cap while the frozen owner targets remain audit truth. This cap
     never mutates an open position and cannot be completed from price history that predates the cap.
     A newly ranked opposite zone may remain visible as context but cannot steal M1 authority
@@ -120,29 +122,115 @@ def _zone_reaction_key(zone: Zone) -> str:
     )
 
 
-def _sequence_position_truth(now: int) -> tuple[bool, int]:
-    """Return (fresh, open_positions) from the live Sequence heartbeat.
-
-    Used for safe owner-release transitions that depend on proving the Sequence
-    is flat. It is not a grade or touch-count eligibility check.
-    """
+def _sequence_campaign_truth(now: int) -> dict[str, Any]:
+    """Return fresh Sequence campaign truth used by fail-safe owner release."""
     rows = latest_heartbeats(30)
     hb = next(
         (x for x in rows if str(x.get("ea") or "") == "InstitutionalSMC_SequenceEA"),
         None,
     )
     if hb is None:
-        return False, 0
+        return {"fresh": False}
     hb_ts = int(hb.get("ts") or 0)
     if hb_ts <= 0 or int(now) - hb_ts > SEQUENCE_HEARTBEAT_MAX_AGE_SECONDS:
-        return False, 0
+        return {"fresh": False}
     payload = hb.get("payload") if isinstance(hb.get("payload"), dict) else {}
     details = dict(payload.get("details") or {}) if isinstance(payload, dict) else {}
     try:
-        open_positions = max(0, int(details.get("open_positions") or 0))
+        return {
+            "fresh": True,
+            "open_positions": max(0, int(details.get("open_positions") or 0)),
+            "primary_entries": max(0, int(details.get("primary_entries") or 0)),
+            "reentries": max(0, int(details.get("reentries") or 0)),
+            "opportunity_slot": str(details.get("opportunity_slot") or ""),
+            "gate_stage": str(details.get("gate_stage") or "").upper(),
+            "gate_reason": str(details.get("gate_reason") or "").upper(),
+            "campaign_key": str(details.get("campaign_key") or ""),
+        }
     except (TypeError, ValueError):
+        return {"fresh": False}
+
+
+def _sequence_position_truth(now: int) -> tuple[bool, int]:
+    """Return (fresh, open_positions) from the live Sequence heartbeat."""
+    truth = _sequence_campaign_truth(now)
+    if not truth.get("fresh"):
         return False, 0
-    return True, open_positions
+    return True, int(truth.get("open_positions") or 0)
+
+
+def _owner_campaign_key(owner: dict[str, Any]) -> str:
+    return (
+        f"{str(owner.get('direction') or '')}|"
+        f"{str(owner.get('source_tf') or '')}|"
+        f"{int(owner.get('source_ts') or 0)}|"
+        f"{int(owner.get('ownership_acquired_at') or 0)}"
+    )
+
+
+def _release_terminal_flat_campaign(owner: dict[str, Any], now: int) -> bool:
+    """Release execution monopoly only after Sequence proves this exact campaign is terminal and flat.
+
+    This intentionally does NOT set objective_complete_at and does NOT invalidate
+    the thesis. The lifecycle row remains historical/audit truth, while a campaign
+    that has consumed P0/R1/R2 can no longer block unrelated new execution.
+    """
+    truth = _sequence_campaign_truth(int(now))
+    if not truth.get("fresh"):
+        return False
+    if int(truth.get("open_positions") or 0) != 0:
+        return False
+
+    expected = _owner_campaign_key(owner)
+    if not expected or str(truth.get("campaign_key") or "") != expected:
+        return False
+
+    terminal_gate = (
+        str(truth.get("opportunity_slot") or "") == "REENTRY_CAP_REACHED"
+        or (
+            str(truth.get("gate_stage") or "") == "THESIS"
+            and "REENTRY_LIMIT_REACHED" in str(truth.get("gate_reason") or "")
+        )
+    )
+    if not terminal_gate or int(truth.get("primary_entries") or 0) < 1:
+        return False
+
+    key = str(owner.get("reaction_key") or "")
+    if not key:
+        return False
+    reason = TERMINAL_FLAT_OWNER_RELEASE_REASON
+    with connect() as db:
+        cur = db.execute(
+            """
+            UPDATE zone_reactions
+            SET ownership_execution_released_at=?,
+                ownership_execution_release_reason=?,
+                last_reason=?,last_seen_at=?
+            WHERE reaction_key=?
+              AND ownership_acquired_at>0
+              AND invalidated_at=0
+              AND objective_complete_at=0
+              AND COALESCE(ownership_execution_released_at,0)=0
+            """,
+            (
+                int(now),
+                reason,
+                f"EXECUTION_AUTHORITY_RELEASED:{reason}:campaign={expected}:"
+                f"P={int(truth.get('primary_entries') or 0)}:"
+                f"R={int(truth.get('reentries') or 0)}",
+                int(now),
+                key,
+            ),
+        )
+        released = int(cur.rowcount or 0) > 0
+    if released:
+        audit(
+            "thesis.execution_owner.released",
+            f"reaction_key={key} reason={reason} campaign={expected} "
+            f"primary_entries={int(truth.get('primary_entries') or 0)} "
+            f"reentries={int(truth.get('reentries') or 0)} objective_preserved=1",
+        )
+    return released
 
 
 def _owner_execution_lock_eligible(owner: dict[str, Any]) -> bool:
@@ -313,12 +401,14 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
                    ownership_anchor_price,ownership_zone_id,ownership_zone_payload,
                    ownership_objective_cap,ownership_objective_cap_zone_id,
                    ownership_objective_cap_set_at,ownership_objective_cap_reached_at,
-                   ownership_objective_cap_reason
+                   ownership_objective_cap_reason,ownership_execution_released_at,
+                   ownership_execution_release_reason
             FROM zone_reactions
             WHERE first_seen_at>=?
               AND ownership_acquired_at>0
               AND invalidated_at=0
               AND objective_complete_at=0
+              AND COALESCE(ownership_execution_released_at,0)=0
               AND status IN ('INTERACTING','REACTION_CONFIRMED','OBJECTIVE_IN_PROGRESS')
             ORDER BY ownership_acquired_at ASC, first_seen_at ASC
             """,
@@ -330,6 +420,8 @@ def _active_owner_row(now: int) -> dict[str, Any] | None:
     sequence_fresh, open_positions = _sequence_position_truth(int(now))
     for raw in rows:
         owner = dict(raw)
+        if _release_terminal_flat_campaign(owner, int(now)):
+            continue
         if _owner_execution_lock_eligible(owner):
             return owner
 
@@ -689,6 +781,7 @@ def _owner_meta(owner: dict[str, Any], owner_zone: Zone | None) -> dict[str, Any
             "M15_ACCEPTED_INVALIDATION",
             "DEEPEST_PLANNED_LIQUIDITY_OBJECTIVE_REACHED",
             "OPPOSING_ZONE_OWNER_OBJECTIVE_CAP_REACHED",
+            "TERMINAL_FLAT_CAMPAIGN_ENTRY_CAP_EXHAUSTED",
         ],
         "fresh_m1_confirmation_required": True,
         "no_chase": True,
@@ -930,7 +1023,11 @@ def acquire_execution_ownership(
         key, row = _handoff_reaction_instance(db, analysis, snapshot, zone, authority, anchor)
         if row is None:
             return None
-        if int(row["invalidated_at"] or 0) or int(row["objective_complete_at"] or 0):
+        if (
+            int(row["invalidated_at"] or 0)
+            or int(row["objective_complete_at"] or 0)
+            or int(row["ownership_execution_released_at"] or 0)
+        ):
             return None
         status = str(row["status"] or "ARMED")
         if status not in ACTIVE_THESIS_STATUSES and not (
