@@ -2517,6 +2517,27 @@ bool TZ73_OriginalZoneReentryFamily(Signal &sig)
    );
 }
 
+datetime TZ73_LatestFlatExitAfter(datetime floorTs)
+{
+   if(floorTs<=0||AnyOurPosition())return floorTs;
+   datetime now=TimeTradeServer();if(now<=0)now=TimeCurrent();
+   if(now<=floorTs||!HistorySelect(floorTs,now))return floorTs;
+
+   datetime latest=floorTs;
+   int total=HistoryDealsTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong ticket=HistoryDealGetTicket(i);if(ticket==0)continue;
+      if(HistoryDealGetString(ticket,DEAL_SYMBOL)!=_Symbol)continue;
+      if((ulong)HistoryDealGetInteger(ticket,DEAL_MAGIC)!=MagicNumber)continue;
+      long entryType=HistoryDealGetInteger(ticket,DEAL_ENTRY);
+      if(entryType!=DEAL_ENTRY_OUT&&entryType!=DEAL_ENTRY_OUT_BY)continue;
+      datetime ts=(datetime)HistoryDealGetInteger(ticket,DEAL_TIME);
+      if(ts>latest)latest=ts;
+   }
+   return latest;
+}
+
 bool TZ73_ReentryFreshEpochValid(MqlRates &r[],Signal &sig,string &reason)
 {
    reason="";
@@ -2526,6 +2547,12 @@ bool TZ73_ReentryFreshEpochValid(MqlRates &r[],Signal &sig,string &reason)
       reason="REENTRY_FRESHNESS_FLOOR_MISSING";
       return false;
    }
+
+   // When the preceding campaign leg is flat, the new structural opportunity
+   // must form after the actual MT5 exit, not merely after the prior entry bar.
+   // If a protected position remains open, the existing layering contract uses
+   // the prior entry bar as the epoch floor.
+   datetime floorTs=TZ73_LatestFlatExitAfter(g_lastTradeBar);
    if(sig.anchor_idx<1||sig.anchor_idx>=ArraySize(r)||sig.break_idx<1||sig.break_idx>=ArraySize(r))
    {
       reason="REENTRY_EVENT_TIME_UNAVAILABLE";
@@ -2534,26 +2561,26 @@ bool TZ73_ReentryFreshEpochValid(MqlRates &r[],Signal &sig,string &reason)
 
    datetime anchorTs=r[sig.anchor_idx].time;
    datetime breakTs=r[sig.break_idx].time;
-   if(anchorTs<=g_lastTradeBar||breakTs<=g_lastTradeBar)
+   if(anchorTs<=floorTs||breakTs<=floorTs)
    {
       reason=StringFormat(
          "REENTRY_PREVIOUS_EPOCH_EVENT:ANCHOR=%I64d:BREAK=%I64d:FLOOR=%I64d",
-         (long)anchorTs,(long)breakTs,(long)g_lastTradeBar
+         (long)anchorTs,(long)breakTs,(long)floorTs
       );
       return false;
    }
 
    if(TZ73_OriginalZoneReentryFamily(sig) &&
-      (g_tzTraceContactTs<=0||g_tzTraceContactTs<=g_lastTradeBar))
+      (g_tzTraceContactTs<=0||g_tzTraceContactTs<=floorTs))
    {
       reason=StringFormat(
          "REENTRY_ZONE_CONTACT_PREVIOUS_EPOCH:CONTACT=%I64d:FLOOR=%I64d",
-         (long)g_tzTraceContactTs,(long)g_lastTradeBar
+         (long)g_tzTraceContactTs,(long)floorTs
       );
       return false;
    }
 
-   reason="REENTRY_FRESH_POST_PRIOR_ENTRY_EVENT";
+   reason="REENTRY_FRESH_POST_PRIOR_EXECUTION_EPOCH";
    return true;
 }
 
