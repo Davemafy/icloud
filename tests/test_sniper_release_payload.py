@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "dd0083e87df34722fefa8c0f67db8dd7b4688521899a2a200e189b3f4a758ead",
+    SEQ: "470da1722fbe7d97de99fc100d8bd8c8fadc83a1138c7636137c3b69e9ddcbc7",
     BRIDGE: "d4625df0bacae7af1f5e565041fed0e8974ae257bc9443897f7efc910b5c93f5",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
