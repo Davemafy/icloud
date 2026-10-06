@@ -106,7 +106,7 @@ def test_371_cloud_and_dashboard_surface_reacquisition_truth():
         assert field in main
     assert "ZONE RE-ACQUISITION FORMING" in dash
     assert "Sweep candidate rejected:" in dash
-    assert "Sequence 3.71+" in dash
+    assert "Sequence 3.72+" in dash
 
 
 def test_371_does_not_modify_trade_management_function():
