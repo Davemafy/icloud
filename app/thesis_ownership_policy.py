@@ -226,6 +226,7 @@ def _release_terminal_flat_campaign(owner: dict[str, Any], now: int) -> bool:
         released = int(cur.rowcount or 0) > 0
     if released:
         audit(
+            int(now),
             "thesis.execution_owner.released",
             f"reaction_key={key} reason={reason} campaign={expected} "
             f"primary_entries={int(truth.get('primary_entries') or 0)} "
