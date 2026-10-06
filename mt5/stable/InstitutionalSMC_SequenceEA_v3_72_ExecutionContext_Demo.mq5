@@ -1030,6 +1030,8 @@ string g_tzExecutionContextZone="";
 string g_tzExecutionContextDirection="";
 string g_tzExecutionContextSourceZone="";
 string g_tzExecutionContextSlot="";
+string g_tzExecutionContextContractFingerprint="";
+bool g_tzExecutionContextContractVerified=false;
 datetime g_tzExecutionContextAcceptedAt=0;
 double g_tzExecutionContextCoreLow=0.0,g_tzExecutionContextCoreHigh=0.0;
 double g_tzExecutionContextZoneLow=0.0,g_tzExecutionContextZoneHigh=0.0;
@@ -1043,6 +1045,8 @@ void TZ72_SetPlanExecutionContext(bool ownerContext)
    g_tzExecutionContextDirection=g_plan.original_direction;
    g_tzExecutionContextSourceZone="";
    g_tzExecutionContextSlot=g_tzOpportunitySlot;
+   g_tzExecutionContextContractVerified=g_tzSniperContractVerified;
+   g_tzExecutionContextContractFingerprint=g_tzSniperContractFingerprint;
    g_tzExecutionContextAcceptedAt=0;
    g_tzExecutionContextCoreLow=g_plan.core_low;
    g_tzExecutionContextCoreHigh=g_plan.core_high;
@@ -1060,6 +1064,8 @@ void TZ72_SetAcceptedFlipExecutionContext()
    g_tzExecutionContextZone=g_tzFlipSourceZone;
    g_tzExecutionContextDirection=g_tzFlipPlan.flip_direction;
    g_tzExecutionContextSourceZone=g_tzFlipSourceZone;
+   g_tzExecutionContextContractVerified=g_tzFlipSniperContractVerified;
+   g_tzExecutionContextContractFingerprint=g_tzFlipSourceContractFingerprint;
    g_tzExecutionContextAcceptedAt=g_tzFlipAcceptedAt;
    if(g_tzAcceptedFlipEntries<=0)g_tzExecutionContextSlot="F0";
    else if(MaxReentriesPerThesis>0&&g_tzAcceptedFlipReentries>=MaxReentriesPerThesis)g_tzExecutionContextSlot="FLIP_CAP_REACHED";
@@ -1776,6 +1782,8 @@ void TZ_WriteSequenceState()
    FileWriteString(h,"execution_context_direction="+g_tzExecutionContextDirection+"\r\n");
    FileWriteString(h,"execution_context_source_zone_id="+g_tzExecutionContextSourceZone+"\r\n");
    FileWriteString(h,"execution_context_slot="+g_tzExecutionContextSlot+"\r\n");
+   FileWriteString(h,"execution_context_contract_verified="+(g_tzExecutionContextContractVerified?"1":"0")+"\r\n");
+   FileWriteString(h,"execution_context_contract_fingerprint="+g_tzExecutionContextContractFingerprint+"\r\n");
    FileWriteString(h,"execution_context_accepted_at="+IntegerToString((int)g_tzExecutionContextAcceptedAt)+"\r\n");
    FileWriteString(h,"execution_context_core_low="+DoubleToString(g_tzExecutionContextCoreLow,5)+"\r\n");
    FileWriteString(h,"execution_context_core_high="+DoubleToString(g_tzExecutionContextCoreHigh,5)+"\r\n");
@@ -1871,7 +1879,7 @@ void TZ_SendSequenceHeartbeat()
       "\"owner_mirror_target1_hit_at\":%I64d,\"owner_mirror_target2_hit_at\":%I64d,\"owner_mirror_target3_hit_at\":%I64d,"
       "\"owner_mirror_reaction_confirmed_at\":%I64d,\"owner_mirror_best_price\":%s,\"owner_mirror_zone_payload_b64\":\"%s\","
       "\"execution_handoff_ts\":%I64d,"
-      "\"execution_context_type\":\"%s\",\"execution_context_analysis_id\":\"%s\",\"execution_context_zone_id\":\"%s\",\"execution_context_direction\":\"%s\",\"execution_context_source_zone_id\":\"%s\",\"execution_context_slot\":\"%s\",\"execution_context_accepted_at\":%I64d,"
+      "\"execution_context_type\":\"%s\",\"execution_context_analysis_id\":\"%s\",\"execution_context_zone_id\":\"%s\",\"execution_context_direction\":\"%s\",\"execution_context_source_zone_id\":\"%s\",\"execution_context_slot\":\"%s\",\"execution_context_contract_verified\":%s,\"execution_context_contract_fingerprint\":\"%s\",\"execution_context_accepted_at\":%I64d,"
       "\"execution_context_core_low\":%s,\"execution_context_core_high\":%s,\"execution_context_zone_low\":%s,\"execution_context_zone_high\":%s,\"execution_context_target1\":%s,\"execution_context_target2\":%s,\"execution_context_target3\":%s,"
       "\"gate_stage\":\"%s\",\"gate_reason\":\"%s\",\"candidate_model\":\"%s\",\"opportunity_slot\":\"%s\",\"campaign_key\":\"%s\",\"trace_contact_ts\":%I64d,\"trace_reconstructed_pre_handoff\":%s,\"trace_sweep_scan_bars\":%d,\"trace_sweep_reject_reason\":\"%s\",\"trace_sweep_candidate_ts\":%I64d,\"trace_sweep_candidate_liquidity\":%s,\"trace_sweep_candidate_price\":%s,\"trace_sweep_candidate_clearance_points\":%s,\"last_candidate_entry\":%s,\"last_candidate_stop\":%s,\"last_candidate_target\":%s,\"last_candidate_rr\":%s,\"last_candidate_rr_required\":%s,\"last_candidate_stop_basis\":\"%s\",\"last_candidate_swing_level\":%s,\"last_candidate_swing_time\":%d,\"trace_liquidity_level\":%s,\"trace_sweep_price\":%s,\"trace_sweep_ts\":%I64d,\"trace_mss_level\":%s,\"trace_mss_break_ts\":%I64d,\"trace_pd_type\":\"%s\",\"trace_pd_low\":%s,\"trace_pd_high\":%s,\"trace_pd_ts\":%I64d,\"trace_pullback_ts\":%I64d,\"trace_confirm_ts\":%I64d,\"orderflow_proxy_mode\":%d,\"orderflow_proxy_feed\":\"%s\",\"orderflow_proxy_state\":\"%s\",\"orderflow_proxy_score\":%s,\"orderflow_proxy_delta_norm\":%s,\"orderflow_proxy_absorption\":%s,\"orderflow_proxy_divergence\":%s,\"orderflow_proxy_expansion\":%s,\"cloud_regime\":\"%s\",\"local_regime\":\"%s\",\"allow_momentum\":%s,\"allow_vwap\":%s,\"allow_orb\":%s,\"gate_ts\":%I64d,"
       "\"primary_entries\":%d,\"reentries\":%d,\"flip_primary_entries\":%d,\"flip_reentries\":%d,"
@@ -1891,7 +1899,7 @@ void TZ_SendSequenceHeartbeat()
       (long)StringToInteger(TZ30_OwnerKV("owner_mirror_reaction_confirmed_at")),TZ30_OwnerNum("owner_mirror_best_price"),TZ_JsonEscape(TZ30_OwnerKV("owner_mirror_zone_payload_b64")),
       (long)g_tzExecutionHandoffTs,
       TZ_JsonEscape(g_tzExecutionContextType),TZ_JsonEscape(g_tzExecutionContextAnalysis),TZ_JsonEscape(g_tzExecutionContextZone),TZ_JsonEscape(g_tzExecutionContextDirection),
-      TZ_JsonEscape(g_tzExecutionContextSourceZone),TZ_JsonEscape(g_tzExecutionContextSlot),(long)g_tzExecutionContextAcceptedAt,
+      TZ_JsonEscape(g_tzExecutionContextSourceZone),TZ_JsonEscape(g_tzExecutionContextSlot),g_tzExecutionContextContractVerified?"true":"false",TZ_JsonEscape(g_tzExecutionContextContractFingerprint),(long)g_tzExecutionContextAcceptedAt,
       DoubleToString(g_tzExecutionContextCoreLow,5),DoubleToString(g_tzExecutionContextCoreHigh,5),DoubleToString(g_tzExecutionContextZoneLow,5),DoubleToString(g_tzExecutionContextZoneHigh,5),
       DoubleToString(g_tzExecutionContextTarget1,5),DoubleToString(g_tzExecutionContextTarget2,5),DoubleToString(g_tzExecutionContextTarget3,5),
       TZ_JsonEscape(g_tzGateStage),TZ_JsonEscape(g_tzGateReason),TZ_JsonEscape(g_tzCandidateModel),
