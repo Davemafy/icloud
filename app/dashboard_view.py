@@ -369,6 +369,13 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const selectedId=String(z.zone_id||'');
     const selectedDir=String(z.direction||'').toUpperCase();
     const selectedTouches=(z.touch_count===0 || z.touch_count) ? String(z.touch_count) : '—';
+    const seqContext=j?.sequence_debug||{};
+    const executionContextType=String(seqContext.execution_context_type||'MAP_PLAN').toUpperCase();
+    const acceptedFlipContext=executionContextType==='ACCEPTED_ZONE_FLIP';
+    const executionContextZone=String(seqContext.execution_context_zone_id||'');
+    const executionContextDir=String(seqContext.execution_context_direction||'').toUpperCase();
+    const executionContextSlot=String(seqContext.execution_context_slot||'');
+    const executionContextAcceptedAt=Number(seqContext.execution_context_accepted_at||0);
     const parts=[];
 
     parts.push('Journal status '+status+'.');
@@ -376,7 +383,20 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 
     let ownership='NO THESIS OWNER';
     let cls='warn';
-    if(locked){
+    if(acceptedFlipContext){
+      ownership='ACCEPTED-ZONE '+(executionContextDir||'')+' FLIP';
+      cls='blue';
+      parts.push(
+        'Active execution context is the persisted accepted-zone '+(executionContextDir||'opposite-side')+
+        ' flip from failed zone '+(executionContextZone||'—')+
+        (executionContextSlot?' • slot '+executionContextSlot:'')+
+        (executionContextAcceptedAt?' • accepted '+new Date(executionContextAcceptedAt*1000).toLocaleString():'')+
+        '. Its micro gate is independent of the newly ranked current HTF map.'
+      );
+      if(selectedId){
+        parts.push('Current journal/map selection '+selectedId+' ('+(selectedDir||'—')+') is map context only while this accepted-flip execution object is active.');
+      }
+    }else if(locked){
       if(ownerId && selectedId===ownerId){
         ownership='THESIS OWNER MATCH';
         cls='ok';
