@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.14",
+  "release": "6.4.15",
   "repository": "Davemafy/icloud",
-  "ref": "dc1b2e6341705a0efcf6224770188616a49fa4b1",
+  "ref": "3be00d4fcd0dae20cd0e2c20f0e3730e33b02692",
   "data_bridge_version": "1.59",
-  "sequence_ea_version": "3.73",
+  "sequence_ea_version": "3.74",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -299,7 +299,12 @@
     "r1_r2_fresh_zone_contact_per_original_zone_cycle",
     "original_zone_reentry_distal_side_guard",
     "continuation_breakout_reentry_family_preserved",
-    "sequence_373_truth_overlay"
+    "sequence_373_truth_overlay",
+    "universal_final_closed_m1_directional_gate_all_sniper_slots",
+    "closed_m1_direction_candle_audit_proof",
+    "p0_core_protected_stop_geometry",
+    "p0_rr_recomputed_from_effective_structural_stop",
+    "sequence_374_truth_overlay"
   ],
   "files": [
     {
@@ -312,11 +317,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_73_ReentryFreshness_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_73_ReentryFreshness_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_73_ReentryFreshness_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
       "requires_reload": true,
-      "sha256": "8d36c2659fa75d6c2ecb275ffc129fecaa5367a5adeff777cec155812e5803bc"
+      "sha256": "470da1722fbe7d97de99fc100d8bd8c8fadc83a1138c7636137c3b69e9ddcbc7"
     }
   ],
   "support_files": [
