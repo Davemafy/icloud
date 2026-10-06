@@ -17,12 +17,12 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.12"
-    assert manifest["data_bridge_version"] == "1.58"
+    assert manifest["release"] == "6.4.13"
+    assert manifest["data_bridge_version"] == "1.59"
     assert manifest["sequence_ea_version"] == "3.72"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
-    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
+    assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5"
     bridge_source = ROOT / bridge["path"]
     assert bridge_source.exists()
     bridge_digest = hashlib.sha256(bridge_source.read_bytes()).hexdigest()
@@ -224,5 +224,9 @@ def test_professional_release_contract_is_self_consistent():
         "accepted_flip_source_contract_truth",
         "execution_context_dashboard_truth",
         "sequence_372_truth_overlay",
+        "databridge_159_sequence_372_display_truth",
+        "historical_flip_context_non_authoritative_label",
+        "active_accepted_flip_context_chart_label",
+        "databridge_sequence_expected_version_current",
     }
     assert required.issubset(set(manifest["channel_features"]))
