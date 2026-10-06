@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "086f470d1f749bb6ae69b9f13b39600a0d3c87d53135776f3258e6b8bf17822f",
+    SEQ: "8d36c2659fa75d6c2ecb275ffc129fecaa5367a5adeff777cec155812e5803bc",
     BRIDGE: "d4625df0bacae7af1f5e565041fed0e8974ae257bc9443897f7efc910b5c93f5",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
@@ -72,7 +72,7 @@ def test_release_payload_versions_and_parity_wiring():
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["release"] == "6.4.14"
-    assert manifest["ref"] == "527ddf0680ba0d70ffa6b89754e8692f38725d49"
+    assert manifest["ref"] == "dc1b2e6341705a0efcf6224770188616a49fa4b1"
     assert manifest["data_bridge_version"] == "1.59"
     assert manifest["sequence_ea_version"] == "3.73"
     files = {item["role"]: item for item in manifest["files"]}
