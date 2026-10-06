@@ -751,6 +751,8 @@ def _sequence_reconciled_status(base_status: str, sequence_debug: dict) -> str:
         return "BREAKOUT SEQUENCE FORMING"
     if stage in {"CONTINUATION_OB_FVG", "CONTINUATION_PD_PULLBACK"}:
         return "CONTINUATION SEQUENCE FORMING"
+    if stage in {"REENTRY_FRESHNESS", "REENTRY_LOCATION"}:
+        return "REENTRY HOLD"
     if stage in {"BREAKOUT_NO_CHASE", "BREAKOUT_REGIME"}:
         return "EXECUTION HOLD"
     if stage in {"SAFETY", "RISK", "TARGET", "DUPLICATE", "AUTHORITY", "DATA", "MARKET", "BAR"}:
