@@ -41,16 +41,29 @@ def test_373_each_reentry_requires_new_anchor_and_break_after_prior_entry():
     text = _text(SEQ)
     fn = _function_source(text, "bool TZ73_ReentryFreshEpochValid(")
     assert "g_lastTradeBar<=0" in fn
-    assert "anchorTs<=g_lastTradeBar||breakTs<=g_lastTradeBar" in fn
+    assert "floorTs=TZ73_LatestFlatExitAfter(g_lastTradeBar)" in fn
+    assert "anchorTs<=floorTs||breakTs<=floorTs" in fn
     assert "REENTRY_PREVIOUS_EPOCH_EVENT" in fn
-    assert "REENTRY_FRESH_POST_PRIOR_ENTRY_EVENT" in fn
+    assert "REENTRY_FRESH_POST_PRIOR_EXECUTION_EPOCH" in fn
+
+
+def test_373_flat_campaign_uses_actual_mt5_exit_as_freshness_floor():
+    text = _text(SEQ)
+    fn = _function_source(text, "datetime TZ73_LatestFlatExitAfter(")
+    assert "AnyOurPosition()" in fn
+    assert "HistorySelect(floorTs,now)" in fn
+    assert "HistoryDealsTotal()" in fn
+    assert "DEAL_MAGIC" in fn
+    assert "DEAL_ENTRY_OUT" in fn
+    assert "DEAL_ENTRY_OUT_BY" in fn
+    assert "DEAL_SYMBOL" in fn
 
 
 def test_373_original_zone_reentry_requires_fresh_zone_contact_epoch():
     text = _text(SEQ)
     fn = _function_source(text, "bool TZ73_ReentryFreshEpochValid(")
     assert "TZ73_OriginalZoneReentryFamily(sig)" in fn
-    assert "g_tzTraceContactTs<=0||g_tzTraceContactTs<=g_lastTradeBar" in fn
+    assert "g_tzTraceContactTs<=0||g_tzTraceContactTs<=floorTs" in fn
     assert "REENTRY_ZONE_CONTACT_PREVIOUS_EPOCH" in fn
 
 
