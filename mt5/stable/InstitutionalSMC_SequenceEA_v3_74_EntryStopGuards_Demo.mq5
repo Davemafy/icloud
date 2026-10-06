@@ -3342,6 +3342,12 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
    datetime breakTs=(s.break_idx>=0&&s.break_idx<ArraySize(r)?r[s.break_idx].time:0);
    datetime pdTs=(s.pd_idx>=0&&s.pd_idx<ArraySize(r)?r[s.pd_idx].time:0);
    datetime reactionTs=(reactionIdx>=1&&reactionIdx<ArraySize(r)?r[reactionIdx].time:0);
+   datetime directionTs=(ArraySize(r)>1?r[1].time:0);
+   double directionOpen=(ArraySize(r)>1?r[1].open:0.0);
+   double directionHigh=(ArraySize(r)>1?r[1].high:0.0);
+   double directionLow=(ArraySize(r)>1?r[1].low:0.0);
+   double directionClose=(ArraySize(r)>1?r[1].close:0.0);
+   int directionOk=(ArraySize(r)>1&&TZ60_DirectionalClose(r[1],s.buy)?1:0);
    string setup=TZ47_SetupName(tag);
    string campaign=g_plan.analysis_id+"|"+g_plan.zone_id+"|"+tag;
    string details=StringFormat(
@@ -3354,14 +3360,18 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       "\"m1_atr\":%.5f,\"lots\":%.4f,\"reentries_before\":%d,"
       "\"risk_model\":\"%s\",\"risk_epoch\":\"%s\",\"risk_context\":\"%s\",\"risk_base\":%.2f,\"grade_risk_pct\":%.4f,\"original_risk_pct\":%.4f,\"flip_risk_pct\":%.4f,\"risk_money\":%.2f,"
       "\"nearest_open_target\":%.5f,\"rr_at_entry\":%.4f,\"min_rr_required\":%.4f,"
-      "\"closed_m1_value_reaction_required\":%d,\"closed_m1_value_reaction_confirmed\":%d,\"orderflow_proxy_feed\":\"%s\",\"orderflow_proxy_state\":\"%s\",\"orderflow_proxy_score\":%.4f,\"orderflow_proxy_delta_norm\":%.4f,\"orderflow_proxy_absorption\":%d,\"orderflow_proxy_divergence\":%d,\"orderflow_proxy_expansion\":%d}",
+      "\"closed_m1_value_reaction_required\":%d,\"closed_m1_value_reaction_confirmed\":%d,"
+      "\"closed_m1_direction_bar_ts\":%I64d,\"closed_m1_direction_open\":%.5f,\"closed_m1_direction_high\":%.5f,\"closed_m1_direction_low\":%.5f,\"closed_m1_direction_close\":%.5f,\"closed_m1_direction_ok\":%d,"
+      "\"orderflow_proxy_feed\":\"%s\",\"orderflow_proxy_state\":\"%s\",\"orderflow_proxy_score\":%.4f,\"orderflow_proxy_delta_norm\":%.4f,\"orderflow_proxy_absorption\":%d,\"orderflow_proxy_divergence\":%d,\"orderflow_proxy_expansion\":%d}",
       TZ_JsonEscape(campaign),TZ_JsonEscape(setup),TZ_JsonEscape(tag),(s.buy?"BUY":"SELL"),
       TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_tzCandidateModel),TZ_JsonEscape(s.pd_type),
       (long)breakTs,(long)pdTs,(long)reactionTs,
       s.anchor_price,s.break_level,s.impulse_extreme,s.ote_low,s.ote_high,s.pd_low,s.pd_high,
       s.entry_low,s.entry_high,entry,sl,a,lots,g_reentries,
       TZ_JsonEscape(g_tzRiskModel),TZ_JsonEscape(g_tzRiskEpoch),TZ_JsonEscape(g_tzRiskContext),g_tzLastRiskBase,g_tzGradeRiskPct,g_tzOriginalRiskPct,g_tzFlipRiskPct,g_tzLastRiskMoney,
-      openTarget,rr,rrRequired,(reactionRequired?1:0),(reactionIdx>=1?1:0),TZ_JsonEscape(g_tzOrderFlowProxyFeed),TZ_JsonEscape(g_tzOrderFlowProxyState),g_tzOrderFlowProxyScore,g_tzOrderFlowProxyDeltaNorm,(g_tzOrderFlowProxyAbsorption?1:0),(g_tzOrderFlowProxyDivergence?1:0),(g_tzOrderFlowProxyExpansion?1:0));
+      openTarget,rr,rrRequired,(reactionRequired?1:0),(reactionIdx>=1?1:0),
+      (long)directionTs,directionOpen,directionHigh,directionLow,directionClose,directionOk,
+      TZ_JsonEscape(g_tzOrderFlowProxyFeed),TZ_JsonEscape(g_tzOrderFlowProxyState),g_tzOrderFlowProxyScore,g_tzOrderFlowProxyDeltaNorm,(g_tzOrderFlowProxyAbsorption?1:0),(g_tzOrderFlowProxyDivergence?1:0),(g_tzOrderFlowProxyExpansion?1:0));
    string body=StringFormat(
       "{\"ts\":%I64d,\"event\":\"ENTRY_DECISION\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",
       (long)now,TZ_JsonEscape(g_plan.analysis_id),TZ_JsonEscape(g_plan.zone_id),entry,details);
