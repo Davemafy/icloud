@@ -564,6 +564,20 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
     const seqReason=String(seq.gate_reason||'');
     const seqModel=String(seq.candidate_model||'NONE');
     const seqVersion=String(seq.version||'');
+    const executionContextType2=String(seq.execution_context_type||'MAP_PLAN').toUpperCase();
+    const acceptedFlipContext2=executionContextType2==='ACCEPTED_ZONE_FLIP';
+    const executionContextZone2=String(seq.execution_context_zone_id||'');
+    const executionContextDirection2=String(seq.execution_context_direction||'').toUpperCase();
+    const executionContextSlot2=String(seq.execution_context_slot||'');
+    const executionContextAcceptedAt2=Number(seq.execution_context_accepted_at||0);
+    const executionContextContractVerified=seq.execution_context_contract_verified===true;
+    const executionContextCoreLow=Number(seq.execution_context_core_low||0);
+    const executionContextCoreHigh=Number(seq.execution_context_core_high||0);
+    const executionContextZoneLow=Number(seq.execution_context_zone_low||0);
+    const executionContextZoneHigh=Number(seq.execution_context_zone_high||0);
+    const executionContextTarget1=Number(seq.execution_context_target1||0);
+    const executionContextTarget2=Number(seq.execution_context_target2||0);
+    const executionContextTarget3=Number(seq.execution_context_target3||0);
     const opportunitySlot=String(seq.opportunity_slot||'');
     const primaryEntries=Number(seq.primary_entries||0);
     const reentries=Number(seq.reentries||0);
@@ -658,7 +672,24 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
         (lastCandidateSwingLevel?' • swing '+tracePrice(lastCandidateSwingLevel):'')+
         (lastCandidateSwingTime?' @ '+new Date(lastCandidateSwingTime*1000).toLocaleString():'')+'.'
       : '';
-    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+orderFlowText+rrAuditText;
+    const flipTargets=[executionContextTarget1,executionContextTarget2,executionContextTarget3].filter(v=>v>0).map(v=>tracePrice(v));
+    const executionContextText=acceptedFlipContext2
+      ? ' Accepted-flip context: '+(executionContextDirection2||'—')+
+        ' from failed zone '+(executionContextZone2||'—')+
+        (executionContextSlot2?' • '+executionContextSlot2:'')+
+        (executionContextAcceptedAt2?' • accepted '+traceTime(executionContextAcceptedAt2):'')+
+        ((executionContextZoneLow||executionContextZoneHigh)?' • failed envelope '+tracePrice(executionContextZoneLow)+'–'+tracePrice(executionContextZoneHigh):'')+
+        ((executionContextCoreLow||executionContextCoreHigh)?' • core '+tracePrice(executionContextCoreLow)+'–'+tracePrice(executionContextCoreHigh):'')+
+        (flipTargets.length?' • flip targets '+flipTargets.join(' / '):'')+'.'
+      : '';
+    const parity=seq.sniper_contract_parity||{};
+    const parityMismatches=Array.isArray(parity.mismatches)?parity.mismatches:[];
+    const parityCloud=parity.cloud||{};
+    const paritySequence=parity.sequence||{};
+    const parityText=parityMismatches.length
+      ? ' Mismatch detail: '+parityMismatches.map(k=>k+' [Cloud='+String(parityCloud[k]??'—')+' / Sequence='+String(paritySequence[k]??'—')+']').join(' • ')+'.'
+      : '';
+    const traceText=(traceParts.length?' M1 trace: '+traceParts.join(' • ')+'.':'')+executionContextText+orderFlowText+rrAuditText;
 
     if(seqOnline && seqOpen>0){
       state='IN TRADE • MANAGING';
