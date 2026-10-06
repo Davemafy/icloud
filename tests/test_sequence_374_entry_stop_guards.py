@@ -105,6 +105,21 @@ def test_374_no_implicit_inside_core_exception_is_invented():
     assert "interior-core structural" in fn
 
 
+def test_374_entry_audit_records_closed_m1_direction_candle_proof():
+    text = _text(SEQ)
+    audit = _function_source(text, "void TZ36_SendEntryDecisionAudit(")
+    for field in (
+        "closed_m1_direction_bar_ts",
+        "closed_m1_direction_open",
+        "closed_m1_direction_high",
+        "closed_m1_direction_low",
+        "closed_m1_direction_close",
+        "closed_m1_direction_ok",
+    ):
+        assert field in audit
+    assert "TZ60_DirectionalClose(r[1],s.buy)" in audit
+
+
 def test_374_accepted_flip_and_trade_management_are_unchanged():
     previous = _text(PREV)
     current = _text(SEQ)
