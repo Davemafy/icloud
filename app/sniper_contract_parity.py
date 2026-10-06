@@ -107,6 +107,7 @@ def evaluate_sequence_parity(cloud: dict, sequence: dict, *, online: bool, open_
         "reason": "SEQUENCE_OFFLINE" if not online else "LEGACY_TELEMETRY",
         "mismatches": [],
         "cloud": dict(cloud or {}),
+        "sequence": {field: seq.get(field) for field in _REQUIRED_SEQUENCE_FIELDS},
         "cloud_fingerprint": cloud_fp,
         "sequence_fingerprint": str(seq.get("contract_fingerprint") or ""),
     }
