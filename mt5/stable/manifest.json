@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.12",
+  "release": "6.4.13",
   "repository": "Davemafy/icloud",
-  "ref": "6384332995a9dfbe324b22d446f01fa39a332356",
-  "data_bridge_version": "1.58",
+  "ref": "7e59e1419a3c6db4de4add350e33f1b46f93876f",
+  "data_bridge_version": "1.59",
   "sequence_ea_version": "3.72",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
@@ -290,16 +290,20 @@
     "accepted_flip_execution_context_provenance",
     "accepted_flip_source_contract_truth",
     "execution_context_dashboard_truth",
-    "sequence_372_truth_overlay"
+    "sequence_372_truth_overlay",
+    "databridge_159_sequence_372_display_truth",
+    "historical_flip_context_non_authoritative_label",
+    "active_accepted_flip_context_chart_label",
+    "databridge_sequence_expected_version_current"
   ],
   "files": [
     {
       "role": "data_bridge",
-      "name": "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
-      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
-      "target_name": "InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5",
+      "name": "InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5",
+      "path": "mt5/stable/InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5",
+      "target_name": "InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5",
       "requires_reload": true,
-      "sha256": "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1"
+      "sha256": "d4625df0bacae7af1f5e565041fed0e8974ae257bc9443897f7efc910b5c93f5"
     },
     {
       "role": "sequence_ea",

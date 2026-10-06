@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_72_ExecutionContext_Demo.mq5"
-BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_58_EntryRunwayTruth.mq5"
+BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
 JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEntryJournal.mq5"
@@ -13,7 +13,7 @@ MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
     SEQ: "476e2cdb0b2e97df94be1f4647c7ebef630dab4a767bf46208c3f9f223ea2219",
-    BRIDGE: "fd5a3fb07b4ee84619afd37421e6abccc4d6f0413b4599d445fe47bfc4e640c1",
+    BRIDGE: "d4625df0bacae7af1f5e565041fed0e8974ae257bc9443897f7efc910b5c93f5",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
     JOURNAL_CORE: "7063db3f717eca0cd6c184a5a0ee74d70e2bad78308e52cb75822d32bfdfbdd0",
@@ -56,17 +56,21 @@ def test_release_payload_versions_and_parity_wiring():
     assert 'execution_context_type' in seq
     assert 'execution_context_source_zone_id' in seq
     assert 'execution_context_contract_verified' in seq
-    assert '#property version "1.58"' in bridge
-    assert '#define TZ_BRIDGE_VERSION "1.58"' in bridge
-    assert '#define TZ_SEQUENCE_EXPECTED "' in bridge  # installer patches this to manifest sequence_ea_version
+    assert '#property version "1.59"' in bridge
+    assert '#define TZ_BRIDGE_VERSION "1.59"' in bridge
+    assert '#define TZ_SEQUENCE_EXPECTED "3.72"' in bridge
+    assert 'HISTORICAL INVALIDATED ' in bridge
+    assert 'ACTIVE ACCEPTED ' in bridge
+    assert 'NO CURRENT M1 AUTHORITY' in bridge
+    assert 'Sequence ",TZ_SEQUENCE_EXPECTED," execution-context display truth' in bridge
     assert 'TZ_SNIPER_PARITY_VERSION "SNIPER_PARITY_V1"' in inc
 
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.4.12"
-    assert manifest["ref"] == "6384332995a9dfbe324b22d446f01fa39a332356"
-    assert manifest["data_bridge_version"] == "1.58"
+    assert manifest["release"] == "6.4.13"
+    assert manifest["ref"] == "7e59e1419a3c6db4de4add350e33f1b46f93876f"
+    assert manifest["data_bridge_version"] == "1.59"
     assert manifest["sequence_ea_version"] == "3.72"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
