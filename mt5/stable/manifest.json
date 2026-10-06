@@ -321,7 +321,7 @@
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
       "requires_reload": true,
-      "sha256": "dd0083e87df34722fefa8c0f67db8dd7b4688521899a2a200e189b3f4a758ead"
+      "sha256": "470da1722fbe7d97de99fc100d8bd8c8fadc83a1138c7636137c3b69e9ddcbc7"
     }
   ],
   "support_files": [
