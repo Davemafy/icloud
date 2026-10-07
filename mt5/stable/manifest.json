@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.15",
+  "release": "6.4.16",
   "repository": "Davemafy/icloud",
-  "ref": "3be00d4fcd0dae20cd0e2c20f0e3730e33b02692",
+  "ref": "cfb42f9706ad6ef5921fcd6dc05f36d856115e20",
   "data_bridge_version": "1.59",
-  "sequence_ea_version": "3.74",
+  "sequence_ea_version": "3.75",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -304,7 +304,12 @@
     "closed_m1_direction_candle_audit_proof",
     "p0_core_protected_stop_geometry",
     "p0_rr_recomputed_from_effective_structural_stop",
-    "sequence_374_truth_overlay"
+    "sequence_374_truth_overlay",
+    "canonical_zone_liquidity_attached_bsl_ssl",
+    "canonical_closed_m1_sweep_reclaim_primary_gate",
+    "canonical_owner_acquired_p0_proof_reentry",
+    "canonical_sweep_reclaim_entry_decision_audit",
+    "sequence_375_truth_overlay"
   ],
   "files": [
     {
@@ -317,11 +322,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
       "requires_reload": true,
-      "sha256": "470da1722fbe7d97de99fc100d8bd8c8fadc83a1138c7636137c3b69e9ddcbc7"
+      "sha256": "e4f817efdae4f552ad2f9353898b1d7311da3b35c2a4a5d5409e510e2b6ff0fe"
     }
   ],
   "support_files": [
