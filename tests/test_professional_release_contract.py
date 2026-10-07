@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.15"
+    assert manifest["release"] == "6.4.16"
     assert manifest["data_bridge_version"] == "1.59"
-    assert manifest["sequence_ea_version"] == "3.74"
+    assert manifest["sequence_ea_version"] == "3.75"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_74_EntryStopGuards_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -238,5 +238,10 @@ def test_professional_release_contract_is_self_consistent():
         "p0_core_protected_stop_geometry",
         "p0_rr_recomputed_from_effective_structural_stop",
         "sequence_374_truth_overlay",
+        "canonical_zone_liquidity_attached_bsl_ssl",
+        "canonical_closed_m1_sweep_reclaim_primary_gate",
+        "canonical_owner_acquired_p0_proof_reentry",
+        "canonical_sweep_reclaim_entry_decision_audit",
+        "sequence_375_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))
