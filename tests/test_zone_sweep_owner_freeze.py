@@ -90,6 +90,43 @@ def test_outer_zone_contact_grants_m1_search_without_core(tmp_path, monkeypatch)
     assert _stamp_execution_authority(analysis, ready, {}) == "HTF_ZONE_CONTACT_HANDOFF"
 
 
+def test_zone_contact_handoff_promotes_armed_base_owner_to_interacting(tmp_path, monkeypatch):
+    path = tmp_path / "zone_contact_owner_persistence.db"
+    monkeypatch.setattr(db, "_path", lambda: str(path))
+    db.init_db()
+
+    zone = _sell("SELL_CONTACT_OWNER")
+    analysis = Analysis(
+        analysis_id="A_CONTACT_OWNER",
+        generated_at=1000,
+        snapshot_at=1000,
+        overall_bias=Direction.SELL,
+        zones=[zone],
+        selected_zone_id=zone.zone_id,
+        approved=True,
+        ai_approved=True,
+    )
+    register_analysis_zones(analysis)
+    snap = _snapshot(mid=98.0, ts=1200, reclaimed=False)
+
+    # The base source lifecycle exists as ARMED because the tactical core has not
+    # been touched. A qualified envelope-contact handoff must still become a live
+    # INTERACTING owner; it must not disappear on the next live ownership sync.
+    acquired = acquire_execution_ownership(
+        analysis, snap, "HTF_ZONE_CONTACT_HANDOFF", zone.zone_id, anchor_price=98.0
+    )
+    assert acquired is not None
+    assert acquired["status"] == "INTERACTING"
+    assert int(acquired["reaction_confirmed_at"] or 0) == 0
+    assert acquired["ownership_authority"] == "HTF_ZONE_CONTACT_HANDOFF"
+
+    owner = policy.active_owner_snapshot(snap.sent_at)
+    assert owner is not None
+    assert owner["reaction_key"] == acquired["reaction_key"]
+    assert owner["status"] == "INTERACTING"
+    assert owner["ownership_zone_id"] == zone.zone_id
+
+
 def test_envelope_contact_does_not_require_m15_sweep_reclaim(tmp_path, monkeypatch):
     path = tmp_path / "no_sweep_handoff.db"
     monkeypatch.setattr(db, "_path", lambda: str(path))
