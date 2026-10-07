@@ -404,9 +404,10 @@ bool TZ75_FindCanonicalSweepReclaim(MqlRates &r[],Signal &sig,string &reason)
    if(!IsTester())
    {
       datetime authorityTs=ownerTs;
-      if(g_tzExecutionHandoffTs>0)authorityTs=MathMin(authorityTs,g_tzExecutionHandoffTs);
-      datetime freshMin=authorityTs-MathMax(0,CanonicalHandoffToleranceSeconds);
-      earliest=MathMax(earliest,freshMin);
+      if(g_tzExecutionHandoffTs>0&&g_tzExecutionHandoffTs<authorityTs)
+         authorityTs=g_tzExecutionHandoffTs;
+      datetime freshMin=authorityTs-CanonicalHandoffToleranceSeconds;
+      if(freshMin>earliest)earliest=freshMin;
    }
    double tick=MathMax(_Point,SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE));
    double lo=MathMin(g_plan.zone_low,g_plan.zone_high);
