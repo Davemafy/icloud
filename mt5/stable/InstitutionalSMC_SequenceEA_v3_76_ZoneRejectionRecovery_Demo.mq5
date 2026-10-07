@@ -3792,11 +3792,17 @@ void Evaluate()
       }
    }
 
-   // v3.73: an R1/R2 slot is a new opportunity, not permission to recycle
-   // a contact/sweep/engulfing/break that belonged to the previous execution.
-   // This guard is deliberately downstream of model construction so P0 and all
-   // existing model definitions remain untouched.
-   if(sig.reentry)
+   // v3.76 campaign-continuation contract:
+   // R1/R2 inherit the canonical external-liquidity proof from the successfully
+   // opened P0/B0 in the SAME owner acquisition. They must not be forced to
+   // manufacture a new owner-zone contact or a second external-liquidity sweep.
+   // Freshness is supplied by the selected re-entry model itself:
+   // - Model 1: a newly completed sweep/MSS/PD/pullback chain;
+   // - Model 2: a new closed engulfing (or its bounded causal retest);
+   // - Model 3: a new break/acceptance/retest/closed-directional chain;
+   // - continuation families: their own post-primary structural event.
+   // Legacy non-model re-entry families keep the v3.73 epoch guard.
+   if(sig.reentry&&!TZ74_IsSniperModel(sig)&&StringFind(sig.pd_type,"CONTINUATION_PD_")!=0)
    {
       string freshnessReason="";
       if(!TZ73_ReentryFreshEpochValid(r,sig,freshnessReason))
