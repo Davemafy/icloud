@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.16",
+  "release": "6.4.17",
   "repository": "Davemafy/icloud",
-  "ref": "cfb42f9706ad6ef5921fcd6dc05f36d856115e20",
+  "ref": "126c17d6d068c1bc77cf5f4f7d11000317fb0f97",
   "data_bridge_version": "1.59",
-  "sequence_ea_version": "3.75",
+  "sequence_ea_version": "3.76",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -309,7 +309,12 @@
     "canonical_closed_m1_sweep_reclaim_primary_gate",
     "canonical_owner_acquired_p0_proof_reentry",
     "canonical_sweep_reclaim_entry_decision_audit",
-    "sequence_375_truth_overlay"
+    "sequence_375_truth_overlay",
+    "model_complete_immediate_final_authorization",
+    "same_campaign_canonical_liquidity_inheritance_r1_r2",
+    "sniper_reentry_freshness_from_model_chain",
+    "sniper_orderflow_proxy_telemetry_only",
+    "sequence_376_truth_overlay"
   ],
   "files": [
     {
@@ -322,11 +327,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
       "requires_reload": true,
-      "sha256": "e4f817efdae4f552ad2f9353898b1d7311da3b35c2a4a5d5409e510e2b6ff0fe"
+      "sha256": "e3d98d1592dd37af0c68bbdcfdc718db65add9143c313bf8b0041609222dd569"
     }
   ],
   "support_files": [
