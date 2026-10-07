@@ -1,6 +1,6 @@
 #property strict
 #property version   "3.76"
-#property description "DEMO/PAPER XAU with canonical liquidity proof plus closed-M1 zone-rejection recovery."
+#property description "DEMO/PAPER XAU canonical liquidity with immediate model-complete final authorization."
 
 // Research wrapper around the validated v3.21 execution core.
 // DEMO/PAPER ONLY. Real accounts remain hard-blocked.
@@ -2638,54 +2638,6 @@ bool TZ60_BuildEngulfing(MqlRates &r[],bool buy,bool reentry,Signal &sig)
 }
 
 
-// v3.76 surgical recovery: a canonical-liquidity-proven owner reaction must not
-// be lost merely because the first decisive closed M1 response fails the exact
-// two-candle real-body engulfing shape. This remains a CLOSED-M1 model: price
-// must have contacted the frozen owner zone recently, the latest closed candle
-// must displace in thesis direction, and it must close beyond the tactical core.
-// The downstream canonical BSL/SSL sweep/reclaim, protected-swing SL, RR,
-// parity, sizing and order gates remain mandatory.
-bool TZ76_BuildZoneRejectionDisplacement(MqlRates &r[],bool buy,bool reentry,Signal &sig)
-{
-   sig.valid=false;
-   if(ArraySize(r)<8)return false;
-   double a=ATR(r,ATRPeriod,1);if(a<=0)return false;
-   if(!TZ60_DirectionalClose(r[1],buy))return false;
-
-   int contact=-1;
-   if(!TZ62_FindZoneContactBeforeEvent(r,1,MathMax(SniperEngulfContextBars,SniperConfirmMaxBars+3),contact))
-      return false;
-
-   double body=MathAbs(r[1].close-r[1].open);
-   double minBody=MathMax(_Point*5.0,a*0.20);
-   if(body<minBody)return false;
-
-   double coreLo=MathMin(g_plan.core_low,g_plan.core_high);
-   double coreHi=MathMax(g_plan.core_low,g_plan.core_high);
-   if(coreLo<=0||coreHi<=coreLo)return false;
-   double tol=MathMax(_Point*2.0,SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE));
-   bool clearedCore=buy?(r[1].close>=coreHi-tol):(r[1].close<=coreLo+tol);
-   if(!clearedCore)return false;
-
-   // The confirming candle must be causally connected to the owner reaction,
-   // not a later directional candle after price has already escaped.
-   int maxGap=MathMax(2,SniperConfirmMaxBars+1);
-   if(contact>maxGap)return false;
-
-   sig.valid=true;sig.buy=buy;sig.reentry=reentry;sig.flip=false;
-   sig.anchor_idx=contact;sig.break_idx=1;sig.pd_idx=contact;
-   sig.anchor_price=buy?r[contact].low:r[contact].high;
-   sig.break_level=buy?coreHi:coreLo;
-   sig.impulse_extreme=buy?r[1].high:r[1].low;
-   sig.ote_low=coreLo;sig.ote_high=coreHi;sig.pd_low=coreLo;sig.pd_high=coreHi;
-   sig.entry_low=MathMin(r[1].open,r[1].close);sig.entry_high=MathMax(r[1].open,r[1].close);
-   sig.pd_type="ZONE_REJECTION_DISPLACEMENT";
-   TZ60_SetTrace(0.0,sig.anchor_price,r[contact].time,sig.break_level,r[1].time,
-                 "ZONE_REJECTION",coreLo,coreHi,r[contact].time,r[contact].time,r[1].time);
-   g_tzTraceContactTs=r[contact].time;
-   return true;
-}
-
 bool TZ70_BuildEngulfingRetest(MqlRates &r[],bool buy,bool reentry,Signal &sig,string &stage)
 {
    sig.valid=false;stage="";
@@ -2771,8 +2723,7 @@ bool TZ73_OriginalZoneReentryFamily(Signal &sig)
    return (
       StringFind(sig.pd_type,"MASTER_SNIPER_PD_")==0||
       sig.pd_type=="ZONE_ENGULFING"||
-      sig.pd_type=="ZONE_ENGULFING_RETEST"||
-      sig.pd_type=="ZONE_REJECTION_DISPLACEMENT"
+      sig.pd_type=="ZONE_ENGULFING_RETEST"
    );
 }
 
@@ -2877,12 +2828,6 @@ bool TZ60_ScanPrimaryEngine(
    // engulfing entry that has recent institutional-zone context.
    if(TZ60_BuildEngulfing(r,buy,reentry,sig))
    {model="ZONE_ENGULFING";stage="READY";return true;}
-
-   // v3.76: exact engulfing is preferred, but a decisive closed-M1 rejection that
-   // clears the tactical core is an independent recovery path. It is still
-   // downstream-gated by the exact canonical BSL/SSL sweep/reclaim contract.
-   if(TZ76_BuildZoneRejectionDisplacement(r,buy,reentry,sig))
-   {model="ZONE_REJECTION_DISPLACEMENT";stage="READY";return true;}
 
    // v3.70 recovery: a valid earlier engulfing may be re-used only as a bounded
    // causal value retest. This is not a new re-entry allowance; it consumes the
@@ -3022,7 +2967,7 @@ bool TZ63_ModelSpecificConfirmationReady(MqlRates &r[],bool buy,Signal &sig,stri
 
    // Model 2 is a complete, independent entry family. The closed engulfing candle
    // plus recent institutional-zone context is its confirmation; do not add Model 1 MSS.
-   if(sig.pd_type=="ZONE_ENGULFING"||sig.pd_type=="ZONE_ENGULFING_RETEST"||sig.pd_type=="ZONE_REJECTION_DISPLACEMENT")
+   if(sig.pd_type=="ZONE_ENGULFING"||sig.pd_type=="ZONE_ENGULFING_RETEST")
    {
       reason="ENGULFING_MODEL_CONFIRMED_NO_SEPARATE_MSS_REQUIRED";
       return true;
@@ -3054,7 +2999,6 @@ bool TZ74_IsSniperModel(Signal &sig)
       StringFind(sig.pd_type,"MASTER_SNIPER_PD_")==0||
       sig.pd_type=="ZONE_ENGULFING"||
       sig.pd_type=="ZONE_ENGULFING_RETEST"||
-      sig.pd_type=="ZONE_REJECTION_DISPLACEMENT"||
       StringFind(sig.pd_type,"BREAKOUT_")==0
    );
 }
@@ -3862,13 +3806,18 @@ void Evaluate()
       }
    }
 
-   int modelShiftIdx=-1;double modelShiftLevel=0.0;string modelConfirmReason="";
-   if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,modelConfirmReason,modelShiftIdx,modelShiftLevel))
-   {TZ_SetGate("M1_MICRO_SHIFT",modelConfirmReason);return;}
-
-   int universalDirectionIdx=-1;string universalDirectionReason="";
-   if(!TZ74_UniversalClosedM1DirectionalReady(r,sig.buy,sig,tag,universalDirectionReason,universalDirectionIdx))
-   {TZ_SetGate("M1_DIRECTIONAL_CLOSE",universalDirectionReason);return;}
+   // v3.76 final-authorization contract:
+   // Model 1/2/3 builders are complete entry confirmations. Once canonical
+   // campaign liquidity is proven and the selected builder returns READY,
+   // do not demand another MSS, pullback, sweep, core touch or later candle.
+   // Legacy/non-sniper families retain the historical downstream shift check.
+   bool completedSniperModel=TZ74_IsSniperModel(sig);
+   if(!completedSniperModel)
+   {
+      int modelShiftIdx=-1;double modelShiftLevel=0.0;string modelConfirmReason="";
+      if(!TZ63_ModelSpecificConfirmationReady(r,sig.buy,sig,modelConfirmReason,modelShiftIdx,modelShiftLevel))
+      {TZ_SetGate("M1_MICRO_SHIFT",modelConfirmReason);return;}
+   }
 
    TZ67_EvaluateOrderFlowProxy(r,sig.buy);
    if(!TZ67_OrderFlowProxyAllowsEntry())return;
@@ -3890,7 +3839,6 @@ void Evaluate()
       StringFind(sig.pd_type,"MASTER_SNIPER_PD_")==0||
       sig.pd_type=="ZONE_ENGULFING"||
       sig.pd_type=="ZONE_ENGULFING_RETEST"||
-      sig.pd_type=="ZONE_REJECTION_DISPLACEMENT"||
       StringFind(sig.pd_type,"CONTINUATION_PD_")==0||
       StringFind(sig.pd_type,"BREAKOUT_")==0
    );
