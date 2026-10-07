@@ -3826,7 +3826,11 @@ void Evaluate()
    }
 
    TZ67_EvaluateOrderFlowProxy(r,sig.buy);
-   if(!TZ67_OrderFlowProxyAllowsEntry())return;
+   // v3.76: the broker-CFD order-flow proxy is confluence/telemetry for the
+   // canonical Model 1/2/3 sniper path. It must not become an undocumented
+   // post-confirmation authorization gate. Legacy/non-sniper models retain the
+   // configured veto/require-supportive behaviour.
+   if(!completedSniperModel&&!TZ67_OrderFlowProxyAllowsEntry())return;
 
    double entry=sig.buy?tk.ask:tk.bid;
    if(sig.reentry)
