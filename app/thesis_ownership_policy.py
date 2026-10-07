@@ -1037,6 +1037,11 @@ def acquire_execution_ownership(
         ):
             return None
 
+        # A qualified envelope-contact handoff is a real ownership event, but it
+        # is not reaction confirmation. When the existing base source row is still
+        # ARMED, promote it to INTERACTING so the persisted owner remains visible
+        # to live ownership sync and Sequence can keep the same owner identity while
+        # waiting for the unchanged M1/canonical execution gates.
         db.execute(
             """
             UPDATE zone_reactions SET
@@ -1049,6 +1054,7 @@ def acquire_execution_ownership(
                 reaction_confirmed_at=CASE WHEN ?=1 AND reaction_confirmed_at=0 THEN ? ELSE reaction_confirmed_at END,
                 status=CASE
                     WHEN ?=1 AND status IN ('ARMED','INTERACTING') THEN 'REACTION_CONFIRMED'
+                    WHEN ?=1 AND status='ARMED' THEN 'INTERACTING'
                     ELSE status
                 END,
                 last_reason=?,last_seen_at=?
@@ -1058,6 +1064,7 @@ def acquire_execution_ownership(
                 now, authority, analysis.analysis_id, anchor, zone.zone_id, zone.model_dump_json(),
                 1 if preconfirmed_authority else 0, now,
                 1 if preconfirmed_authority else 0,
+                1 if zone_contact_authority else 0,
                 f"EXECUTION_AUTHORITY_ACQUIRED:{authority}", now, key,
             ),
         )
