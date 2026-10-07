@@ -17,9 +17,9 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.16"
+    assert manifest["release"] == "6.4.17"
     assert manifest["data_bridge_version"] == "1.59"
-    assert manifest["sequence_ea_version"] == "3.75"
+    assert manifest["sequence_ea_version"] == "3.76"
 
     bridge = next(item for item in manifest["files"] if item["role"] == "data_bridge")
     assert bridge["name"] == "InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5"
@@ -53,7 +53,7 @@ def test_professional_release_contract_is_self_consistent():
     assert parity["target"] == "Include\\TradeZoneCore"
 
     seq = next(item for item in manifest["files"] if item["role"] == "sequence_ea")
-    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_75_CanonicalLiquidityGate_Demo.mq5"
+    assert seq["name"] == "InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5"
     source = ROOT / seq["path"]
     assert source.exists()
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -243,5 +243,10 @@ def test_professional_release_contract_is_self_consistent():
         "canonical_owner_acquired_p0_proof_reentry",
         "canonical_sweep_reclaim_entry_decision_audit",
         "sequence_375_truth_overlay",
+        "model_complete_immediate_final_authorization",
+        "same_campaign_canonical_liquidity_inheritance_r1_r2",
+        "sniper_reentry_freshness_from_model_chain",
+        "sniper_orderflow_proxy_telemetry_only",
+        "sequence_376_truth_overlay",
     }
     assert required.issubset(set(manifest["channel_features"]))
