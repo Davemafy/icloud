@@ -3549,6 +3549,9 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
    double directionLow=(ArraySize(r)>1?r[1].low:0.0);
    double directionClose=(ArraySize(r)>1?r[1].close:0.0);
    int directionOk=(ArraySize(r)>1&&TZ60_DirectionalClose(r[1],s.buy)?1:0);
+   bool canonicalOriginal=(tag=="P0"||tag=="B0"||tag=="R1"||tag=="R2");
+   datetime canonicalSweep=(tag=="P0"||tag=="B0")?g_tzCanonicalCandidateSweep:g_tzCanonicalProofSweepTs;
+   datetime canonicalReclaim=(tag=="P0"||tag=="B0")?g_tzCanonicalCandidateReclaim:g_tzCanonicalProofReclaimTs;
    string setup=TZ47_SetupName(tag);
    string campaign=g_plan.analysis_id+"|"+g_plan.zone_id+"|"+tag;
    string details=StringFormat(
@@ -3563,6 +3566,7 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       "\"nearest_open_target\":%.5f,\"rr_at_entry\":%.4f,\"min_rr_required\":%.4f,"
       "\"closed_m1_value_reaction_required\":%d,\"closed_m1_value_reaction_confirmed\":%d,"
       "\"closed_m1_direction_bar_ts\":%I64d,\"closed_m1_direction_open\":%.5f,\"closed_m1_direction_high\":%.5f,\"closed_m1_direction_low\":%.5f,\"closed_m1_direction_close\":%.5f,\"closed_m1_direction_ok\":%d,"
+      "\"canonical_required\":%d,\"canonical_side\":\"%s\",\"canonical_label\":\"%s\",\"canonical_level\":%.5f,\"canonical_sweep_ts\":%I64d,\"canonical_reclaim_ts\":%I64d,\"canonical_owner_acquired_at\":%I64d,"
       "\"orderflow_proxy_feed\":\"%s\",\"orderflow_proxy_state\":\"%s\",\"orderflow_proxy_score\":%.4f,\"orderflow_proxy_delta_norm\":%.4f,\"orderflow_proxy_absorption\":%d,\"orderflow_proxy_divergence\":%d,\"orderflow_proxy_expansion\":%d}",
       TZ_JsonEscape(campaign),TZ_JsonEscape(setup),TZ_JsonEscape(tag),(s.buy?"BUY":"SELL"),
       TZ_JsonEscape(g_tzExecutionAuthority),TZ_JsonEscape(g_tzCandidateModel),TZ_JsonEscape(s.pd_type),
@@ -3572,6 +3576,8 @@ void TZ36_SendEntryDecisionAudit(string tag,Signal &s,double entry,double sl,dou
       TZ_JsonEscape(g_tzRiskModel),TZ_JsonEscape(g_tzRiskEpoch),TZ_JsonEscape(g_tzRiskContext),g_tzLastRiskBase,g_tzGradeRiskPct,g_tzOriginalRiskPct,g_tzFlipRiskPct,g_tzLastRiskMoney,
       openTarget,rr,rrRequired,(reactionRequired?1:0),(reactionIdx>=1?1:0),
       (long)directionTs,directionOpen,directionHigh,directionLow,directionClose,directionOk,
+      (canonicalOriginal?1:0),TZ_JsonEscape(g_tzCanonicalSide),TZ_JsonEscape(g_tzCanonicalLabel),g_tzCanonicalLevel,
+      (long)canonicalSweep,(long)canonicalReclaim,(long)TZ75_CurrentOwnerAcquiredAt(),
       TZ_JsonEscape(g_tzOrderFlowProxyFeed),TZ_JsonEscape(g_tzOrderFlowProxyState),g_tzOrderFlowProxyScore,g_tzOrderFlowProxyDeltaNorm,(g_tzOrderFlowProxyAbsorption?1:0),(g_tzOrderFlowProxyDivergence?1:0),(g_tzOrderFlowProxyExpansion?1:0));
    string body=StringFormat(
       "{\"ts\":%I64d,\"event\":\"ENTRY_DECISION\",\"analysis_id\":\"%s\",\"zone_id\":\"%s\",\"price\":%.5f,\"details\":%s}",
