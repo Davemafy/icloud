@@ -243,5 +243,34 @@ def active_plan_text(a:Analysis,snapshot:Optional[MarketSnapshot]=None)->str:
         elif text.startswith("qualified_mitigations:"):
             try: qualified_mitigations=int(float(text.split(":",1)[1]))
             except (TypeError,ValueError): pass
+    # Publish the *exact* structural BSL/SSL attached when this zone was built.
+    # It is execution provenance, not a new price, confluence or zone ranking.
+    # Never substitute a zone boundary, a current M1 pivot or a guessed threshold.
+    attached_note = next((str(n) for n in (z.notes or []) if str(n).startswith("attached_liquidity:")), "")
+    liquidity_type, liquidity_label, liquidity_price = "", "", ""
+    try:
+        _, liquidity_type, liquidity_ref = attached_note.split(":", 2)
+        liquidity_label, at, price_text = liquidity_ref.rpartition("@")
+        parsed_price = float(price_text) if at else 0.0
+        expected_type = "BSL" if z.original_direction == Direction.SELL else "SSL"
+        if (
+            liquidity_type != expected_type
+            or not liquidity_label
+            or not (float(z.zone_low) <= parsed_price <= float(z.zone_high))
+        ):
+            raise ValueError("canonical liquidity reference does not match its zone")
+        liquidity_price = f"{parsed_price:.5f}"
+    except (ValueError, TypeError):
+        liquidity_type, liquidity_label, liquidity_price = "", "", ""
+    source_ready_ts = next(
+        (str(n).split(":", 1)[1] for n in (z.notes or []) if str(n).startswith("source_ready_ts:")),
+        "",
+    )
+    lines.update({
+        "zone_liquidity_type": liquidity_type,
+        "zone_liquidity_label": liquidity_label,
+        "zone_liquidity_price": liquidity_price,
+        "zone_liquidity_source_ready_ts": source_ready_ts,
+    })
     lines.update({"ea_mode":"DUAL_BRANCH" if executable else "WATCH_ONLY","zone_id":z.zone_id,"zone_state":state.value,"setup_type":z.setup_type,"source_tf":z.source_tf,"grade":z.grade.value,"current_grade":current_grade,"qualified_mitigations":str(qualified_mitigations),"original_direction":z.original_direction.value,"flip_direction":z.flip_direction.value,"core_method":z.core_method,"core_low":f"{z.core_low:.5f}","core_high":f"{z.core_high:.5f}","zone_low":f"{z.zone_low:.5f}","zone_high":f"{z.zone_high:.5f}","location_score":f"{z.location_score:.4f}","touch_count":str(z.touch_count),"invalidation_level":f"{z.invalidation_level:.5f}","min_displacement_atr":"0.80","min_rr":"1.50","original_target1":f"{z.original_target1:.5f}","original_target2":f"{z.original_target2:.5f}","original_target3":f"{z.original_target3:.5f}","original_runner":f"{z.original_runner:.5f}","flip_target1":f"{z.flip_target1:.5f}","flip_target2":f"{z.flip_target2:.5f}","flip_target3":f"{z.flip_target3:.5f}","flip_runner":f"{z.flip_runner:.5f}","requires_sweep":"1","flip_requires_retest":"1","flip_invalidation_is_not_entry":"1","execution_contract":"V6_PRIMARY_REENTRY_FLIP_THESIS_RISK","risk_model":RISK_MODEL,"risk_epoch":SETTINGS.research_risk_epoch,"validation_initial_capital":f"{SETTINGS.research_validation_initial_capital:.2f}","risk_context":zone_risk_context(z),"grade_risk_pct":f"{original_risk_pct(z):.3f}","original_risk_pct":f"{original_risk_pct(z):.3f}","flip_risk_pct":f"{flip_risk_pct(z):.3f}","bplus_reduced_risk":"0","bplus_execution_authority":"0","dxy_support":z.dxy_support})
     return "\n".join(f"{k}={v}" for k,v in lines.items())+"\n"
