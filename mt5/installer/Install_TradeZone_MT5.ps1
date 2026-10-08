@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.2'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.2'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.3'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.3'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -72,23 +72,58 @@ function DiscoverTargets(){
   }
   return @($inst)
 }
+function NormalizeMT5DataPath([string]$PathText){
+  if([string]::IsNullOrWhiteSpace($PathText)){return ''}
+  $p=$PathText.Trim().Trim('"').Trim("'")
+  try{$p=[IO.Path]::GetFullPath($p)}catch{}
+  return ($p -replace '[\\/]+$','').ToLowerInvariant()
+}
 function ChooseTarget($inst){
-  if($inst.Count-eq0){throw 'No MT5 data folder found.'}
-  if($inst.Count-eq1){return $inst[0]}
-
-  # With multiple terminals, require an explicit choice. Reusing a stale
-  # saved target can install into a different MT5 data folder than the live chart.
-
-  Write-Host 'Choose the MT5 instance:' -ForegroundColor Yellow
-  for($i=0;$i-lt$inst.Count;$i++){
-    $lab=$inst[$i].Install
-    if([string]::IsNullOrWhiteSpace($lab)){$lab=$inst[$i].Data}
-    Write-Host " [$($i+1)] $lab"
+  $targets=@($inst)
+  if($targets.Count-eq0){throw 'No MT5 data folder found.'}
+  if($targets.Count-eq1){
+    Write-Host "Only MT5 data folder: $($targets[0].Data)" -ForegroundColor White
+    return $targets[0]
   }
-  do{
-    $x=Read-Host 'Number';$n=0;$ok=[int]::TryParse($x,[ref]$n)
-  }until($ok-and$n-ge1-and$n-le$inst.Count)
-  return $inst[$n-1]
+
+  # Never assume a default target when several MT5 terminals are present.
+  # Use the exact folder shown by the LIVE terminal's File > Open Data Folder.
+  while($true){
+    Write-Host ''
+    Write-Host "DETECTED MT5 DATA FOLDERS ($($targets.Count)):" -ForegroundColor Yellow
+    for($i=0;$i-lt$targets.Count;$i++){
+      Write-Host ("  [{0}] DATA: {1}" -f ($i+1),[string]$targets[$i].Data) -ForegroundColor White
+      if($targets[$i].Install){
+        Write-Host ("      INSTALL: {0}" -f [string]$targets[$i].Install) -ForegroundColor Gray
+      }
+    }
+    Write-Host 'In the MT5 terminal you use, click File > Open Data Folder.' -ForegroundColor Cyan
+    Write-Host 'Paste that exact folder path below (safest), or enter its matching number.' -ForegroundColor Cyan
+    $x=Read-Host 'MT5 data folder path or number'
+    $choice=$null
+    $n=0
+    if([int]::TryParse($x,[ref]$n)){
+      if($n-ge1-and$n-le$targets.Count){$choice=$targets[$n-1]}
+    }else{
+      $wanted=NormalizeMT5DataPath $x
+      if($wanted){
+        foreach($candidate in $targets){
+          if((NormalizeMT5DataPath $candidate.Data)-eq$wanted){
+            $choice=$candidate
+            break
+          }
+        }
+      }
+    }
+    if(!$choice){
+      Write-Host 'Not a recognized MT5 data folder/number. No files changed. Try again.' -ForegroundColor Red
+      continue
+    }
+    Write-Host "SELECTED MT5 DATA FOLDER: $($choice.Data)" -ForegroundColor Green
+    $answer=(Read-Host 'Confirm this is the folder opened by your MT5 terminal? (Y/N)').Trim()
+    if($answer -match '^(?i:y|yes)$'){return $choice}
+    Write-Host 'Not confirmed. No files changed. Select again.' -ForegroundColor Yellow
+  }
 }
 function BackupFile([string]$Path,[string]$BackupRoot,[string]$Name){
   if(Test-Path $Path){
@@ -189,7 +224,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.2") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.3") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
