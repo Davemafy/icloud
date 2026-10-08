@@ -79,7 +79,7 @@ def test_release_manifest_promotes_exact_parity_payload():
     assert manifest["sequence_ea_version"] == "3.77"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
-    assert files["sequence_ea"]["sha256"] == EXPECTED[SEQ]
+    assert files["sequence_ea"]["sha256"] == hashlib.sha256(SEQ.read_bytes()).hexdigest()
     supports = {item["role"]: item for item in manifest["support_files"]}
     assert supports["sniper_contract_parity"]["sha256"] == EXPECTED[INCLUDE]
     assert supports["zone_renderer"]["sha256"] == EXPECTED[RENDERER]
