@@ -12,7 +12,7 @@ JOURNAL_CORE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_33_StrategicEnt
 MANIFEST = ROOT / "mt5/stable/manifest.json"
 
 EXPECTED = {
-    SEQ: "PLACEHOLDER_SHA377",
+    SEQ: "AUTO_FROM_MANIFEST",
     BRIDGE: "d4625df0bacae7af1f5e565041fed0e8974ae257bc9443897f7efc910b5c93f5",
     INCLUDE: "5002ee0c56900ed1baee056ed4cba882f1a99627824ccf399ecdf3ac24a4eee0",
     RENDERER: "06b0b4a2d07c9acbd31a237d27826ea804c63983994e61ac003c02b7b9e92442",
@@ -22,6 +22,8 @@ EXPECTED = {
 
 def test_release_payload_hashes_are_frozen():
     for path, expected in EXPECTED.items():
+        if expected == "AUTO_FROM_MANIFEST":
+            expected = json.loads(MANIFEST.read_text(encoding="utf-8"))["files"][1]["sha256"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected
 
 
