@@ -34,5 +34,9 @@ jobs:
         run: |
           $bat = Get-Content 'mt5\installer\TradeZone_MT5_Installer.bat' -Raw
           if ($bat -notmatch 'Install_TradeZone_MT5\.ps1') { throw 'Bootstrap installer URL missing' }
-          if ($bat -notmatch 'Installer 1\.5') { throw 'Bootstrap installer version out of date' }
+          if ($bat -notmatch 'Installer 1\.6') { throw 'Bootstrap installer version out of date' }
           Write-Host 'Bootstrap installer URL and version: OK'
+      - name: Execute installed-status writer against isolated MT5 folder
+        shell: powershell
+        run: |
+          & 'tests\windows\verify_installer_status_serialization.ps1'
