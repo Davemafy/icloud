@@ -22,7 +22,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Running installer; this window will remain open if an error occurs...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TMP_PS%"
 set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  echo.
+  echo INSTALLER EXITED WITH ERROR CODE %RC%.
+  echo The installer script has been kept at: %TMP_PS%
+  echo Please photograph the error above before closing this window.
+  pause
+  exit /b %RC%
+)
 del /q "%TMP_PS%" >nul 2>&1
-exit /b %RC%
+echo.
+echo Installer process finished. Check the SUCCESS message above.
+pause
+exit /b 0
