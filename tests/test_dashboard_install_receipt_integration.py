@@ -13,7 +13,7 @@ def _heartbeats(sequence_running: str, installed_sequence: str, receipt: str):
             "ts": now,
             "payload": {
                 "details": {
-                    "updater_version": "FRONT_FACING_MANUAL_INSTALLER_1.5",
+                    "updater_version": "FRONT_FACING_MANUAL_INSTALLER_1.6",
                     "last_action": receipt,
                     "stable_release": "6.4.20",
                     "installed_bridge_version": "1.59",
@@ -42,7 +42,7 @@ def test_installed_378_is_not_misrepresented_as_running_378(monkeypatch):
     monkeypatch.setattr(journal, "latest_heartbeats", lambda limit: _heartbeats("3.77", "3.78", receipt))
     truth = journal.component_status()
     assert truth["last_action"] == receipt
-    assert truth["updater_version"] == "FRONT_FACING_MANUAL_INSTALLER_1.5"
+    assert truth["updater_version"] == "FRONT_FACING_MANUAL_INSTALLER_1.6"
     assert truth["components"]["sequence_ea"]["installed"] == "3.78"
     assert truth["components"]["sequence_ea"]["running"] == "3.77"
     assert truth["components"]["sequence_ea"]["status"] == "RESTART_REQUIRED"
