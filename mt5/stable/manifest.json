@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.19",
+  "release": "6.4.20",
   "repository": "Davemafy/icloud",
-  "ref": "6de68439895340d437ef72187c32aabec36cc1b6",
+  "ref": "0970a530f4aed1c40c44de299cb8e8bd9f195f12",
   "data_bridge_version": "1.59",
   "sequence_ea_version": "3.78",
   "updater_min_version": "2.7.0",
@@ -321,7 +321,9 @@
     "owner_acquisition_stable_execution_state",
     "p0_one_shot_per_owner_acquisition",
     "independent_p0_r1_r2_execution_campaigns",
-    "sequence_378_truth_overlay"
+    "sequence_378_truth_overlay",
+    "sequence_378_runtime_version_truth_hotfix",
+    "installer_12_verified_disk_version_truth"
   ],
   "files": [
     {
@@ -338,7 +340,7 @@
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5",
       "requires_reload": true,
-      "sha256": "790029d490993867fc57a297a62a2583167af18408dc76e5673ab6c8ffb90600"
+      "sha256": "88d3c6d9a5bd52af92d3db27c8bcfb78600406e55dc995416cee0fde49873cca"
     }
   ],
   "support_files": [
