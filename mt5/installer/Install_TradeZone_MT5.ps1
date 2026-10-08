@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.3'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.3'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.4'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.4'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -78,6 +78,36 @@ function NormalizeMT5DataPath([string]$PathText){
   try{$p=[IO.Path]::GetFullPath($p)}catch{}
   return ($p -replace '[\\/]+$','').ToLowerInvariant()
 }
+function FindUniqueRunningMT5Target($targets){
+  # One-click mode is safe only when EXACTLY ONE MT5 process is running and
+  # its executable folder matches EXACTLY ONE discovered data-folder origin.
+  # Multiple running terminals, portable mode, missing origin or access denied
+  # are ambiguous: keep the explicit, fail-closed folder picker.
+  $running=@()
+  try{
+    $running=@(Get-CimInstance Win32_Process -Filter "Name = 'terminal64.exe' OR Name = 'terminal.exe'" -ErrorAction Stop)
+  }catch{
+    Write-Host 'Running MT5 detection unavailable; manual folder selection is required.' -ForegroundColor Yellow
+    return $null
+  }
+  if($running.Count-ne1){return $null}
+  $proc=$running[0]
+  if([string]::IsNullOrWhiteSpace([string]$proc.ExecutablePath)){return $null}
+  if(([string]$proc.CommandLine) -match '(?i)(?:^|\s)[/-]portable(?:\s|$)'){return $null}
+  $liveInstall=NormalizeMT5DataPath (Split-Path -Parent ([string]$proc.ExecutablePath))
+  if(!$liveInstall){return $null}
+  $matches=@()
+  foreach($candidate in @($targets)){
+    if([string]::IsNullOrWhiteSpace([string]$candidate.Install)){continue}
+    $origin=[string]$candidate.Install
+    if($origin -match '(?i)\\(?:terminal64?|metaeditor64?)\.exe$'){
+      $origin=Split-Path -Parent $origin
+    }
+    if((NormalizeMT5DataPath $origin)-eq$liveInstall){$matches+=,$candidate}
+  }
+  if($matches.Count-ne1){return $null}
+  return $matches[0]
+}
 function ChooseTarget($inst){
   $targets=@($inst)
   if($targets.Count-eq0){throw 'No MT5 data folder found.'}
@@ -86,7 +116,14 @@ function ChooseTarget($inst){
     return $targets[0]
   }
 
-  # Never assume a default target when several MT5 terminals are present.
+  $liveTarget=FindUniqueRunningMT5Target $targets
+  if($null-ne$liveTarget){
+    Write-Host "AUTO-DETECTED RUNNING MT5 DATA FOLDER: $($liveTarget.Data)" -ForegroundColor Green
+    Write-Host 'The only running MT5 terminal matches exactly one discovered data folder.' -ForegroundColor Green
+    return $liveTarget
+  }
+
+  # Multiple, missing or ambiguous live terminals require an explicit choice.
   # Use the exact folder shown by the LIVE terminal's File > Open Data Folder.
   while($true){
     Write-Host ''
@@ -224,7 +261,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.3") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.4") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
