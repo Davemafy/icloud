@@ -8,9 +8,9 @@ def _text() -> str:
     return INSTALLER.read_text(encoding="utf-8")
 
 
-def test_installer_11_uses_unique_temp_compile_logs_not_experts_tree():
+def test_installer_12_uses_unique_temp_compile_logs_not_experts_tree():
     text = _text()
-    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.1'" in text
+    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.2'" in text
     assert "$compileLogDir=Join-Path $tmp 'compile_logs'" in text
     assert "[guid]::NewGuid().ToString('N')+'_compile.log'" in text
     compile_fn = text[text.index("function CompileOne"):text.index("function RemoveObsoleteManagedFiles")]
@@ -58,3 +58,31 @@ def test_installer_keeps_only_current_ea_source_and_executable_names():
         "*_compile.log",
     ):
         assert pattern in text
+
+
+def test_installer_12_version_truth_block_is_inside_main_try_before_success():
+    text = _text()
+    status_at = text.index("$statusDir=Join-Path $t.MQL5 'Files\\TradeZone'")
+    success_at = text.index("SUCCESS: CURRENT TRADE ZONE EAs INSTALLED.")
+    catch_at = text.index("\ncatch{")
+    finally_at = text.index("\nfinally{")
+    assert status_at < success_at < catch_at < finally_at
+    assert "installed_sequence_version='+[string]$m.sequence_ea_version" in text
+    assert "'result=INSTALLED_REATTACH_REQUIRED'" in text
+    assert "Move-Item -LiteralPath $statusTmp -Destination $statusFile -Force" in text
+
+
+def test_installer_has_no_stray_code_after_finally_block():
+    text = _text().rstrip()
+    assert text.endswith("}")
+    finally_at = text.index("\nfinally{")
+    tail = text[finally_at:]
+    assert "installed_sequence_version" not in tail
+    assert "SUCCESS: CURRENT TRADE ZONE EAs INSTALLED." not in tail
+
+
+def test_launcher_keeps_window_open_on_failure():
+    launcher = Path("mt5/installer/TradeZone_MT5_Installer.bat").read_text(encoding="utf-8")
+    assert 'if not "%RC%"=="0"' in launcher
+    assert "INSTALLER EXITED WITH ERROR CODE" in launcher
+    assert "pause" in launcher.lower()
