@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.17",
+  "release": "6.4.18",
   "repository": "Davemafy/icloud",
-  "ref": "126c17d6d068c1bc77cf5f4f7d11000317fb0f97",
+  "ref": "9ebb36130616fc70a6ca7eac3c5ad89e20bfbae0",
   "data_bridge_version": "1.59",
-  "sequence_ea_version": "3.76",
+  "sequence_ea_version": "3.77",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -314,7 +314,10 @@
     "same_campaign_canonical_liquidity_inheritance_r1_r2",
     "sniper_reentry_freshness_from_model_chain",
     "sniper_orderflow_proxy_telemetry_only",
-    "sequence_376_truth_overlay"
+    "sequence_376_truth_overlay",
+    "sniper_r1_r2_model_specific_confirmation_epoch",
+    "inherited_canonical_proof_without_recycled_entry_confirmation",
+    "sequence_377_truth_overlay"
   ],
   "files": [
     {
@@ -327,9 +330,9 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_76_ZoneRejectionRecovery_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
       "requires_reload": true,
       "sha256": "e3d98d1592dd37af0c68bbdcfdc718db65add9143c313bf8b0041609222dd569"
     }
