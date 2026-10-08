@@ -311,6 +311,7 @@ def component_status() -> dict:
         "stable_release": release,
         "updater_version": updater_version,
         "update_result": update_result,
+        "last_action": str(telemetry.get("last_action") or ""),
         "pending_reload": pending_reload,
         "restart_manager": restart_manager,
         "restart_safe": restart_safe,
