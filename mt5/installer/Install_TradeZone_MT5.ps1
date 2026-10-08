@@ -19,7 +19,7 @@ function Verify([string]$Path,[string]$Expected){
   if([string]::IsNullOrWhiteSpace($Expected)){throw "Missing SHA256 for $(Split-Path $Path -Leaf)"}
   $actual=(Get-FileHash -Algorithm SHA256 $Path).Hash.ToLowerInvariant()
   if($actual-ne([string]$Expected).ToLowerInvariant()){
-    throw "SHA256 verification failed for $(Split-Path $Path -Leaf). Nothing active was replaced."
+    throw "SHA256 verification failed for $(Split-Path $Path -Leaf). Expected=$(([string]$Expected).ToLowerInvariant()) Actual=$actual. Nothing active was replaced."
   }
 }
 function FindMetaEditor($T){
