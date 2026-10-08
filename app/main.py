@@ -248,6 +248,7 @@ def _dashboard_read_only_payload() -> dict:
             "stable_release": str(manifest.get("release") or ""),
             "updater_version": str(telemetry.get("updater_version") or ""),
             "update_result": str(telemetry.get("update_result") or ""),
+            "last_action": str(telemetry.get("last_action") or ""),
             "pending_reload": pending_reload,
             "restart_manager": restart_manager,
             "restart_safe": restart_safe,
