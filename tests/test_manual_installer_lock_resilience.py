@@ -8,9 +8,9 @@ def _text() -> str:
     return INSTALLER.read_text(encoding="utf-8")
 
 
-def test_installer_16_uses_unique_temp_compile_logs_not_experts_tree():
+def test_installer_17_uses_unique_temp_compile_logs_not_experts_tree():
     text = _text()
-    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.6'" in text
+    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.7'" in text
     assert "$compileLogDir=Join-Path $tmp 'compile_logs'" in text
     assert "[guid]::NewGuid().ToString('N')+'_compile.log'" in text
     compile_fn = text[text.index("function CompileOne"):text.index("function RemoveObsoleteManagedFiles")]
@@ -60,10 +60,10 @@ def test_installer_keeps_only_current_ea_source_and_executable_names():
         assert pattern in text
 
 
-def test_installer_12_version_truth_block_is_inside_main_try_before_success():
+def test_installer_17_version_truth_block_is_inside_main_try_before_success():
     text = _text()
     status_at = text.index("$statusDir=Join-Path $t.MQL5 'Files\\TradeZone'")
-    success_at = text.index("SUCCESS: MT5 DISK INSTALL VERIFIED AND CLOUD DASHBOARD ACKNOWLEDGED.")
+    success_at = text.index("SUCCESS: MT5 DISK INSTALL VERIFIED. INSTALLER FINISHED.")
     catch_at = text.index("\ncatch{")
     finally_at = text.index("\nfinally{")
     assert status_at < success_at < catch_at < finally_at
