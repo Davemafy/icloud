@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.4'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.4'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.5'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.5'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -246,6 +246,57 @@ function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
     }
   }
 }
+function CheckDashboardAcknowledgement([string]$CloudUrl,[string]$ExpectedBridge,[string]$ExpectedSequence,[string]$ExpectedRelease,[string]$InstallerVersion){
+  # Read-only verification: never updates cloud state and never claims MT5 is
+  # running a newly installed EX5 until the Sequence heartbeat confirms it.
+  $url=$CloudUrl.TrimEnd('/')+'/system/status'
+  $deadline=(Get-Date).AddSeconds(45)
+  $lastReason='no fresh cloud acknowledgement'
+  $lastReport=$null
+  Write-Host 'Checking cloud dashboard acknowledgement of this MT5 installation...' -ForegroundColor Cyan
+  do{
+    try{
+      $reply=Invoke-RestMethod -Method Get -Uri $url -TimeoutSec 6 -ErrorAction Stop
+      $components=$reply.components
+      $bridge=$components.components.data_bridge
+      $seq=$components.components.sequence_ea
+      $lastReport=$components
+      $reportedInstaller=[string]$components.updater_version
+      $reportedBridge=[string]$bridge.installed
+      $reportedSequence=[string]$seq.installed
+      $bridgeAge=999999
+      if($null-ne$bridge.heartbeat_age_seconds){$bridgeAge=[int]$bridge.heartbeat_age_seconds}
+      $lastReason="installer=$reportedInstaller, disk bridge=$reportedBridge, disk sequence=$reportedSequence, bridge age=$bridgeAge"
+      if(
+        $reportedInstaller -eq $InstallerVersion -and
+        $reportedBridge -eq $ExpectedBridge -and
+        $reportedSequence -eq $ExpectedSequence -and
+        $bridgeAge -ge 0 -and $bridgeAge -le 45
+      ){
+        Write-Host 'DASHBOARD ACKNOWLEDGED: This installer and both installed component versions are visible in cloud telemetry.' -ForegroundColor Green
+        Write-Host ("  Cloud stable release: {0} | Installer stable release: {1}" -f [string]$components.stable_release,$ExpectedRelease) -ForegroundColor White
+        if([string]$components.stable_release -ne $ExpectedRelease){
+          Write-Host '  Cloud release label is behind the installed GitHub manifest; check Railway deployment.' -ForegroundColor Yellow
+        }
+        Write-Host ("  DataBridge: installed={0}, running={1}" -f $reportedBridge,[string]$bridge.running) -ForegroundColor White
+        Write-Host ("  Sequence:   installed={0}, running={1}" -f $reportedSequence,[string]$seq.running) -ForegroundColor White
+        if([string]$bridge.running -eq $ExpectedBridge -and [string]$seq.running -eq $ExpectedSequence){
+          Write-Host 'RUNTIME VERIFIED: both EAs are running the intended versions in MT5.' -ForegroundColor Green
+        }else{
+          Write-Host 'RUNTIME NOT YET CURRENT: Re-attach/reload the Sequence EA safely; the dashboard must show Running 3.78 before it is current.' -ForegroundColor Yellow
+        }
+        return $true
+      }
+    }catch{
+      $lastReason=$_.Exception.Message
+    }
+    Start-Sleep -Seconds 3
+  }while((Get-Date)-lt$deadline)
+  Write-Host 'DASHBOARD ACKNOWLEDGEMENT PENDING: MT5 disk installation was verified, but the cloud has NOT confirmed this installer report.' -ForegroundColor Yellow
+  Write-Host ("  Last cloud check: {0}" -f $lastReason) -ForegroundColor Yellow
+  Write-Host '  Check DataBridge is attached to the SAME MT5 data folder and WebRequest is enabled, then refresh /system/status.' -ForegroundColor Yellow
+  return $false
+}
 function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
   $root=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5'
   New-Item -ItemType Directory -Force -Path $root|Out-Null
@@ -262,7 +313,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.4") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.5") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -409,9 +460,53 @@ try{
   $statusTmp=$statusFile+'.tmp'
   [IO.File]::WriteAllLines($statusTmp,[string[]]$statusLines,(New-Object System.Text.UTF8Encoding($false)))
   Move-Item -LiteralPath $statusTmp -Destination $statusFile -Force
-  Write-Host "Disk version truth written to: $statusFile" -ForegroundColor Green
+  # Confirm this exact MT5 data folder contains the published status before
+  # claiming the disk-install record exists.
+  $readBack=Get-Content -LiteralPath $statusFile -Raw -ErrorAction Stop
+  foreach($expected in @(
+    ('updater_version='+$InstallerVersion),
+    ('stable_release='+[string]$m.release),
+    ('installed_bridge_version='+[string]$m.data_bridge_version),
+    ('installed_sequence_version='+[string]$m.sequence_ea_version)
+  )){
+    if($readBack -notmatch ('(?m)^'+[regex]::Escape($expected)+'\\r?
+
+  Write-Host ''
+  if($dashboardAcknowledged){
+    Write-Host 'SUCCESS: MT5 DISK INSTALL VERIFIED AND CLOUD DASHBOARD ACKNOWLEDGED.' -ForegroundColor Green
+  }else{
+    Write-Host 'MT5 DISK INSTALL VERIFIED; CLOUD DASHBOARD ACKNOWLEDGEMENT IS STILL PENDING.' -ForegroundColor Yellow
+  }
+  Write-Host "  Installer $InstallerVersion" -ForegroundColor Green
+  Write-Host "  DataBridge v$($m.data_bridge_version)" -ForegroundColor Green
+  Write-Host "  Sequence EA v$($m.sequence_ea_version)" -ForegroundColor Green
+  Write-Host "  Cloud URL/key are already the EA defaults." -ForegroundColor Green
+  Write-Host "  Old TradeZone Navigator tree backed up to: $expertsBackup" -ForegroundColor DarkGray
+  Write-Host '  Existing TradeZone subfolders were preserved.' -ForegroundColor DarkGray
+  Write-Host ''
+  Write-Host 'MT5: Navigator > Expert Advisors > right-click Refresh > TradeZone.' -ForegroundColor Cyan
+  Write-Host 'Attach DataBridge once to XAUUSD; attach Sequence EA to XAUUSD M1.' -ForegroundColor Cyan
+  Write-Host 'Add the Railway URL once under Tools > Options > Expert Advisors > Allow WebRequest.' -ForegroundColor Yellow
+  Write-Host 'Keep DEMO/PAPER_ONLY while validating.' -ForegroundColor Yellow
+  PauseExit 0
+}
+catch{
+  Write-Host ''
+  Write-Host "INSTALLER FAILED: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host 'Downloaded files failed closed. Review the message before retrying.' -ForegroundColor Yellow
+  PauseExit 1
+}
+finally{
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+)){
+      throw "Installed-status readback mismatch for $expected in $statusFile"
+    }
+  }
+  Write-Host "Disk version truth VERIFIED at: $statusFile" -ForegroundColor Green
 
   SaveManagedConfig $t $cloudUrl $cloudKey
+  $dashboardAcknowledged=CheckDashboardAcknowledgement $cloudUrl ([string]$m.data_bridge_version) ([string]$m.sequence_ea_version) ([string]$m.release) $InstallerVersion
 
   Write-Host ''
   Write-Host 'SUCCESS: CURRENT TRADE ZONE EAs INSTALLED.' -ForegroundColor Green
