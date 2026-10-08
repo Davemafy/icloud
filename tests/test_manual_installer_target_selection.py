@@ -32,3 +32,25 @@ def test_multiple_terminal_selection_is_fail_closed_until_confirmed():
     assert 'Confirm this is the folder opened by your MT5 terminal?' in chooser
     assert "if($answer -match '^(?i:y|yes)$'){return $choice}" in chooser
     assert 'Select again' in chooser
+
+
+def test_only_one_running_terminal_can_be_auto_selected():
+    source = INSTALLER.read_text(encoding="utf-8")
+    helper = source.split("function FindUniqueRunningMT5Target($targets){", 1)[1].split("function ChooseTarget($inst){", 1)[0]
+    assert "Get-CimInstance Win32_Process" in helper
+    assert "terminal64.exe" in helper
+    assert "terminal.exe" in helper
+    assert "if($running.Count-ne1){return $null}" in helper
+    assert "if($matches.Count-ne1){return $null}" in helper
+    assert "NormalizeMT5DataPath $origin" in helper
+    assert "NormalizeMT5DataPath (Split-Path -Parent" in helper
+    assert "portable" in helper
+
+
+def test_automatic_detection_precedes_manual_picker_without_unsafe_default():
+    chooser = _chooser()
+    assert "$liveTarget=FindUniqueRunningMT5Target $targets" in chooser
+    assert "if($null-ne$liveTarget)" in chooser
+    assert "AUTO-DETECTED RUNNING MT5 DATA FOLDER" in chooser
+    assert chooser.index("FindUniqueRunningMT5Target $targets") < chooser.index("while($true)")
+    assert "Read-Host 'MT5 data folder path or number'" in chooser
