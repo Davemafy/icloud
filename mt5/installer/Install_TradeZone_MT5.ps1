@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.1'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.1'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.2'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.2'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -76,8 +76,8 @@ function ChooseTarget($inst){
   if($inst.Count-eq0){throw 'No MT5 data folder found.'}
   if($inst.Count-eq1){return $inst[0]}
 
-  # Never silently reuse a saved MT5 instance when multiple terminals exist.
-  # The user must select the terminal that is actually running TradeZone.
+  # With multiple terminals, require an explicit choice. Reusing a stale
+  # saved target can install into a different MT5 data folder than the live chart.
 
   Write-Host 'Choose the MT5 instance:' -ForegroundColor Yellow
   for($i=0;$i-lt$inst.Count;$i++){
@@ -189,7 +189,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.1") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.2") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -316,52 +316,23 @@ try{
   }
   RemoveObsoleteManagedFiles $dest $keepNames
 
-  # Commit disk-install truth only AFTER verified downloads and successful compilation.
-  # DataBridge reads this exact file under the selected terminal's MQL5/Files/TradeZone.
-  $statusDir=Join-Path $t.MQL5 'Files\\TradeZone'
+  # Publish disk-install truth only after every download is verified and every
+  # front-facing EA has compiled successfully. DataBridge reads this exact file.
+  $statusDir=Join-Path $t.MQL5 'Files\TradeZone'
   New-Item -ItemType Directory -Force -Path $statusDir|Out-Null
   $statusFile=Join-Path $statusDir 'updater_status.txt'
-  $status=@{}
-  if(Test-Path $statusFile){
-    foreach($line in @(Get-Content $statusFile)){
-      if($line -match '^([^=]+)=(.*)
-  Write-Host ''
-  Write-Host 'SUCCESS: CURRENT TRADE ZONE EAs INSTALLED.' -ForegroundColor Green
-  Write-Host "  Installer $InstallerVersion" -ForegroundColor Green
-  Write-Host "  DataBridge v$($m.data_bridge_version)" -ForegroundColor Green
-  Write-Host "  Sequence EA v$($m.sequence_ea_version)" -ForegroundColor Green
-  Write-Host "  Cloud URL/key are already the EA defaults." -ForegroundColor Green
-  Write-Host "  Old TradeZone Navigator tree backed up to: $expertsBackup" -ForegroundColor DarkGray
-  Write-Host '  Existing TradeZone subfolders were preserved.' -ForegroundColor DarkGray
-  Write-Host ''
-  Write-Host 'MT5: Navigator > Expert Advisors > right-click Refresh > TradeZone.' -ForegroundColor Cyan
-  Write-Host 'Attach DataBridge once to XAUUSD; attach Sequence EA to XAUUSD M1.' -ForegroundColor Cyan
-  Write-Host 'Add the Railway URL once under Tools > Options > Expert Advisors > Allow WebRequest.' -ForegroundColor Yellow
-  Write-Host 'Keep DEMO/PAPER_ONLY while validating.' -ForegroundColor Yellow
-  PauseExit 0
-}
-catch{
-  Write-Host ''
-  Write-Host "INSTALLER FAILED: $($_.Exception.Message)" -ForegroundColor Red
-  Write-Host 'Downloaded files failed closed. Review the message before retrying.' -ForegroundColor Yellow
-  PauseExit 1
-}
-finally{
-  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-}
-){$status[$matches[1].Trim()]=$matches[2].Trim()}
-    }
-  }
-  $status['updater_version']=$InstallerVersion
-  $status['stable_release']=[string]$m.release
-  $status['desired_bridge_version']=[string]$m.data_bridge_version
-  $status['desired_sequence_version']=[string]$m.sequence_ea_version
-  $status['installed_bridge_version']=[string]$m.data_bridge_version
-  $status['installed_sequence_version']=[string]$m.sequence_ea_version
-  $status['pending_reload']='1'
-  $status['update_result']='INSTALLED_REATTACH_REQUIRED'
-  $status['last_action']='MANUAL_INSTALL_COMPILED'
-  $statusLines=@($status.Keys | Sort-Object | ForEach-Object { $_+'='+$status[$_] })
+  $statusLines=@(
+    'updater_version='+$InstallerVersion,
+    'stable_release='+[string]$m.release,
+    'desired_bridge_version='+[string]$m.data_bridge_version,
+    'desired_sequence_version='+[string]$m.sequence_ea_version,
+    'installed_bridge_version='+[string]$m.data_bridge_version,
+    'installed_sequence_version='+[string]$m.sequence_ea_version,
+    'pending_reload=1',
+    'result=INSTALLED_REATTACH_REQUIRED',
+    'update_result=INSTALLED_REATTACH_REQUIRED',
+    'last_action=MANUAL_INSTALL_COMPILED'
+  )
   $statusTmp=$statusFile+'.tmp'
   [IO.File]::WriteAllLines($statusTmp,[string[]]$statusLines,(New-Object System.Text.UTF8Encoding($false)))
   Move-Item -LiteralPath $statusTmp -Destination $statusFile -Force
