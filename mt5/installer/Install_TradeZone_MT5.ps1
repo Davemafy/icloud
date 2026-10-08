@@ -100,7 +100,7 @@ function FindUniqueRunningMT5Target($targets){
   foreach($candidate in @($targets)){
     if([string]::IsNullOrWhiteSpace([string]$candidate.Install)){continue}
     $origin=[string]$candidate.Install
-    if($origin -match '(?i)\\(?:terminal64?|metaeditor64?)\.exe$'){
+    if($origin -match '(?i)\\(?:terminal(?:64)?|metaeditor(?:64)?)\.exe$'){
       $origin=Split-Path -Parent $origin
     }
     if((NormalizeMT5DataPath $origin)-eq$liveInstall){$matches+=,$candidate}
