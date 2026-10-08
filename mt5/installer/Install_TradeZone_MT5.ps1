@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.5'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.5'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.6'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.6'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -315,7 +315,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.5") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.6") -ForegroundColor Cyan
 Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -448,30 +448,27 @@ try{
   New-Item -ItemType Directory -Force -Path $statusDir|Out-Null
   $statusFile=Join-Path $statusDir 'updater_status.txt'
   $installReceipt='MANUAL_INSTALL_COMPILED_'+[guid]::NewGuid().ToString('N')
-  $statusLines=@(
-    'updater_version='+$InstallerVersion,
-    'stable_release='+[string]$m.release,
-    'desired_bridge_version='+[string]$m.data_bridge_version,
-    'desired_sequence_version='+[string]$m.sequence_ea_version,
-    'installed_bridge_version='+[string]$m.data_bridge_version,
-    'installed_sequence_version='+[string]$m.sequence_ea_version,
-    'pending_reload=1',
-    'result=INSTALLED_REATTACH_REQUIRED',
-    'update_result=INSTALLED_REATTACH_REQUIRED',
-    'last_action='+$installReceipt
-  )
+  # PowerShell's '+' and comma expression precedence can collapse a key/value
+  # array into ONE space-joined string. Emit each line explicitly instead.
+  $statusLines=New-Object 'System.Collections.Generic.List[string]'
+  [void]$statusLines.Add(('updater_version='+$InstallerVersion))
+  [void]$statusLines.Add(('stable_release='+[string]$m.release))
+  [void]$statusLines.Add(('desired_bridge_version='+[string]$m.data_bridge_version))
+  [void]$statusLines.Add(('desired_sequence_version='+[string]$m.sequence_ea_version))
+  [void]$statusLines.Add(('installed_bridge_version='+[string]$m.data_bridge_version))
+  [void]$statusLines.Add(('installed_sequence_version='+[string]$m.sequence_ea_version))
+  [void]$statusLines.Add('pending_reload=1')
+  [void]$statusLines.Add('result=INSTALLED_REATTACH_REQUIRED')
+  [void]$statusLines.Add('update_result=INSTALLED_REATTACH_REQUIRED')
+  [void]$statusLines.Add(('last_action='+$installReceipt))
+  if($statusLines.Count-ne10){throw 'Installer status serialization produced the wrong field count.'}
   $statusTmp=$statusFile+'.tmp'
-  [IO.File]::WriteAllLines($statusTmp,[string[]]$statusLines,(New-Object System.Text.UTF8Encoding($false)))
+  [IO.File]::WriteAllLines($statusTmp,[string[]]$statusLines.ToArray(),(New-Object System.Text.UTF8Encoding($false)))
   Move-Item -LiteralPath $statusTmp -Destination $statusFile -Force
   # Check the exact status file in the selected MT5 data folder.
   $readBackLines=@(Get-Content -LiteralPath $statusFile -ErrorAction Stop)
-  foreach($expected in @(
-    ('updater_version='+$InstallerVersion),
-    ('stable_release='+[string]$m.release),
-    ('installed_bridge_version='+[string]$m.data_bridge_version),
-    ('installed_sequence_version='+[string]$m.sequence_ea_version),
-    ('last_action='+$installReceipt)
-  )){
+  if($readBackLines.Count-ne10){throw "Installed-status must have 10 separate lines; found $($readBackLines.Count)."}
+  foreach($expected in $statusLines){
     if($readBackLines -notcontains $expected){
       throw "Installed-status readback mismatch for $expected in $statusFile"
     }
