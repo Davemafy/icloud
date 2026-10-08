@@ -147,7 +147,7 @@
 #undef ManagePositions
 #undef BuildFlip
 
-#define TZ_SEQUENCE_VERSION "3.77"
+#define TZ_SEQUENCE_VERSION "3.78"
 
 input bool PaperResearchMode=true;
 input double ResearchMaxSpreadPoints=50.0;
