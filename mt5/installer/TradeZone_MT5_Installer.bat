@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 color 0B
-title Trade Zone - ONE MT5 Installer 1.2 1.2
+title Trade Zone - ONE MT5 Installer 1.2
 
 echo ============================================================
 echo  Trade Zone - ONE MT5 Installer
