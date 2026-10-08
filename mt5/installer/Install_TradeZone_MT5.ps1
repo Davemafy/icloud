@@ -246,7 +246,7 @@ function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
     }
   }
 }
-function CheckDashboardAcknowledgement([string]$CloudUrl,[string]$ExpectedBridge,[string]$ExpectedSequence,[string]$ExpectedRelease,[string]$InstallerVersion){
+function CheckDashboardAcknowledgement([string]$CloudUrl,[string]$ExpectedBridge,[string]$ExpectedSequence,[string]$ExpectedRelease,[string]$InstallerVersion,[string]$InstallReceipt){
   # Read-only verification: never updates cloud state and never claims MT5 is
   # running a newly installed EX5 until the Sequence heartbeat confirms it.
   $url=$CloudUrl.TrimEnd('/')+'/system/status'
@@ -262,13 +262,15 @@ function CheckDashboardAcknowledgement([string]$CloudUrl,[string]$ExpectedBridge
       $seq=$components.components.sequence_ea
       $lastReport=$components
       $reportedInstaller=[string]$components.updater_version
+      $reportedReceipt=[string]$components.last_action
       $reportedBridge=[string]$bridge.installed
       $reportedSequence=[string]$seq.installed
       $bridgeAge=999999
       if($null-ne$bridge.heartbeat_age_seconds){$bridgeAge=[int]$bridge.heartbeat_age_seconds}
-      $lastReason="installer=$reportedInstaller, disk bridge=$reportedBridge, disk sequence=$reportedSequence, bridge age=$bridgeAge"
+      $lastReason="installer=$reportedInstaller, receipt=$reportedReceipt, disk bridge=$reportedBridge, disk sequence=$reportedSequence, bridge age=$bridgeAge"
       if(
         $reportedInstaller -eq $InstallerVersion -and
+        $reportedReceipt -eq $InstallReceipt -and
         $reportedBridge -eq $ExpectedBridge -and
         $reportedSequence -eq $ExpectedSequence -and
         $bridgeAge -ge 0 -and $bridgeAge -le 45
@@ -283,7 +285,7 @@ function CheckDashboardAcknowledgement([string]$CloudUrl,[string]$ExpectedBridge
         if([string]$bridge.running -eq $ExpectedBridge -and [string]$seq.running -eq $ExpectedSequence){
           Write-Host 'RUNTIME VERIFIED: both EAs are running the intended versions in MT5.' -ForegroundColor Green
         }else{
-          Write-Host 'RUNTIME NOT YET CURRENT: Re-attach/reload the Sequence EA safely; the dashboard must show Running 3.78 before it is current.' -ForegroundColor Yellow
+          Write-Host 'RUNTIME NOT YET CURRENT: Re-attach/reload the Sequence EA safely; the dashboard must show the new Sequence Running version before it is current.' -ForegroundColor Yellow
         }
         return $true
       }
@@ -445,6 +447,7 @@ try{
   $statusDir=Join-Path $t.MQL5 'Files\TradeZone'
   New-Item -ItemType Directory -Force -Path $statusDir|Out-Null
   $statusFile=Join-Path $statusDir 'updater_status.txt'
+  $installReceipt='MANUAL_INSTALL_COMPILED_'+[guid]::NewGuid().ToString('N')
   $statusLines=@(
     'updater_version='+$InstallerVersion,
     'stable_release='+[string]$m.release,
@@ -455,7 +458,7 @@ try{
     'pending_reload=1',
     'result=INSTALLED_REATTACH_REQUIRED',
     'update_result=INSTALLED_REATTACH_REQUIRED',
-    'last_action=MANUAL_INSTALL_COMPILED'
+    'last_action='+$installReceipt
   )
   $statusTmp=$statusFile+'.tmp'
   [IO.File]::WriteAllLines($statusTmp,[string[]]$statusLines,(New-Object System.Text.UTF8Encoding($false)))
@@ -466,7 +469,8 @@ try{
     ('updater_version='+$InstallerVersion),
     ('stable_release='+[string]$m.release),
     ('installed_bridge_version='+[string]$m.data_bridge_version),
-    ('installed_sequence_version='+[string]$m.sequence_ea_version)
+    ('installed_sequence_version='+[string]$m.sequence_ea_version),
+    ('last_action='+$installReceipt)
   )){
     if($readBackLines -notcontains $expected){
       throw "Installed-status readback mismatch for $expected in $statusFile"
@@ -475,7 +479,7 @@ try{
   Write-Host "Disk version truth VERIFIED at: $statusFile" -ForegroundColor Green
 
   SaveManagedConfig $t $cloudUrl $cloudKey
-  $dashboardAcknowledged=CheckDashboardAcknowledgement $cloudUrl ([string]$m.data_bridge_version) ([string]$m.sequence_ea_version) ([string]$m.release) $InstallerVersion
+  $dashboardAcknowledged=CheckDashboardAcknowledgement $cloudUrl ([string]$m.data_bridge_version) ([string]$m.sequence_ea_version) ([string]$m.release) $InstallerVersion $installReceipt
 
   Write-Host ''
   if($dashboardAcknowledged){
