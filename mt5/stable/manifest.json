@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "channel": "stable",
-  "release": "6.4.18",
+  "release": "6.4.19",
   "repository": "Davemafy/icloud",
-  "ref": "9ebb36130616fc70a6ca7eac3c5ad89e20bfbae0",
+  "ref": "6de68439895340d437ef72187c32aabec36cc1b6",
   "data_bridge_version": "1.59",
-  "sequence_ea_version": "3.77",
+  "sequence_ea_version": "3.78",
   "updater_min_version": "2.7.0",
   "update_latency_seconds": 10,
   "demo_defaults": {
@@ -317,7 +317,11 @@
     "sequence_376_truth_overlay",
     "sniper_r1_r2_model_specific_confirmation_epoch",
     "inherited_canonical_proof_without_recycled_entry_confirmation",
-    "sequence_377_truth_overlay"
+    "sequence_377_truth_overlay",
+    "owner_acquisition_stable_execution_state",
+    "p0_one_shot_per_owner_acquisition",
+    "independent_p0_r1_r2_execution_campaigns",
+    "sequence_378_truth_overlay"
   ],
   "files": [
     {
@@ -330,11 +334,11 @@
     },
     {
       "role": "sequence_ea",
-      "name": "InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
-      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
-      "target_name": "InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
+      "name": "InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5",
+      "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5",
+      "target_name": "InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5",
       "requires_reload": true,
-      "sha256": "5a5b5d8592c45e1e296d52f615bc57b8e1b252c91c3006940e5229fb47198d5e"
+      "sha256": "b8b3608ae5848cb1f82a20096df8aefe7a2845e8ff6a29ec6736f15c664918de"
     }
   ],
   "support_files": [
