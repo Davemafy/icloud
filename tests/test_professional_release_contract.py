@@ -17,7 +17,7 @@ def test_professional_release_contract_is_self_consistent():
     cloud_parts = SETTINGS.app_version.split(".")
     assert len(cloud_parts) == 3 and all(part.isdigit() for part in cloud_parts)
     assert tuple(map(int, cloud_parts)) >= (6, 5, 88)
-    assert manifest["release"] == "6.4.19"
+    assert manifest["release"] == "6.4.20"
     assert manifest["data_bridge_version"] == "1.59"
     assert manifest["sequence_ea_version"] == "3.78"
 
