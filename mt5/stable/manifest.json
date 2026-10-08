@@ -334,7 +334,7 @@
       "path": "mt5/stable/InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
       "target_name": "InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5",
       "requires_reload": true,
-      "sha256": "e3d98d1592dd37af0c68bbdcfdc718db65add9143c313bf8b0041609222dd569"
+      "sha256": "5a5b5d8592c45e1e296d52f615bc57b8e1b252c91c3006940e5229fb47198d5e"
     }
   ],
   "support_files": [
