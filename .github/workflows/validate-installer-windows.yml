@@ -1,0 +1,38 @@
+name: validate-installer-windows
+
+on:
+  push:
+    paths:
+      - 'mt5/installer/**'
+      - '.github/workflows/validate-installer-windows.yml'
+  pull_request:
+    paths:
+      - 'mt5/installer/**'
+      - '.github/workflows/validate-installer-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  parse-powershell:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Parse one-click installer with Windows PowerShell
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          $file = Join-Path $env:GITHUB_WORKSPACE 'mt5\installer\Install_TradeZone_MT5.ps1'
+          [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.ToString() }
+            throw "Installer PowerShell syntax invalid ($($errors.Count) errors)."
+          }
+          Write-Host 'Installer Windows PowerShell syntax: OK'
+      - name: Validate one-click bootstrap points to current GitHub installer
+        shell: powershell
+        run: |
+          $bat = Get-Content 'mt5\installer\TradeZone_MT5_Installer.bat' -Raw
+          if ($bat -notmatch 'Install_TradeZone_MT5\.ps1') { throw 'Bootstrap installer URL missing' }
+          if ($bat -notmatch 'Installer 1\.5') { throw 'Bootstrap installer version out of date' }
+          Write-Host 'Bootstrap installer URL and version: OK'
