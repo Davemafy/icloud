@@ -40,7 +40,7 @@ def test_bridges_existing_last_action_heartbeat_to_both_status_paths():
     journal = JOURNAL.read_text(encoding="utf-8")
     main = MAIN.read_text(encoding="utf-8")
     assert 'TZ_ReadLocalKV("updater_status.txt","last_action")' in bridge
-    assert '"\\\"last_action\\\":\\\"%s\\\""' in bridge
+    assert "JsonEscape(lastAction)" in bridge
     assert '"last_action": str(telemetry.get("last_action") or "")' in journal
     assert '"last_action": str(telemetry.get("last_action") or "")' in main
     assert '@app.get("/system/status")' in main
