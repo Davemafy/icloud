@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_77_ModelEpochReentry_Demo.mq5"
+SEQ = ROOT / "mt5/stable/InstitutionalSMC_SequenceEA_v3_78_OwnerStableCampaigns_Demo.mq5"
 BRIDGE = ROOT / "mt5/stable/InstitutionalSMC_DataBridge_v1_59_DisplayTruth.mq5"
 INCLUDE = ROOT / "mt5/stable/SniperContractParityV1.mqh"
 RENDERER = ROOT / "mt5/stable/TradeZone_ZoneRenderer_v1_0.mqh"
@@ -31,8 +31,8 @@ def test_release_payload_versions_and_parity_wiring():
     seq = SEQ.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
     inc = INCLUDE.read_text(encoding="utf-8")
-    assert '#property version   "3.77"' in seq
-    assert '#define TZ_SEQUENCE_VERSION "3.77"' in seq
+    assert '#property version   "3.78"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.78"' in seq
     assert '#include <TradeZoneCore\\SniperContractParityV1.mqh>' in seq
     assert 'TZ_PreCoreSync();ManagePositions();Evaluate();' in seq
     assert seq.index("ManagePositions();") < seq.index("Evaluate();")
@@ -73,10 +73,10 @@ def test_release_payload_versions_and_parity_wiring():
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.4.18"
-    assert manifest["ref"] == "9ebb36130616fc70a6ca7eac3c5ad89e20bfbae0"
+    assert manifest["release"] == "6.4.19"
+    assert manifest["ref"] == "6de68439895340d437ef72187c32aabec36cc1b6"
     assert manifest["data_bridge_version"] == "1.59"
-    assert manifest["sequence_ea_version"] == "3.77"
+    assert manifest["sequence_ea_version"] == "3.78"
     files = {item["role"]: item for item in manifest["files"]}
     assert files["data_bridge"]["sha256"] == EXPECTED[BRIDGE]
     assert files["sequence_ea"]["sha256"] == hashlib.sha256(SEQ.read_bytes()).hexdigest()
