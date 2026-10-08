@@ -79,10 +79,9 @@ function NormalizeMT5DataPath([string]$PathText){
   return ($p -replace '[\\/]+$','').ToLowerInvariant()
 }
 function FindUniqueRunningMT5Target($targets){
-  # One-click mode is safe only when EXACTLY ONE MT5 process is running and
-  # its executable folder matches EXACTLY ONE discovered data-folder origin.
-  # Multiple running terminals, portable mode, missing origin or access denied
-  # are ambiguous: keep the explicit, fail-closed folder picker.
+  # Select automatically only if exactly one RUNNING MT5 executable matches
+  # exactly one discovered MQL5 data-folder origin. Ignore unrelated MT4
+  # terminal.exe processes; fail closed for two MT5s, portable or ambiguous paths.
   $running=@()
   try{
     $running=@(Get-CimInstance Win32_Process -Filter "Name = 'terminal64.exe' OR Name = 'terminal.exe'" -ErrorAction Stop)
@@ -90,23 +89,25 @@ function FindUniqueRunningMT5Target($targets){
     Write-Host 'Running MT5 detection unavailable; manual folder selection is required.' -ForegroundColor Yellow
     return $null
   }
-  if($running.Count-ne1){return $null}
-  $proc=$running[0]
-  if([string]::IsNullOrWhiteSpace([string]$proc.ExecutablePath)){return $null}
-  if(([string]$proc.CommandLine) -match '(?i)(?:^|\s)[/-]portable(?:\s|$)'){return $null}
-  $liveInstall=NormalizeMT5DataPath (Split-Path -Parent ([string]$proc.ExecutablePath))
-  if(!$liveInstall){return $null}
   $matches=@()
-  foreach($candidate in @($targets)){
-    if([string]::IsNullOrWhiteSpace([string]$candidate.Install)){continue}
-    $origin=[string]$candidate.Install
-    if($origin -match '(?i)\\(?:terminal(?:64)?|metaeditor(?:64)?)\.exe$'){
-      $origin=Split-Path -Parent $origin
+  foreach($proc in @($running)){
+    if([string]::IsNullOrWhiteSpace([string]$proc.ExecutablePath)){continue}
+    if(([string]$proc.CommandLine) -match '(?i)(?:^|\s)[/-]portable(?:\s|$)'){continue}
+    $liveInstall=NormalizeMT5DataPath (Split-Path -Parent ([string]$proc.ExecutablePath))
+    if(!$liveInstall){continue}
+    foreach($candidate in @($targets)){
+      if([string]::IsNullOrWhiteSpace([string]$candidate.Install)){continue}
+      $origin=[string]$candidate.Install
+      if($origin -match '(?i)\\(?:terminal(?:64)?|metaeditor(?:64)?)\.exe$'){
+        $origin=Split-Path -Parent $origin
+      }
+      if((NormalizeMT5DataPath $origin)-eq$liveInstall){
+        $matches+=,[PSCustomObject]@{Target=$candidate;ProcessId=$proc.ProcessId}
+      }
     }
-    if((NormalizeMT5DataPath $origin)-eq$liveInstall){$matches+=,$candidate}
   }
   if($matches.Count-ne1){return $null}
-  return $matches[0]
+  return $matches[0].Target
 }
 function ChooseTarget($inst){
   $targets=@($inst)
