@@ -63,7 +63,7 @@ def test_installer_keeps_only_current_ea_source_and_executable_names():
 def test_installer_12_version_truth_block_is_inside_main_try_before_success():
     text = _text()
     status_at = text.index("$statusDir=Join-Path $t.MQL5 'Files\\TradeZone'")
-    success_at = text.index("SUCCESS: CURRENT TRADE ZONE EAs INSTALLED.")
+    success_at = text.index("SUCCESS: MT5 DISK INSTALL VERIFIED AND CLOUD DASHBOARD ACKNOWLEDGED.")
     catch_at = text.index("\ncatch{")
     finally_at = text.index("\nfinally{")
     assert status_at < success_at < catch_at < finally_at
