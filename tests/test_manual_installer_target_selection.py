@@ -40,7 +40,8 @@ def test_only_one_running_terminal_can_be_auto_selected():
     assert "Get-CimInstance Win32_Process" in helper
     assert "terminal64.exe" in helper
     assert "terminal.exe" in helper
-    assert "if($running.Count-ne1){return $null}" in helper
+    assert "foreach($proc in @($running))" in helper
+    assert "ProcessId=$proc.ProcessId" in helper
     assert "if($matches.Count-ne1){return $null}" in helper
     assert "NormalizeMT5DataPath $origin" in helper
     assert "NormalizeMT5DataPath (Split-Path -Parent" in helper
