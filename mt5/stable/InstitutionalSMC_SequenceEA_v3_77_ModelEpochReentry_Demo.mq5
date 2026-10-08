@@ -140,7 +140,7 @@
 #undef ManagePositions
 #undef BuildFlip
 
-#define TZ_SEQUENCE_VERSION "3.76"
+#define TZ_SEQUENCE_VERSION "3.77"
 
 input bool PaperResearchMode=true;
 input double ResearchMaxSpreadPoints=50.0;
@@ -4022,7 +4022,7 @@ void Evaluate()
       g_lastSequence=seq;g_lastTradeBar=cb;
       g_tzLastModel=(g_tzCandidateModel!=""&&g_tzCandidateModel!="NONE"?g_tzCandidateModel:sig.pd_type);
       TZ_SetGate("ORDER_SENT",g_tzLastSplitPartial?"DEMO_ENTRY_OPENED_PARTIAL_SPLIT":"DEMO_ENTRY_OPENED");
-      Print("SMC Research v3.76 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
+      Print("SMC Research v3.77 ",tag," opened. authority=",g_tzExecutionAuthority," model=",g_tzLastModel,
             " gate=",g_tzGateStage," lr=",g_tzLRLabel,"@",g_tzLRPrice," entry=",entry," sl=",sl,
             " rrTarget=",rrTarget," rr=",DoubleToString(rr,2)," riskMoney=",risk);
    }
