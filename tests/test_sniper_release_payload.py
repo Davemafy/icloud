@@ -73,8 +73,8 @@ def test_release_payload_versions_and_parity_wiring():
 
 def test_release_manifest_promotes_exact_parity_payload():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["release"] == "6.4.19"
-    assert manifest["ref"] == "6de68439895340d437ef72187c32aabec36cc1b6"
+    assert manifest["release"] == "6.4.20"
+    assert manifest["ref"] == "0970a530f4aed1c40c44de299cb8e8bd9f195f12"
     assert manifest["data_bridge_version"] == "1.59"
     assert manifest["sequence_ea_version"] == "3.78"
     files = {item["role"]: item for item in manifest["files"]}
@@ -86,3 +86,16 @@ def test_release_manifest_promotes_exact_parity_payload():
     assert supports["data_bridge_core"]["sha256"] == EXPECTED[JOURNAL_CORE]
     assert supports["sniper_contract_parity"]["target"] == "Include\\TradeZoneCore"
 
+
+
+def test_sequence_378_runtime_truth_and_installer_contract():
+    seq = SEQ.read_text(encoding="utf-8")
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    installer = (ROOT / "mt5/installer/Install_TradeZone_MT5.ps1").read_text(encoding="utf-8")
+    assert '#property version   "3.78"' in seq
+    assert '#define TZ_SEQUENCE_VERSION "3.78"' in seq
+    assert "sequence_378_runtime_version_truth_hotfix" in manifest["channel_features"]
+    assert "installer_12_verified_disk_version_truth" in manifest["channel_features"]
+    assert "installed_sequence_version='+[string]$m.sequence_ea_version" in installer
+    assert "'result=INSTALLED_REATTACH_REQUIRED'" in installer
+    assert "FRONT_FACING_MANUAL_INSTALLER_1.2" in installer
