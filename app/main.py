@@ -1251,6 +1251,47 @@ def _journal_snapshot():
     }
 
 
+@app.get("/journal/forensics")
+def journal_forensics(
+    analysis_id: str = "",
+    zone_id: str = "",
+    event: str = "",
+    limit: int = 500,
+):
+    """Read-only forensic access to persisted MT5 feedback evidence.
+
+    This endpoint cannot mutate analysis, ownership, risk, execution state or orders.
+    It exists so an exact campaign/zone can be audited after paper execution.
+    """
+    analysis_id = str(analysis_id or "").strip()
+    zone_id = str(zone_id or "").strip()
+    event = str(event or "").strip().upper()
+    limit = max(1, min(int(limit), 5000))
+    rows = recent_feedback(10000)
+    items = []
+    for row in rows:
+        if analysis_id and str(row.get("analysis_id") or "") != analysis_id:
+            continue
+        if zone_id and str(row.get("zone_id") or "") != zone_id:
+            continue
+        if event and str(row.get("event") or "").upper() != event:
+            continue
+        item = dict(row)
+        item["details"] = _detail_value(item.get("details", ""))
+        items.append(item)
+        if len(items) >= limit:
+            break
+    return {
+        "paper_only": SETTINGS.paper_only,
+        "read_only": True,
+        "analysis_id": analysis_id,
+        "zone_id": zone_id,
+        "event": event,
+        "count": len(items),
+        "items": items,
+    }
+
+
 @app.get("/journal/current")
 def journal_current():
     return _journal_snapshot()
