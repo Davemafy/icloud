@@ -164,6 +164,36 @@ ML_DATA_ENABLED=true
 ```
 
 Attach a Railway volume at `/data` if you want the ML dataset and SQLite state to persist across deploys.
+ 
+### Railway account migration (DEMO/PAPER ONLY)
+
+The active MT5 installer target is configured by \`mt5/stable/manifest.json\`.
+It points to \`https://icloud-production-c8d3.up.railway.app\`. The public manifest
+intentionally contains **no API key**. In the new Railway service's **Variables**,
+set \`CLOUD_EA_API_KEY\` to a unique random key (24 or more URL-safe
+letters/numbers/\`_\`/\`-\`). Do not commit the key, paste it into a support chat,
+or reuse the historical public demo key.
+
+On the MT5 VPS, run the front-facing installer after the Railway key has been
+applied. Installer 1.8 asks for the identical private key using hidden console
+input on the first install for the new cloud origin. On subsequent installs, it
+reuses \`%LOCALAPPDATA%\TradeZoneMT5\config.json\` only if its saved cloud URL
+exactly matches the manifest target. It patches the downloaded, checksum-verified
+support sources locally and compiles in the chosen MT5 data folder. The installed
+EAs and local config contain the credential: restrict VPS account access and do
+not publish these files. The installer never prints the key.
+
+In MT5, allow WebRequest access for the new HTTPS Railway origin, and reattach
+DataBridge and Sequence to activate newly installed defaults only when safe
+(no exposed live/demo position). MT5's own Sequence heartbeat, not installer
+success, must confirm runtime version 3.78 on the new dashboard. Changing the
+manifest alone does **not** reroute an EA already running in MT5 memory.
+
+The new Railway app does **not** inherit the prior Railway account's SQLite
+journal, ML records, or campaign state. Back up/restore the prior \`/data\`
+database separately, if that history must survive. Keep \`PAPER_ONLY=true\`
+throughout migration.
+
 
 ## Endpoints
 
