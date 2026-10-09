@@ -165,40 +165,43 @@ ML_DATA_ENABLED=true
 
 Attach a Railway volume at `/data` if you want the ML dataset and SQLite state to persist across deploys.
  
-### Railway account migration (DEMO/PAPER ONLY)
+### Railway account migration (R&D / DEMO / PAPER ONLY)
 
-The active MT5 installer target is configured by `mt5/stable/manifest.json`.
-It points to `https://icloud-production-c8d3.up.railway.app`. The public manifest
-intentionally contains **no API key**. In the new Railway service's **Variables**,
-set `CLOUD_EA_API_KEY` to the same value provisioned on the VPS. A unique
-random key (24 or more URL-safe letters/numbers/`_`/`-`) is strongly
-recommended for any publicly accessible Railway deployment. Installer 1.10
-permits an explicitly supplied shorter key for legacy DEMO/PAPER testing
-and issues a visible security warning. Do not commit or publish keys.
+For the current research deployment, the approved MT5 stable manifest defaults are:
 
-On the MT5 VPS, run the front-facing installer after the Railway key has been
-applied. Installer 1.10 auto-loads the private key from the exact-origin local
-configuration. For unattended first-time provisioning, it also accepts the VPS
-user environment variable `TRADEZONE_CLOUD_API_KEY` (or `CLOUD_EA_API_KEY`),
-without printing its value. If no matching locally configured key exists, it
-asks once using hidden console input. On subsequent installs, it
-reuses `%LOCALAPPDATA%\TradeZoneMT5\config.json` only if its saved cloud URL
-exactly matches the manifest target. It patches the downloaded, checksum-verified
-support sources locally and compiles in the chosen MT5 data folder. The installed
-EAs and local config contain the credential: restrict VPS account access and do
-not publish these files. The installer never prints the key.
+```text
+Cloud URL = https://icloud-production-c8d3.up.railway.app
+CLOUD_EA_API_KEY = 123
+PAPER_ONLY = true
+```
+
+Installer **1.11** retrieves these R&D defaults automatically and injects both
+the URL and key into the DataBridge and Sequence EA during local compilation.
+It also records them in the managed VPS configuration for future updates.
+No credential prompt is required for this research release. A deliberately
+provisioned VPS environment override (`TRADEZONE_CLOUD_API_KEY` or
+`CLOUD_EA_API_KEY`) can still supersede the R&D default for testing.
+
+**Security limitation:** `123` is a publicly known shared demo key in this
+public repository. It does not protect the HTTP endpoints against unauthorized
+requests. Use it only for non-sensitive R&D, isolated demo data and paper
+trading. Do not expose a funded account or any personally identifiable trading
+data. Switch to a random private key and private distribution before any
+non-demo or production use.
+
+In the new Railway account's cloud service **Variables**, set
+`CLOUD_EA_API_KEY=123` and `PAPER_ONLY=true`. The Railway setting is not
+automatically changed by a GitHub commit.
 
 In MT5, allow WebRequest access for the new HTTPS Railway origin, and reattach
-DataBridge and Sequence to activate newly installed defaults only when safe
-(no exposed live/demo position). MT5's own Sequence heartbeat, not installer
-success, must confirm runtime version 3.78 on the new dashboard. Changing the
-manifest alone does **not** reroute an EA already running in MT5 memory.
+DataBridge and Sequence only when safe (no open Sequence positions). An MT5
+runtime heartbeat, not successful disk installation, must confirm running
+Sequence version 3.78. Changing the manifest alone does not update a running EA.
 
-The new Railway app does **not** inherit the prior Railway account's SQLite
-journal, ML records, or campaign state. Back up/restore the prior `/data`
-database separately, if that history must survive. Keep `PAPER_ONLY=true`
-throughout migration.
-
+The new Railway account does not automatically inherit the prior SQLite
+journal, research records or campaign state. Backup/restore the former
+`/data/smc_cloud.db` separately if continuity is required. Keep DEMO/PAPER
+mode throughout migration.
 
 ## Endpoints
 
