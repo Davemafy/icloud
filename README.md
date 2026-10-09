@@ -167,45 +167,41 @@ Attach a Railway volume at `/data` if you want the ML dataset and SQLite state t
  
 ### Railway account migration (R&D / DEMO / PAPER ONLY)
 
-The stable release manifest publishes the non-secret cloud URL:
-`https://icloud-production-c8d3.up.railway.app`. The MT5 cloud API key is
-**never published in GitHub or installer output**.
+The stable manifest automatically supplies:
+`https://icloud-production-c8d3.up.railway.app`.
+The cloud API key is never published in current GitHub files.
 
-Use a private random API key of at least 24 URL-safe characters. Enter the
-same value as `CLOUD_EA_API_KEY` in the new Railway application's **Variables**
-and **once** on the MT5 VPS. From installer **1.13**, the key is stored
-encrypted with Windows DPAPI for the installing Windows user, in a
-URL-specific file under `%LOCALAPPDATA%\TradeZoneMT5\secrets\`. The
-non-secret `config.json` no longer contains a plaintext API key.
+**Installer 1.14 automatically carries the existing VPS key across the
+specific old-to-new Railway account migration**, provided a matching previous
+VPS configuration exists. It can read either the previous managed
+`config.json` or its same-Windows-user DPAPI store for the old Railway
+origin. It then injects the **same** URL/key into both verified DataBridge and
+Sequence EA sources locally during compilation, and saves the new pairing
+encrypted under `%LOCALAPPDATA%\TradeZoneMT5\secrets\`.
 
-On every subsequent version, the installer reads that same encrypted key
-automatically, downloads the approved release, and locally patches
-`CloudBaseUrl` and `CloudApiKey` into both DataBridge and Sequence EA
-before compilation. No key prompt is needed for regular upgrades.
-`TRADEZONE_CLOUD_API_KEY` / `CLOUD_EA_API_KEY` on the VPS can explicitly
-override it for key rotation; if no usable saved key exists, the installer
-requests it once through hidden input. An old plaintext `config.json`
-can be migrated in place, then is rewritten without the key.
+Subsequent MT5 version installations reuse the encrypted key automatically;
+there is no need to enter it again. If the VPS never stored the old key,
+first-time configuration still requires entering it locally once, through
+hidden input or a VPS environment variable. The Railway application must
+separately have the matching `CLOUD_EA_API_KEY` in Variables.
 
-Windows DPAPI storage works under **the same Windows account** that saved
-the key; switching VPS Windows users requires one new provisioning step.
-The locally patched MQL5 sources and compiled executables still carry the
-connection defaults, so protect the VPS, never publish local MT5 source
-files or `.set` files, and do not treat those artifacts as secret vaults.
-No API key is committed to GitHub.
+Existing short research/demo keys are accepted for backward compatibility,
+but a weak key previously published in GitHub history **is not secret or
+secure**. Retain it only for isolated non-sensitive R&D. Rotate it to a long
+private value before non-demo use. New keys must not be committed to GitHub.
 
-**Previously used demo credentials were exposed in public GitHub commits.**
-Deleting them from the current branch cannot make them confidential, because
-Git history and external caches may retain them. Rotate the old credential in
-Railway and on the VPS before relying on authentication. Restrict access to
-the VPS managed configuration and compiled EA files.
+The managed VPS `config.json` stores the cloud URL but no plaintext key
+after migration. The per-origin key is protected by Windows user DPAPI.
+The locally compiled EA sources/executables will still contain the key,
+so limit access to the VPS and never publish those artifacts. The account
+and Windows user running the installer must be the same for DPAPI reuse.
 
-Enable the new Railway HTTPS origin under MT5 Tools > Options > Expert
-Advisors > Allow WebRequest. Reattach the EAs only once Sequence is flat.
-MT5 runtime heartbeats must confirm the actual running versions. A new
-Railway account also requires separate backup/restore of the previous
-`/data/smc_cloud.db` if trade/ML history must be preserved. Keep
-`PAPER_ONLY=true` throughout migration.
+Allow the new Railway origin under MT5 Tools > Options > Expert Advisors >
+Allow WebRequest. Reattach EAs only when Sequence has no open positions;
+only MT5 heartbeats can confirm running versions. Historical SQLite journal,
+owner state and research records require a separate transfer of the old
+Railway `/data/smc_cloud.db`, if continuity is required.
+Keep `PAPER_ONLY=true` throughout migration.
 
 ## Endpoints
 
