@@ -10,7 +10,7 @@ def _text() -> str:
 
 def test_installer_111_uses_unique_temp_compile_logs_not_experts_tree():
     text = _text()
-    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.11'" in text
+    assert "$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.12'" in text
     assert "$compileLogDir=Join-Path $tmp 'compile_logs'" in text
     assert "[guid]::NewGuid().ToString('N')+'_compile.log'" in text
     compile_fn = text[text.index("function CompileOne"):text.index("function RemoveObsoleteManagedFiles")]
