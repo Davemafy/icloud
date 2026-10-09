@@ -381,6 +381,13 @@ try{
   if(!$cloudKey){
     $cloudKey=TZ_LoadMigrationCloudKey $cloudUrl $localCfg
   }
+  # A previous DPAPI key may survive even if a newer installer has already
+  # rewritten config.json with the new cloud URL. Recover only for this
+  # explicitly known R&D Railway migration; never search unrelated origins.
+  if(!$cloudKey -and $cloudUrl -eq 'https://icloud-production-c8d3.up.railway.app'){
+    $cloudKey=TZ_LoadPrivateCloudKey 'https://icloud-production-9111.up.railway.app'
+    if($cloudKey){Write-Host 'Recovered previous VPS R&D key from encrypted storage.' -ForegroundColor Green}
+  }
   # Explicit VPS environment key overrides an older saved key, enabling
   # intentional Railway key rotation without editing local config files.
   # The successful value is saved for future unattended version updates.
