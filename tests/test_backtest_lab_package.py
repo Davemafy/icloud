@@ -57,7 +57,9 @@ def test_integrated_lab_uses_managed_cloud_credentials_without_embedding_them():
     text = LAB.read_text(encoding="utf-8")
     assert "TradeZoneMT5\\config.json" in text
     assert "$cfg.cloud_url" in text
-    assert "$cfg.cloud_api_key" in text
+    assert "TZ_LoadPrivateCloudKey $cloud" in text
+    assert "ConvertTo-SecureString -String $cipher" in text
+    assert "$cfg.cloud_api_key" not in text
     assert "@{'X-API-Key'=$apiKey}" in text
     assert "change-me" not in text
 
