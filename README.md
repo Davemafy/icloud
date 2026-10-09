@@ -170,12 +170,14 @@ Attach a Railway volume at `/data` if you want the ML dataset and SQLite state t
 The active MT5 installer target is configured by `mt5/stable/manifest.json`.
 It points to `https://icloud-production-c8d3.up.railway.app`. The public manifest
 intentionally contains **no API key**. In the new Railway service's **Variables**,
-set `CLOUD_EA_API_KEY` to a unique random key (24 or more URL-safe
-letters/numbers/`_`/`-`). Do not commit the key, paste it into a support chat,
-or reuse the historical public demo key.
+set `CLOUD_EA_API_KEY` to the same value provisioned on the VPS. A unique
+random key (24 or more URL-safe letters/numbers/`_`/`-`) is strongly
+recommended for any publicly accessible Railway deployment. Installer 1.10
+permits an explicitly supplied shorter key for legacy DEMO/PAPER testing
+and issues a visible security warning. Do not commit or publish keys.
 
 On the MT5 VPS, run the front-facing installer after the Railway key has been
-applied. Installer 1.9 auto-loads the private key from the exact-origin local
+applied. Installer 1.10 auto-loads the private key from the exact-origin local
 configuration. For unattended first-time provisioning, it also accepts the VPS
 user environment variable `TRADEZONE_CLOUD_API_KEY` (or `CLOUD_EA_API_KEY`),
 without printing its value. If no matching locally configured key exists, it
