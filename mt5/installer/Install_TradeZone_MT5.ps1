@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.8'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.8'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.9'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.9'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -269,7 +269,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.8") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.9") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -305,6 +305,16 @@ try{
     }catch{
       Write-Host 'Local credentials could not be read; enter Railway key again.' -ForegroundColor Yellow
       $cloudKey=''
+    }
+  }
+  # Optional headless VPS provisioning: an administrator can inject the same
+  # private key as a local environment variable once. All subsequent releases
+  # also reuse the successful per-origin TradeZoneMT5 config automatically.
+  if(!$cloudKey){
+    $cloudKey=[string]$env:TRADEZONE_CLOUD_API_KEY
+    if(!$cloudKey){$cloudKey=[string]$env:CLOUD_EA_API_KEY}
+    if($cloudKey){
+      Write-Host 'Using the VPS-provisioned private key; no interactive key entry.' -ForegroundColor Green
     }
   }
   if(!$cloudKey){
