@@ -98,7 +98,31 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "installer_12_verified_disk_version_truth" in manifest["channel_features"]
     assert "installed_sequence_version='+[string]$m.sequence_ea_version" in installer
     assert "'result=INSTALLED_REATTACH_REQUIRED'" in installer
-    assert "FRONT_FACING_MANUAL_INSTALLER_1.7" in installer
+    assert "FRONT_FACING_MANUAL_INSTALLER_1.14" in installer
     assert manifest["demo_defaults"]["cloud_base_url"] == "https://icloud-production-c8d3.up.railway.app"
     assert manifest["demo_defaults"]["cloud_api_key"] == ""
-    assert "Existing VPS API key automatically retained for new Railway URL." in installer
+    assert manifest["demo_defaults"]["paper_only"] is True
+    assert "Unsafe public manifest contains a cloud API key" in installer
+    assert "TZ_LoadMigrationCloudKey $cloudUrl $localCfg" in installer
+    assert "Recovered previous VPS R&D key from encrypted storage." in installer
+    assert "TZ_LoadPrivateCloudKey 'https://icloud-production-9111.up.railway.app'" in installer
+    assert "Automatically carrying forward the existing R&D key from the old Railway URL." in installer
+    assert "icloud-production-9111.up.railway.app" in installer
+    assert "CLOUD_EA_API_KEY must match Railway" in installer
+    assert "Short R&D/demo key reused for compatibility" in installer
+    assert "CLOUD_EA_API_KEY (hidden input)" in installer
+    assert "Reusing the existing MT5 VPS key for this Railway URL." in installer
+    assert "TRADEZONE_CLOUD_API_KEY" in installer
+    assert "$env:CLOUD_EA_API_KEY" in installer
+    assert "Using the VPS-provisioned private key; no interactive key entry." in installer
+    assert "Short R&D/demo key reused for compatibility" in installer
+    assert "cloudKey.Length -lt 24 -or" not in installer
+    assert "cloudKey='123'" not in installer
+    assert "TZ_LoadPrivateCloudKey $cloudUrl" in installer
+    assert "TZ_SavePrivateCloudKey $CloudUrl $CloudKey" in installer
+    assert "cloud_key_storage='WINDOWS_DPAPI_CURRENT_USER'" in installer
+    assert "    cloud_api_key=$CloudKey" not in installer
+    assert "ConvertFrom-SecureString -SecureString $secure" in installer
+    assert "ConvertTo-SecureString -String $cipher" in installer
+
+    assert 'Demo API key: locally configured (value hidden).' in installer
