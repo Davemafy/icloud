@@ -69,23 +69,6 @@ function CompileOne([string]$Meta,[string]$Src,[string]$Log){
   }
   Write-Host '  PASS: 0 errors, 0 warnings.' -ForegroundColor Green
 }
-# Match the front-facing installer private per-origin Windows DPAPI store.
-function TZ_SecretPath([string]$CloudUrl){
-  $origin=$CloudUrl.Trim().TrimEnd('/').ToLowerInvariant()
-  $sha=[Security.Cryptography.SHA256]::Create()
-  try{$hex=[BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($origin))).Replace('-','').ToLowerInvariant()}
-  finally{$sha.Dispose()}
-  return (Join-Path (Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\secrets') ('cloud_'+$hex.Substring(0,24)+'.dpapi'))
-}
-function TZ_LoadPrivateCloudKey([string]$CloudUrl){
-  $path=TZ_SecretPath $CloudUrl
-  if(!(Test-Path -LiteralPath $path)){return ''}
-  $cipher=(Get-Content -LiteralPath $path -Raw -ErrorAction Stop).Trim()
-  $secure=ConvertTo-SecureString -String $cipher -ErrorAction Stop
-  $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-  try{return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
-  finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secure.Dispose()}
-}
 function ReadDate([string]$Prompt,[string]$Default){
   $raw=Read-Host "$Prompt [$Default]"
   if([string]::IsNullOrWhiteSpace($raw)){$raw=$Default}
@@ -123,13 +106,9 @@ try{
   $data=[string]$cfg.target_data_folder
   $install=[string]$cfg.mt5_install_path
   $cloud=[string]$cfg.cloud_url
-  # Installer 1.13 stores the private key encrypted under Windows DPAPI,
-  # never as a plaintext field in config.json.
-  $apiKey=TZ_LoadPrivateCloudKey $cloud
+  $apiKey=[string]$cfg.cloud_api_key
   if([string]::IsNullOrWhiteSpace($data)-or!(Test-Path $data)){throw 'Configured MT5 data folder is unavailable.'}
-  if([string]::IsNullOrWhiteSpace($cloud)-or[string]::IsNullOrWhiteSpace($apiKey)){
-    throw 'Managed Cloud URL/key are missing. Run the front-facing installer once to provision the VPS credential.'
-  }
+  if([string]::IsNullOrWhiteSpace($cloud)-or[string]::IsNullOrWhiteSpace($apiKey)){throw 'Managed Cloud URL/key are missing.'}
 
   $start=ReadDate 'Backtest start date' '2026-06-01'
   $end=ReadDate 'Backtest end date' '2026-08-31'
