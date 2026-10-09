@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.7'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.7'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.8'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.8'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -269,8 +269,8 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.7") -ForegroundColor Cyan
-Write-Host ' Current EA names + built-in demo cloud URL/key defaults' -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.8") -ForegroundColor Cyan
+Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
 
@@ -286,15 +286,43 @@ try{
   if($m.repository-ne$Repo){throw 'Manifest repository mismatch.'}
   if(!$m.demo_defaults){throw 'Stable manifest has no demo_defaults block.'}
 
-  $cloudUrl=[string]$m.demo_defaults.cloud_base_url
-  $cloudKey=[string]$m.demo_defaults.cloud_api_key
-  if([string]::IsNullOrWhiteSpace($cloudUrl)-or[string]::IsNullOrWhiteSpace($cloudKey)){
-    throw 'Demo cloud defaults are incomplete.'
+  $cloudUrl=([string]$m.demo_defaults.cloud_base_url).Trim().TrimEnd('/')
+  if($cloudUrl -notmatch '^https://[^/]+$'){
+    throw 'Stable manifest has no valid HTTPS cloud origin.'
+  }
+
+  # Never put a usable Railway key in the public GitHub manifest.
+  # Only reuse the saved VPS credential for the exact same cloud URL.
+  $cloudKey=''
+  $localCfg=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\config.json'
+  if(Test-Path $localCfg){
+    try{
+      $existingCfg=Get-Content $localCfg -Raw|ConvertFrom-Json
+      if(([string]$existingCfg.cloud_url).Trim().TrimEnd('/') -eq $cloudUrl){
+        $cloudKey=[string]$existingCfg.cloud_api_key
+        if($cloudKey){Write-Host 'Reusing the VPS key saved for this exact Railway URL.' -ForegroundColor Green}
+      }
+    }catch{
+      Write-Host 'Local credentials could not be read; enter Railway key again.' -ForegroundColor Yellow
+      $cloudKey=''
+    }
+  }
+  if(!$cloudKey){
+    Write-Host ''
+    Write-Host 'RAILWAY SETUP: Service > Variables > CLOUD_EA_API_KEY' -ForegroundColor Yellow
+    Write-Host 'Enter the same private key here. It is NOT downloaded from GitHub or printed.' -ForegroundColor Cyan
+    $secureKey=Read-Host 'CLOUD_EA_API_KEY (hidden input)' -AsSecureString
+    $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+    try{$cloudKey=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
+    finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secureKey.Dispose()}
+  }
+  if($cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
+    throw 'Use a matching Railway CLOUD_EA_API_KEY of at least 24 URL-safe letters/numbers/_/-; no files installed.'
   }
 
   Write-Host "Release $($m.release) | Bridge v$($m.data_bridge_version) | Sequence v$($m.sequence_ea_version)" -ForegroundColor Green
   Write-Host "Demo cloud URL: $cloudUrl" -ForegroundColor DarkCyan
-  Write-Host "Demo API key : $cloudKey" -ForegroundColor DarkCyan
+  Write-Host 'Demo API key: locally configured (value hidden).' -ForegroundColor DarkCyan
 
   # Download and verify ALL source/support files before touching the active MT5 tree.
   $fileDownloads=@()
