@@ -307,15 +307,14 @@ try{
       $cloudKey=''
     }
   }
-  # Optional headless VPS provisioning: an administrator can inject the same
-  # private key as a local environment variable once. All subsequent releases
-  # also reuse the successful per-origin TradeZoneMT5 config automatically.
-  if(!$cloudKey){
-    $cloudKey=[string]$env:TRADEZONE_CLOUD_API_KEY
-    if(!$cloudKey){$cloudKey=[string]$env:CLOUD_EA_API_KEY}
-    if($cloudKey){
-      Write-Host 'Using the VPS-provisioned private key; no interactive key entry.' -ForegroundColor Green
-    }
+  # Explicit VPS environment key overrides an older saved key, enabling
+  # intentional Railway key rotation without editing local config files.
+  # The successful value is saved for future unattended version updates.
+  $overrideKey=[string]$env:TRADEZONE_CLOUD_API_KEY
+  if(!$overrideKey){$overrideKey=[string]$env:CLOUD_EA_API_KEY}
+  if($overrideKey){
+    $cloudKey=$overrideKey
+    Write-Host 'Using the VPS-provisioned private key; no interactive key entry.' -ForegroundColor Green
   }
   if(!$cloudKey){
     Write-Host ''
