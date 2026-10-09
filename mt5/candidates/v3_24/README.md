@@ -25,7 +25,7 @@ The observer now exposes its own cloud inputs so a fresh attach does not require
 
 ```text
 ObserverCloudBaseUrl=https://icloud-production-9111.up.railway.app
-ObserverCloudApiKey=123
+ObserverCloudApiKey=<private key from Railway; never commit>
 ```
 
 These observer-specific inputs are used for both `/mt5/plan` reads and `/mt5/feedback` / heartbeat posts. The legacy cloud inputs inherited from the shared v3.21 analytical core are not used by the v3.24 observer network path.
