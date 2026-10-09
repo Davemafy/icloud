@@ -104,6 +104,8 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert manifest["demo_defaults"]["paper_only"] is True
     assert "Unsafe public manifest contains a cloud API key" in installer
     assert "TZ_LoadMigrationCloudKey $cloudUrl $localCfg" in installer
+    assert "Recovered previous VPS R&D key from encrypted storage." in installer
+    assert "TZ_LoadPrivateCloudKey 'https://icloud-production-9111.up.railway.app'" in installer
     assert "Automatically carrying forward the existing R&D key from the old Railway URL." in installer
     assert "icloud-production-9111.up.railway.app" in installer
     assert "CLOUD_EA_API_KEY must match Railway" in installer
