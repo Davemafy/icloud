@@ -175,8 +175,11 @@ letters/numbers/`_`/`-`). Do not commit the key, paste it into a support chat,
 or reuse the historical public demo key.
 
 On the MT5 VPS, run the front-facing installer after the Railway key has been
-applied. Installer 1.8 asks for the identical private key using hidden console
-input on the first install for the new cloud origin. On subsequent installs, it
+applied. Installer 1.9 auto-loads the private key from the exact-origin local
+configuration. For unattended first-time provisioning, it also accepts the VPS
+user environment variable `TRADEZONE_CLOUD_API_KEY` (or `CLOUD_EA_API_KEY`),
+without printing its value. If no matching locally configured key exists, it
+asks once using hidden console input. On subsequent installs, it
 reuses `%LOCALAPPDATA%\TradeZoneMT5\config.json` only if its saved cloud URL
 exactly matches the manifest target. It patches the downloaded, checksum-verified
 support sources locally and compiles in the chosen MT5 data folder. The installed
