@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.13'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.13'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.14'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.14'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -294,6 +294,33 @@ function TZ_SavePrivateCloudKey([string]$CloudUrl,[string]$CloudKey){
     Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
   }
 }
+# Reuse existing MT5 credentials during the one-time migration between
+# the two explicitly known R&D Railway service URLs. No credential values are
+# published in source code or retrieved anonymously from Railway.
+function TZ_LoadMigrationCloudKey([string]$CloudUrl,[string]$ConfigPath){
+  if(!(Test-Path -LiteralPath $ConfigPath)){return ''}
+  try{
+    $cfg=Get-Content -LiteralPath $ConfigPath -Raw -ErrorAction Stop|ConvertFrom-Json
+    $storedUrl=([string]$cfg.cloud_url).Trim().TrimEnd('/')
+    $newUrl=$CloudUrl.Trim().TrimEnd('/')
+    $same=($storedUrl -eq $newUrl)
+    $approvedMigration=(
+      $storedUrl -eq 'https://icloud-production-9111.up.railway.app' -and
+      $newUrl -eq 'https://icloud-production-c8d3.up.railway.app'
+    )
+    if(!$same -and !$approvedMigration){return ''}
+    $key=TZ_LoadPrivateCloudKey $storedUrl
+    if(!$key){$key=[string]$cfg.cloud_api_key}
+    if($key){
+      if($approvedMigration){Write-Host 'Automatically carrying forward the existing R&D key from the old Railway URL.' -ForegroundColor Green}
+      else{Write-Host 'Reusing the existing MT5 VPS key for this Railway URL.' -ForegroundColor Green}
+    }
+    return $key
+  }catch{
+    Write-Host 'Existing VPS key could not be read; local key input may be needed.' -ForegroundColor Yellow
+    return ''
+  }
+}
 function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
   # Persist credential once, encrypted for the installing Windows user. Keep
   # the app config key-free; older plaintext config is migrated on next install.
@@ -319,7 +346,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.13") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.14") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -348,19 +375,11 @@ try{
   $cloudKey=TZ_LoadPrivateCloudKey $cloudUrl
   if($cloudKey){Write-Host 'Using automatically saved VPS cloud key (Windows DPAPI).' -ForegroundColor Green}
   $localCfg=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\config.json'
-  # Read old plaintext config only once for in-place, per-origin migration.
-  # The successful install rewrites config.json without any API key.
-  if(!$cloudKey -and (Test-Path $localCfg)){
-    try{
-      $existingCfg=Get-Content $localCfg -Raw|ConvertFrom-Json
-      if(([string]$existingCfg.cloud_url).Trim().TrimEnd('/') -eq $cloudUrl){
-        $cloudKey=[string]$existingCfg.cloud_api_key
-        if($cloudKey){Write-Host 'Reusing the VPS key saved for this exact Railway URL.' -ForegroundColor Green}
-      }
-    }catch{
-      Write-Host 'Local credentials could not be read; enter Railway key again.' -ForegroundColor Yellow
-      $cloudKey=''
-    }
+  # Existing config is valid for its own URL; in this specific R&D account
+  # migration it can also supply the same key from the prior Railway URL.
+  # On success the new URL gets a DPAPI copy and config.json becomes key-free.
+  if(!$cloudKey){
+    $cloudKey=TZ_LoadMigrationCloudKey $cloudUrl $localCfg
   }
   # Explicit VPS environment key overrides an older saved key, enabling
   # intentional Railway key rotation without editing local config files.
@@ -371,10 +390,10 @@ try{
     $cloudKey=$overrideKey
     Write-Host 'Using the VPS-provisioned private key; no interactive key entry.' -ForegroundColor Green
   }
-  # Reject compromised/guessable legacy demo keys so a reinstall cannot
-  # silently reintroduce them into the new Railway deployment.
-  if($cloudKey -and ($cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$')){
-    Write-Host 'Stored/demo key is too short or invalid. A rotated private key is required.' -ForegroundColor Yellow
+  # Research/demo compatibility: do not discard the existing short key merely
+  # because it is short. It is the user's current R&D configuration.
+  if($cloudKey -and $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
+    Write-Host 'Stored API key contains unsupported characters.' -ForegroundColor Yellow
     $cloudKey=''
   }
   if(!$cloudKey){
@@ -386,8 +405,11 @@ try{
     try{$cloudKey=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
     finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secureKey.Dispose()}
   }
-  if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
-    throw 'Private CLOUD_EA_API_KEY must be 24+ URL-safe characters and match Railway. No files installed.'
+  if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
+    throw 'CLOUD_EA_API_KEY must match Railway and contain URL-safe letters/numbers/_/-. No files installed.'
+  }
+  if($cloudKey.Length -lt 24){
+    Write-Warning 'Short R&D/demo key reused for compatibility; this publicly exposed legacy key is not secure. Rotate before non-R&D use.'
   }
 
   Write-Host "Release $($m.release) | Bridge v$($m.data_bridge_version) | Sequence v$($m.sequence_ea_version)" -ForegroundColor Green
