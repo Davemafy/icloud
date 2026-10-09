@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.10'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.10'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.11'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.11'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -269,7 +269,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.10") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.11") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -291,11 +291,17 @@ try{
     throw 'Stable manifest has no valid HTTPS cloud origin.'
   }
 
-  # Never put a usable Railway key in the public GitHub manifest.
-  # Only reuse the saved VPS credential for the exact same cloud URL.
-  $cloudKey=''
+  # The approved R&D/PAPER manifest provides the default cloud key/URL
+  # to both MT5 components. A public demo key is forbidden outside paper mode.
+  $cloudKey=([string]$m.demo_defaults.cloud_api_key).Trim()
+  if($cloudKey){
+    if($m.demo_defaults.paper_only -ne $true){
+      throw 'Refusing to embed a public demo cloud key outside PAPER_ONLY mode.'
+    }
+    Write-Host 'Using built-in R&D/PAPER ONLY cloud key from approved stable manifest.' -ForegroundColor Yellow
+  }
   $localCfg=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\config.json'
-  if(Test-Path $localCfg){
+  if(!$cloudKey -and (Test-Path $localCfg)){
     try{
       $existingCfg=Get-Content $localCfg -Raw|ConvertFrom-Json
       if(([string]$existingCfg.cloud_url).Trim().TrimEnd('/') -eq $cloudUrl){
@@ -325,8 +331,8 @@ try{
     try{$cloudKey=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
     finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secureKey.Dispose()}
   }
-  # Permit explicitly supplied short demo credentials for legacy migrations,
-  # but never fetch, embed, or publish their values in the stable release.
+  # Permit the explicit research-only shared key from the approved manifest.
+  # Never treat this published value as authentication security.
   # A short key is guessable: warn visibly, never treat it as secure.
   if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
     throw 'CLOUD_EA_API_KEY must be nonempty and contain URL-safe letters/numbers/_/-; no files installed.'
