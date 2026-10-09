@@ -98,7 +98,7 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "installer_12_verified_disk_version_truth" in manifest["channel_features"]
     assert "installed_sequence_version='+[string]$m.sequence_ea_version" in installer
     assert "'result=INSTALLED_REATTACH_REQUIRED'" in installer
-    assert "FRONT_FACING_MANUAL_INSTALLER_1.9" in installer
+    assert "FRONT_FACING_MANUAL_INSTALLER_1.10" in installer
     assert manifest["demo_defaults"]["cloud_base_url"] == "https://icloud-production-c8d3.up.railway.app"
     assert not manifest["demo_defaults"]["cloud_api_key"], "Never publish an MT5 API key via GitHub"
     assert "CLOUD_EA_API_KEY (hidden input)" in installer
@@ -106,4 +106,7 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "TRADEZONE_CLOUD_API_KEY" in installer
     assert "$env:CLOUD_EA_API_KEY" in installer
     assert "Using the VPS-provisioned private key; no interactive key entry." in installer
+    assert "Short demo API key accepted, but insecure" in installer
+    assert "cloudKey.Length -lt 24 -or" not in installer
+    assert "cloudKey='123'" not in installer
     assert 'Demo API key: locally configured (value hidden).' in installer
