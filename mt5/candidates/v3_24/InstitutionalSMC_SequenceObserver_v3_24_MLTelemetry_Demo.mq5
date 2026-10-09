@@ -18,7 +18,7 @@
 
 input group "V6.4 ML Observer Cloud"
 input string ObserverCloudBaseUrl="https://icloud-production-9111.up.railway.app";
-input string ObserverCloudApiKey="123";
+input string ObserverCloudApiKey="";
 
 input group "V6.4 ML Observation"
 input bool EnableMLObservation=true;
