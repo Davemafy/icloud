@@ -167,41 +167,31 @@ Attach a Railway volume at `/data` if you want the ML dataset and SQLite state t
  
 ### Railway account migration (R&D / DEMO / PAPER ONLY)
 
-For the current research deployment, the approved MT5 stable manifest defaults are:
+The stable release manifest publishes the non-secret cloud URL:
+`https://icloud-production-c8d3.up.railway.app`. The MT5 cloud API key is
+**never published in GitHub or installer output**.
 
-```text
-Cloud URL = https://icloud-production-c8d3.up.railway.app
-CLOUD_EA_API_KEY = 123
-PAPER_ONLY = true
-```
+Use a private random API key of at least 24 URL-safe characters. Enter the
+same value as `CLOUD_EA_API_KEY` in the new Railway application's **Variables**
+and on the MT5 VPS. The front-facing installer obtains it from the VPS's
+per-origin managed config, from `TRADEZONE_CLOUD_API_KEY` /
+`CLOUD_EA_API_KEY` environment variables, or (on first use) hidden input.
+Once configured for that cloud URL, future EA versions inherit the key
+automatically. Both DataBridge and Sequence EA receive the cloud URL and
+private key locally during verified compilation; no key is committed.
 
-Installer **1.11** retrieves these R&D defaults automatically and injects both
-the URL and key into the DataBridge and Sequence EA during local compilation.
-It also records them in the managed VPS configuration for future updates.
-No credential prompt is required for this research release. A deliberately
-provisioned VPS environment override (`TRADEZONE_CLOUD_API_KEY` or
-`CLOUD_EA_API_KEY`) can still supersede the R&D default for testing.
+**Previously used demo credentials were exposed in public GitHub commits.**
+Deleting them from the current branch cannot make them confidential, because
+Git history and external caches may retain them. Rotate the old credential in
+Railway and on the VPS before relying on authentication. Restrict access to
+the VPS managed configuration and compiled EA files.
 
-**Security limitation:** `123` is a publicly known shared demo key in this
-public repository. It does not protect the HTTP endpoints against unauthorized
-requests. Use it only for non-sensitive R&D, isolated demo data and paper
-trading. Do not expose a funded account or any personally identifiable trading
-data. Switch to a random private key and private distribution before any
-non-demo or production use.
-
-In the new Railway account's cloud service **Variables**, set
-`CLOUD_EA_API_KEY=123` and `PAPER_ONLY=true`. The Railway setting is not
-automatically changed by a GitHub commit.
-
-In MT5, allow WebRequest access for the new HTTPS Railway origin, and reattach
-DataBridge and Sequence only when safe (no open Sequence positions). An MT5
-runtime heartbeat, not successful disk installation, must confirm running
-Sequence version 3.78. Changing the manifest alone does not update a running EA.
-
-The new Railway account does not automatically inherit the prior SQLite
-journal, research records or campaign state. Backup/restore the former
-`/data/smc_cloud.db` separately if continuity is required. Keep DEMO/PAPER
-mode throughout migration.
+Enable the new Railway HTTPS origin under MT5 Tools > Options > Expert
+Advisors > Allow WebRequest. Reattach the EAs only once Sequence is flat.
+MT5 runtime heartbeats must confirm the actual running versions. A new
+Railway account also requires separate backup/restore of the previous
+`/data/smc_cloud.db` if trade/ML history must be preserved. Keep
+`PAPER_ONLY=true` throughout migration.
 
 ## Endpoints
 
