@@ -98,9 +98,13 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "installer_12_verified_disk_version_truth" in manifest["channel_features"]
     assert "installed_sequence_version='+[string]$m.sequence_ea_version" in installer
     assert "'result=INSTALLED_REATTACH_REQUIRED'" in installer
-    assert "FRONT_FACING_MANUAL_INSTALLER_1.10" in installer
+    assert "FRONT_FACING_MANUAL_INSTALLER_1.11" in installer
     assert manifest["demo_defaults"]["cloud_base_url"] == "https://icloud-production-c8d3.up.railway.app"
-    assert not manifest["demo_defaults"]["cloud_api_key"], "Never publish an MT5 API key via GitHub"
+    assert manifest["demo_defaults"]["cloud_api_key"] == "123"
+    assert manifest["demo_defaults"]["paper_only"] is True
+    assert "$cloudKey=([string]$m.demo_defaults.cloud_api_key).Trim()" in installer
+    assert "if($m.demo_defaults.paper_only -ne $true)" in installer
+    assert "if(!$cloudKey -and (Test-Path $localCfg))" in installer
     assert "CLOUD_EA_API_KEY (hidden input)" in installer
     assert "Reusing the VPS key saved for this exact Railway URL." in installer
     assert "TRADEZONE_CLOUD_API_KEY" in installer
