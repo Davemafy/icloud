@@ -247,7 +247,7 @@ function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
   }
 }
 # The installer must NEVER make installation success depend on a cloud HTTP read.
-# Windows PowerShell Invoke-RestMethod -TimeoutSec does not impose a strict
+# Windows PowerShell HTTP request timeouts do not impose a strict
 # wall-clock deadline on stalled DNS/proxy/TLS handshakes. This previously
 # trapped the already-successful install at "Checking cloud dashboard..."
 # for many minutes. The live DataBridge transmits the unique installer receipt
