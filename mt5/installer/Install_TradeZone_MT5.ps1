@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.9'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.9'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.10'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.10'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -269,7 +269,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.9") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.10") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -326,8 +326,14 @@ try{
     try{$cloudKey=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
     finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secureKey.Dispose()}
   }
-  if($cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
-    throw 'Use a matching Railway CLOUD_EA_API_KEY of at least 24 URL-safe letters/numbers/_/-; no files installed.'
+  # Permit explicitly supplied short demo credentials for legacy migrations,
+  # but never fetch, embed, or publish their values in the stable release.
+  # A short key is guessable: warn visibly, never treat it as secure.
+  if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
+    throw 'CLOUD_EA_API_KEY must be nonempty and contain URL-safe letters/numbers/_/-; no files installed.'
+  }
+  if($cloudKey.Length -lt 24){
+    Write-Warning 'Short demo API key accepted, but insecure on a public Railway URL. Use a long random key before any wider deployment.'
   }
 
   Write-Host "Release $($m.release) | Bridge v$($m.data_bridge_version) | Sequence v$($m.sequence_ea_version)" -ForegroundColor Green
