@@ -173,12 +173,26 @@ The stable release manifest publishes the non-secret cloud URL:
 
 Use a private random API key of at least 24 URL-safe characters. Enter the
 same value as `CLOUD_EA_API_KEY` in the new Railway application's **Variables**
-and on the MT5 VPS. The front-facing installer obtains it from the VPS's
-per-origin managed config, from `TRADEZONE_CLOUD_API_KEY` /
-`CLOUD_EA_API_KEY` environment variables, or (on first use) hidden input.
-Once configured for that cloud URL, future EA versions inherit the key
-automatically. Both DataBridge and Sequence EA receive the cloud URL and
-private key locally during verified compilation; no key is committed.
+and **once** on the MT5 VPS. From installer **1.13**, the key is stored
+encrypted with Windows DPAPI for the installing Windows user, in a
+URL-specific file under `%LOCALAPPDATA%\TradeZoneMT5\secrets\`. The
+non-secret `config.json` no longer contains a plaintext API key.
+
+On every subsequent version, the installer reads that same encrypted key
+automatically, downloads the approved release, and locally patches
+`CloudBaseUrl` and `CloudApiKey` into both DataBridge and Sequence EA
+before compilation. No key prompt is needed for regular upgrades.
+`TRADEZONE_CLOUD_API_KEY` / `CLOUD_EA_API_KEY` on the VPS can explicitly
+override it for key rotation; if no usable saved key exists, the installer
+requests it once through hidden input. An old plaintext `config.json`
+can be migrated in place, then is rewritten without the key.
+
+Windows DPAPI storage works under **the same Windows account** that saved
+the key; switching VPS Windows users requires one new provisioning step.
+The locally patched MQL5 sources and compiled executables still carry the
+connection defaults, so protect the VPS, never publish local MT5 source
+files or `.set` files, and do not treat those artifacts as secret vaults.
+No API key is committed to GitHub.
 
 **Previously used demo credentials were exposed in public GitHub commits.**
 Deleting them from the current branch cannot make them confidential, because
