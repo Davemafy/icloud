@@ -98,7 +98,7 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "installer_12_verified_disk_version_truth" in manifest["channel_features"]
     assert "installed_sequence_version='+[string]$m.sequence_ea_version" in installer
     assert "'result=INSTALLED_REATTACH_REQUIRED'" in installer
-    assert "FRONT_FACING_MANUAL_INSTALLER_1.12" in installer
+    assert "FRONT_FACING_MANUAL_INSTALLER_1.13" in installer
     assert manifest["demo_defaults"]["cloud_base_url"] == "https://icloud-production-c8d3.up.railway.app"
     assert manifest["demo_defaults"]["cloud_api_key"] == ""
     assert manifest["demo_defaults"]["paper_only"] is True
@@ -113,4 +113,11 @@ def test_sequence_378_runtime_truth_and_installer_contract():
     assert "Stored/demo key is too short or invalid" in installer
     assert "cloudKey.Length -lt 24 -or" in installer
     assert "cloudKey='123'" not in installer
+    assert "TZ_LoadPrivateCloudKey $cloudUrl" in installer
+    assert "TZ_SavePrivateCloudKey $CloudUrl $CloudKey" in installer
+    assert "cloud_key_storage='WINDOWS_DPAPI_CURRENT_USER'" in installer
+    assert "    cloud_api_key=$CloudKey" not in installer
+    assert "ConvertFrom-SecureString -SecureString $secure" in installer
+    assert "ConvertTo-SecureString -String $cipher" in installer
+
     assert 'Demo API key: locally configured (value hidden).' in installer
