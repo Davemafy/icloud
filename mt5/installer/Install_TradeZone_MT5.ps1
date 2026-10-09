@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.12'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.12'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.13'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.13'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -253,7 +253,51 @@ function RemoveObsoleteManagedFiles([string]$Dest,[string[]]$KeepNames){
 # for many minutes. The live DataBridge transmits the unique installer receipt
 # via MT5 heartbeat and /system/status exposes separate disk and running truth.
 # Cloud confirmation is asynchronous; do not poll the network here.
+# Derive a separate credential file per Railway HTTPS origin so account
+# migrations cannot silently reuse a different service's key.
+function TZ_SecretPath([string]$CloudUrl){
+  $origin=$CloudUrl.Trim().TrimEnd('/').ToLowerInvariant()
+  $bytes=[Text.Encoding]::UTF8.GetBytes($origin)
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try{$hex=[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','').ToLowerInvariant()}
+  finally{$sha.Dispose()}
+  return (Join-Path (Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\secrets') ('cloud_'+$hex.Substring(0,24)+'.dpapi'))
+}
+function TZ_LoadPrivateCloudKey([string]$CloudUrl){
+  $path=TZ_SecretPath $CloudUrl
+  if(!(Test-Path -LiteralPath $path)){return ''}
+  try{
+    $cipher=(Get-Content -LiteralPath $path -Raw -ErrorAction Stop).Trim()
+    if(!$cipher){return ''}
+    # ConvertFrom-SecureString (without -Key) uses Windows user DPAPI.
+    $secure=ConvertTo-SecureString -String $cipher -ErrorAction Stop
+    $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try{return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
+    finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secure.Dispose()}
+  }catch{
+    Write-Host 'Stored VPS key is unreadable for this Windows user; re-enter a private key once.' -ForegroundColor Yellow
+    return ''
+  }
+}
+function TZ_SavePrivateCloudKey([string]$CloudUrl,[string]$CloudKey){
+  $path=TZ_SecretPath $CloudUrl
+  $dir=Split-Path -Parent $path
+  New-Item -ItemType Directory -Force -Path $dir|Out-Null
+  $secure=ConvertTo-SecureString -String $CloudKey -AsPlainText -Force
+  try{$cipher=ConvertFrom-SecureString -SecureString $secure -ErrorAction Stop}
+  finally{$secure.Dispose()}
+  $tmp=$path+'.tmp'
+  try{
+    [IO.File]::WriteAllText($tmp,$cipher,(New-Object Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+  }finally{
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+  }
+}
 function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
+  # Persist credential once, encrypted for the installing Windows user. Keep
+  # the app config key-free; older plaintext config is migrated on next install.
+  TZ_SavePrivateCloudKey $CloudUrl $CloudKey
   $root=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5'
   New-Item -ItemType Directory -Force -Path $root|Out-Null
   $cfg=Join-Path $root 'config.json'
@@ -261,15 +305,21 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
     target_data_folder=$T.Data
     mt5_install_path=$T.Install
     cloud_url=$CloudUrl
-    cloud_api_key=$CloudKey
+    cloud_key_storage='WINDOWS_DPAPI_CURRENT_USER'
     mode='MANUAL_ONLY'
     background_updater='DISABLED'
   }
-  $obj|ConvertTo-Json -Depth 8|Set-Content $cfg -Encoding UTF8
+  $tmp=$cfg+'.tmp'
+  try{
+    [IO.File]::WriteAllText($tmp,($obj|ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $tmp -Destination $cfg -Force
+  }finally{
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+  }
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.12") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.13") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -295,8 +345,11 @@ try{
   if(-not [string]::IsNullOrWhiteSpace([string]$m.demo_defaults.cloud_api_key)){
     throw 'Unsafe public manifest contains a cloud API key. Remove it before installing.'
   }
-  $cloudKey=''
+  $cloudKey=TZ_LoadPrivateCloudKey $cloudUrl
+  if($cloudKey){Write-Host 'Using automatically saved VPS cloud key (Windows DPAPI).' -ForegroundColor Green}
   $localCfg=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\config.json'
+  # Read old plaintext config only once for in-place, per-origin migration.
+  # The successful install rewrites config.json without any API key.
   if(!$cloudKey -and (Test-Path $localCfg)){
     try{
       $existingCfg=Get-Content $localCfg -Raw|ConvertFrom-Json
