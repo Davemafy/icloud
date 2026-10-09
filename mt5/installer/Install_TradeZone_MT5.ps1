@@ -2,8 +2,8 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.11'
-$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.11'
+$InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.12'
+$Host.UI.RawUI.WindowTitle='Trade Zone - One-Click Demo MT5 Installer 1.12'
 
 $Repo='Davemafy/icloud'
 $Branch='main'
@@ -269,7 +269,7 @@ function SaveManagedConfig($T,[string]$CloudUrl,[string]$CloudKey){
 }
 
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.11") -ForegroundColor Cyan
+Write-Host (" Trade Zone - ONE-CLICK DEMO MT5 INSTALLER 1.12") -ForegroundColor Cyan
 Write-Host ' Current EA names + private VPS key + GitHub cloud URL' -ForegroundColor Cyan
 Write-Host ' No background updater / no scheduled task' -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
@@ -291,15 +291,11 @@ try{
     throw 'Stable manifest has no valid HTTPS cloud origin.'
   }
 
-  # The approved R&D/PAPER manifest provides the default cloud key/URL
-  # to both MT5 components. A public demo key is forbidden outside paper mode.
-  $cloudKey=([string]$m.demo_defaults.cloud_api_key).Trim()
-  if($cloudKey){
-    if($m.demo_defaults.paper_only -ne $true){
-      throw 'Refusing to embed a public demo cloud key outside PAPER_ONLY mode.'
-    }
-    Write-Host 'Using built-in R&D/PAPER ONLY cloud key from approved stable manifest.' -ForegroundColor Yellow
+  # Secrets must never be distributed by public GitHub manifest, even for demo.
+  if(-not [string]::IsNullOrWhiteSpace([string]$m.demo_defaults.cloud_api_key)){
+    throw 'Unsafe public manifest contains a cloud API key. Remove it before installing.'
   }
+  $cloudKey=''
   $localCfg=Join-Path $env:LOCALAPPDATA 'TradeZoneMT5\config.json'
   if(!$cloudKey -and (Test-Path $localCfg)){
     try{
@@ -322,6 +318,12 @@ try{
     $cloudKey=$overrideKey
     Write-Host 'Using the VPS-provisioned private key; no interactive key entry.' -ForegroundColor Green
   }
+  # Reject compromised/guessable legacy demo keys so a reinstall cannot
+  # silently reintroduce them into the new Railway deployment.
+  if($cloudKey -and ($cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$')){
+    Write-Host 'Stored/demo key is too short or invalid. A rotated private key is required.' -ForegroundColor Yellow
+    $cloudKey=''
+  }
   if(!$cloudKey){
     Write-Host ''
     Write-Host 'RAILWAY SETUP: Service > Variables > CLOUD_EA_API_KEY' -ForegroundColor Yellow
@@ -331,14 +333,8 @@ try{
     try{$cloudKey=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}
     finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$secureKey.Dispose()}
   }
-  # Permit the explicit research-only shared key from the approved manifest.
-  # Never treat this published value as authentication security.
-  # A short key is guessable: warn visibly, never treat it as secure.
-  if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
-    throw 'CLOUD_EA_API_KEY must be nonempty and contain URL-safe letters/numbers/_/-; no files installed.'
-  }
-  if($cloudKey.Length -lt 24){
-    Write-Warning 'Short demo API key accepted, but insecure on a public Railway URL. Use a long random key before any wider deployment.'
+  if([string]::IsNullOrWhiteSpace($cloudKey) -or $cloudKey.Length -lt 24 -or $cloudKey -notmatch '^[A-Za-z0-9_-]+$'){
+    throw 'Private CLOUD_EA_API_KEY must be 24+ URL-safe characters and match Railway. No files installed.'
   }
 
   Write-Host "Release $($m.release) | Bridge v$($m.data_bridge_version) | Sequence v$($m.sequence_ea_version)" -ForegroundColor Green
