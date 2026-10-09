@@ -24,7 +24,7 @@ The main source also requires the existing shared include:
 The observer now exposes its own cloud inputs so a fresh attach does not require retyping the endpoint:
 
 ```text
-ObserverCloudBaseUrl=https://icloud-production-c8d3.up.railway.app
+ObserverCloudBaseUrl=https://icloud-production-9111.up.railway.app
 ObserverCloudApiKey=<private key from Railway; never commit>
 ```
 
