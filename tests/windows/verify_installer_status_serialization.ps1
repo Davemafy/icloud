@@ -18,7 +18,7 @@ try {
     data_bridge_version='1.59'
     sequence_ea_version='3.78'
   }
-  $InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.12'
+  $InstallerVersion='FRONT_FACING_MANUAL_INSTALLER_1.13'
   Invoke-Expression $isolatedBlock
   $path=Join-Path $mt5Folder 'Files\TradeZone\updater_status.txt'
   if(!(Test-Path -LiteralPath $path)){throw 'MT5 status file not created.'}
@@ -26,7 +26,7 @@ try {
   if($lines.Count -ne 10){throw "Expected TEN physical lines; found $($lines.Count): $($lines -join ' | ')"}
 
   $expected=@(
-    'updater_version=FRONT_FACING_MANUAL_INSTALLER_1.12',
+    'updater_version=FRONT_FACING_MANUAL_INSTALLER_1.13',
     'stable_release=6.4.20',
     'desired_bridge_version=1.59',
     'desired_sequence_version=3.78',
