@@ -475,7 +475,9 @@ bool LatestProtectedTrailSwing(const long position_type,const datetime entry_tim
    swing_price=0;
    datetime now=TimeTradeServer();
    if(now<=0) now=TimeCurrent();
-   datetime from=MathMax((datetime)(now-InpRunnerTrailLookbackBars*60),(datetime)(entry_time-120));
+   datetime trail_from=(datetime)(now-InpRunnerTrailLookbackBars*60);
+   datetime entry_from=(datetime)(entry_time-120);
+   datetime from=(trail_from>entry_from?trail_from:entry_from);
 
    MqlRates r[];
    int n=CopyRates(g_symbol,PERIOD_M1,from,now-1,r);
@@ -995,6 +997,12 @@ int OnInit()
    if(mode!=ACCOUNT_TRADE_MODE_DEMO)
    {
       Print("SessionSniper v0.11 HARD BLOCK: DEMO account required.");
+      return INIT_FAILED;
+   }
+   long margin_mode=AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   if(margin_mode!=ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
+   {
+      Print("SessionSniper v0.11 HARD BLOCK: hedging-mode MT5 account required for exact 70/30 legs.");
       return INIT_FAILED;
    }
 
