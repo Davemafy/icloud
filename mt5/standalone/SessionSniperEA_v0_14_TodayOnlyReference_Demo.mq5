@@ -903,7 +903,12 @@ void ProcessSession(SS_SESSION &s,const bool london,const MqlRates &bar)
    if(now<=0) now=TimeCurrent();
 
    BuildSessionClock(s,london,now);
-   if(now<s.ref_end_server)\n   {\n      s.last_reason="WAIT_TODAYS_REFERENCE_CLOSE";\n      return;\n   }\n   if(!LoadReferenceCandle(s)) return;
+   if(now<s.ref_end_server)
+   {
+      s.last_reason=(now<s.ref_start_server?"WAIT_TODAYS_REFERENCE_START":"BUILDING_TODAYS_REFERENCE");
+      return;
+   }
+   if(!LoadReferenceCandle(s)) return;
    DrawSessionLevels(s);
 
    if(g_stop_for_day)
@@ -1226,6 +1231,10 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
    ResetDailyStopIfNeeded();
+   datetime now=TimeTradeServer();
+   if(now<=0) now=TimeCurrent();
+   if(InpEnableLondon) BuildSessionClock(g_london,true,now);
+   if(InpEnableNewYork) BuildSessionClock(g_newyork,false,now);
    ManageRunnerTrail();
    WriteState();
 }
