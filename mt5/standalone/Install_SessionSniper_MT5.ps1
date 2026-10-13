@@ -6,7 +6,7 @@ $InstallerVersion='SESSION_SNIPER_INSTALLER_0.11'
 $Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.11'
 
 $Repo='Davemafy/icloud'
-$Ref='feature/session-sniper-standalone-v01'
+$Ref='af4f1f1a8fa817c7c56b30d6c3a053c820f627c1'
 $SourceName='SessionSniperEA_v0_11_7030Runner_Demo.mq5'
 $SourceUrl="https://raw.githubusercontent.com/$Repo/$Ref/mt5/standalone/$SourceName"
 
@@ -110,7 +110,7 @@ function FindMetaEditor($T){
     $c+=Join-Path $b 'MetaEditor64.exe'
     $c+=Join-Path $b 'metaeditor.exe'
   }
-  foreach($r in @($env:ProgramFiles,\${env:ProgramFiles(x86)})){
+  foreach($r in @($env:ProgramFiles,${env:ProgramFiles(x86)})){
     if($r){
       $c+=Join-Path $r 'MetaTrader 5\metaeditor64.exe'
       $c+=Join-Path $r 'MetaTrader 5\MetaEditor64.exe'
