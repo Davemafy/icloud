@@ -395,7 +395,8 @@ double NormalizeVolume(double lots)
    double step=SymbolInfoDouble(g_symbol,SYMBOL_VOLUME_STEP);
    if(step<=0) step=vmin;
    lots=MathFloor(lots/step)*step;
-   lots=MathMax(vmin,MathMin(vmax,lots));
+   if(lots<vmin) return 0;
+   lots=MathMin(vmax,lots);
    int digits=2;
    if(step>=1.0) digits=0;
    else if(step>=0.1) digits=1;
@@ -766,8 +767,6 @@ void ManageBreakeven()
       double tp=PositionGetDouble(POSITION_TP);
       string comment=PositionGetString(POSITION_COMMENT);
 
-      SS_SESSION *session=NULL;
-      // MQL5 does not support general pointers to local structs; resolve explicitly.
       double ref_mid=0;
       if(StringFind(comment,"LONDON")>=0) ref_mid=g_london.ref_mid;
       else if(StringFind(comment,"NEW_YORK")>=0) ref_mid=g_newyork.ref_mid;
