@@ -6,7 +6,7 @@ $InstallerVersion='SESSION_SNIPER_INSTALLER_0.11'
 $Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.11'
 
 $Repo='Davemafy/icloud'
-$Ref='f47d288dd7bd203eaf802b46a1c1bdd7a566ca70'
+$Ref='66cc1934dae0ad4bb585f70c3e73262052649409'
 $SourceName='SessionSniperEA_v0_11_7030Runner_Demo.mq5'
 $SourceUrl="https://raw.githubusercontent.com/$Repo/$Ref/mt5/standalone/$SourceName"
 
@@ -171,7 +171,7 @@ try{
 
   # MetaEditor requires the Market-compatible xxx.yyy version format even for this DEMO EA.
   $raw=Get-Content $downloaded -Raw
-  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "001.110"',1)
+  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "1.11"',1)
   Set-Content -LiteralPath $downloaded -Value $raw -Encoding UTF8
 
   $src=Join-Path $dest $SourceName
