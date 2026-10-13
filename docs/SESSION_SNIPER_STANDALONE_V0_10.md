@@ -1,4 +1,4 @@
-# Session Sniper Standalone v0.10 — London + New York
+# Session Sniper Standalone v0.11 — London + New York
 
 **Status:** DEMO/PAPER research candidate only.
 
@@ -33,7 +33,7 @@ A trade is not allowed merely because price touches or breaks the 08:00 range.
 9. Actual-entry R:R to the opposite reference side must be at least 1:2.
 10. Only then may the EA open one position for that session.
 
-There is no engulfing-only shortcut and no direct breakout-candle chase in v0.10.
+There is no engulfing-only shortcut and no direct breakout-candle chase in v0.11.
 
 ## Stop contract
 
@@ -46,10 +46,10 @@ The EA does not force a tight stop to improve R:R. If the structural stop makes 
 
 ## Target and management
 
-- Initial TP = opposite side of the session reference candle.
+- 70% TP leg = 0.50 midpoint of the session reference candle; 30% runner target = opposite side of the session reference candle.
 - Minimum actual-entry R:R = 2.0.
-- Optional break-even move occurs when price reaches the 50% midpoint of the reference candle.
-- One execution per session.
+- At the 50% midpoint the 70% leg is banked; the remaining 30% runner then trails behind confirmed protected M1 structure and keeps the opposite reference-side TP.
+- One 70/30 execution bundle per session.
 - Optional daily stop after the first profitable closed Session Sniper trade.
 
 ## Risk
