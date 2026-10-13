@@ -169,6 +169,11 @@ try{
   $downloaded=Join-Path $tmp $SourceName
   Download $SourceUrl $downloaded
 
+  # MetaEditor requires the Market-compatible xxx.yyy version format even for this DEMO EA.
+  $raw=Get-Content $downloaded -Raw
+  $raw=$raw.Replace('#property version   "0.11"','#property version   "0.110"')
+  Set-Content -LiteralPath $downloaded -Value $raw -Encoding UTF8
+
   $src=Join-Path $dest $SourceName
   Copy-Item $downloaded $src -Force
 
