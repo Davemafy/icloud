@@ -193,7 +193,7 @@ try{
   Write-Host 'NEXT IN MT5:' -ForegroundColor Cyan
   Write-Host '1. Navigator > Expert Advisors > right-click > Refresh.' -ForegroundColor White
   Write-Host '2. Open a NEW XAUUSD M1 chart. Do not use the existing Trade Zone chart.' -ForegroundColor White
-  Write-Host '3. Drag SessionSniperEA_v0_13_NearestSwingFVG_NoTimeout_Demo onto that chart.' -ForegroundColor White
+  Write-Host '3. Drag SessionSniperEA_v0_14_TodayOnlyReference_Demo onto that chart.' -ForegroundColor White
   Write-Host '4. Confirm Algo Trading is allowed and the account is DEMO.' -ForegroundColor White
   Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged.' -ForegroundColor White
   Write-Host ''
