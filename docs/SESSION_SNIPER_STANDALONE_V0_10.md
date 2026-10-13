@@ -1,4 +1,4 @@
-# Session Sniper Standalone v0.11 — London + New York
+# Session Sniper Standalone v0.12 — London + New York
 
 **Status:** DEMO/PAPER research candidate only.
 
@@ -33,7 +33,7 @@ A trade is not allowed merely because price touches or breaks the 08:00 range.
 9. Actual-entry R:R to the opposite reference side must be at least 1:2.
 10. Only then may the EA open one position for that session.
 
-There is no engulfing-only shortcut and no direct breakout-candle chase in v0.11.
+There is no engulfing-only shortcut and no direct breakout-candle chase in v0.12.
 
 ## Stop contract
 
@@ -107,3 +107,20 @@ First compile and attach the standalone EA on a separate XAUUSD M1 demo chart. C
 - whether the opposite reference side was reached.
 
 Only after that sample should we decide whether to add FVG-based external-liquidity selection, re-entry, partial exits, or cloud AI veto authority.
+
+
+## v0.12 lifecycle correction
+
+The session setup no longer expires because of an arbitrary clock.
+
+Removed:
+- the 11:30 local execution cutoff;
+- the 30-minute sweep-to-MSS timeout;
+- the 30-minute MSS-to-retest timeout.
+
+The setup remains valid after the 08:00-09:00 reference candle closes until one of these structural events occurs:
+- the intended opposite reference-side objective is reached before entry, consuming the opportunity;
+- a trade is opened for that session;
+- the next local 08:00 reference lifecycle begins.
+
+The 30% runner also has no hard TP. The opposite reference side is telemetry/objective context only; the runner exits through the one-way protected-M1 structural trailing stop or another explicit risk close.
