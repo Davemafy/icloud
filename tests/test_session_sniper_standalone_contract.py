@@ -7,7 +7,7 @@ DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 
 def test_session_sniper_is_standalone_and_demo_only():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "001.110"' in src
+    assert '#property version   "1.11"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "InpMagicNumber=6510010" in src
     assert "InstitutionalSMC_SequenceEA" not in src
