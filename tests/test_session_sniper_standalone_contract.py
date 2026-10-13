@@ -1,14 +1,14 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_13_NearestSwingFVG_NoTimeout_Demo.mq5"
+EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5"
 DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 INSTALLER = ROOT / "mt5" / "standalone" / "Install_SessionSniper_MT5.ps1"
 
 
 def test_session_sniper_is_standalone_demo_only_and_v013():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "1.13"' in src
+    assert '#property version   "1.14"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "ACCOUNT_MARGIN_MODE_RETAIL_HEDGING" in src
     assert "InpMagicNumber=6510010" in src
@@ -78,8 +78,8 @@ def test_7030_management_runner_is_trail_only():
 
 def test_installer_remains_isolated_and_points_to_v013():
     installer = INSTALLER.read_text(encoding="utf-8")
-    assert "SessionSniperEA_v0_13_NearestSwingFVG_NoTimeout_Demo.mq5" in installer
-    assert '#property version   "1.13"' in installer
+    assert "SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5" in installer
+    assert '#property version   "1.14"' in installer
     assert "Sequence 3.78 system" in installer
     assert "Experts\\TradeZone\\SessionSniper" in installer
 
