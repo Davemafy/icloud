@@ -171,7 +171,7 @@ try{
 
   # MetaEditor requires the Market-compatible xxx.yyy version format even for this DEMO EA.
   $raw=Get-Content $downloaded -Raw
-  $raw=$raw.Replace('#property version   "0.11"','#property version   "0.110"')
+  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "001.110"',1)
   Set-Content -LiteralPath $downloaded -Value $raw -Encoding UTF8
 
   $src=Join-Path $dest $SourceName
