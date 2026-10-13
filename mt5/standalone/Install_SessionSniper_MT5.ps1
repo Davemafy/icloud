@@ -6,7 +6,7 @@ $InstallerVersion='SESSION_SNIPER_INSTALLER_0.14'
 $Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.14'
 
 $Repo='Davemafy/icloud'
-$Ref='c09cc6e4325078caad52c5468ce8aef1379890a'
+$Ref='dffe12cceabb8a8493caa0076af27a16a44f5964'
 $SourceName='SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5'
 $SourceUrl="https://raw.githubusercontent.com/$Repo/$Ref/mt5/standalone/$SourceName"
 
