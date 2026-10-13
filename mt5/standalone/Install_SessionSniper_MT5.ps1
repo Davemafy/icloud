@@ -2,12 +2,12 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='SESSION_SNIPER_INSTALLER_0.13'
-$Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.13'
+$InstallerVersion='SESSION_SNIPER_INSTALLER_0.14'
+$Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.14'
 
 $Repo='Davemafy/icloud'
-$Ref='3d2f61e4c4b3e9e8823de5127d004ac3f6241a17'
-$SourceName='SessionSniperEA_v0_13_NearestSwingFVG_NoTimeout_Demo.mq5'
+$Ref='c09cc6e4325078caad52c5468ce8aef1379890a'
+$SourceName='SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5'
 $SourceUrl="https://raw.githubusercontent.com/$Repo/$Ref/mt5/standalone/$SourceName"
 
 function PauseExit([int]$Code=0){
@@ -156,7 +156,7 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
 
 try{
   Write-Host ''
-  Write-Host 'SESSION SNIPER STANDALONE 0.13' -ForegroundColor Cyan
+  Write-Host 'SESSION SNIPER STANDALONE 0.14' -ForegroundColor Cyan
   Write-Host 'DEMO/PAPER ONLY. This installer does NOT modify the current Sequence 3.78 system.' -ForegroundColor Yellow
   Write-Host ''
 
@@ -171,7 +171,7 @@ try{
 
   # MetaEditor requires the Market-compatible xxx.yyy version format even for this DEMO EA.
   $raw=Get-Content $downloaded -Raw
-  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "1.13"',1)
+  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "1.14"',1)
   Set-Content -LiteralPath $downloaded -Value $raw -Encoding UTF8
 
   $src=Join-Path $dest $SourceName
