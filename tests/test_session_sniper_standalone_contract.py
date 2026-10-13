@@ -1,13 +1,13 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_11_7030Runner_Demo.mq5"
+EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_12_NoTimeout_7030Runner_Demo.mq5"
 DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 
 
 def test_session_sniper_is_standalone_and_demo_only():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "1.11"' in src
+    assert '#property version   "1.12"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "InpMagicNumber=6510010" in src
     assert "InstitutionalSMC_SequenceEA" not in src
@@ -56,3 +56,16 @@ def test_session_sniper_7030_management_and_installer_isolation():
     assert "SessionSniperEA_v0_11_7030Runner_Demo.mq5" in installer
     assert "Sequence 3.78 system" in installer
     assert "Experts\\TradeZone\\SessionSniper" in installer
+
+
+def test_session_sniper_has_no_arbitrary_setup_timeout_and_runner_has_no_hard_tp():
+    src = EA.read_text(encoding="utf-8")
+    assert "InpExecutionEndHourLocal" not in src
+    assert "InpExecutionEndMinuteLocal" not in src
+    assert "InpMaxMinutesSweepToMSS" not in src
+    assert "InpMaxMinutesMssToRetest" not in src
+    assert "SWEEP_TO_MSS_EXPIRED" not in src
+    assert "BREAKER_RETEST_EXPIRED" not in src
+    assert "runner_tp=NONE" in src
+    assert "BUY_OBJECTIVE_REACHED_BEFORE_ENTRY" in src
+    assert "SELL_OBJECTIVE_REACHED_BEFORE_ENTRY" in src
