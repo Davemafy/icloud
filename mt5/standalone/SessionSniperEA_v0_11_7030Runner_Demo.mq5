@@ -1,5 +1,5 @@
 #property strict
-#property version   "001.110"
+#property version   "1.11"
 #property description "DEMO/PAPER standalone London + New York session sniper with 70/30 midpoint management."
 
 #include <Trade/Trade.mqh>
