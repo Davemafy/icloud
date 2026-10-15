@@ -1,6 +1,6 @@
 #property strict
 #property version   "1.16"
-#property description "DEMO/PAPER London + New York 08:00 session sniper: nearest H1 swing/FVG reference, no arbitrary setup timeout."
+#property description "DEMO/PAPER independent London 09:00 and New York 08:00 reference; H1 swing/FVG, no arbitrary setup timeout."
 
 #include <Trade/Trade.mqh>
 
@@ -114,7 +114,7 @@ input double InpBaseRiskPercent=0.25;
 input double InpNewYorkPreCashOpenRiskMultiplier=0.50;
 input int    InpMaxSpreadPoints=50;
 
-// Management: bank about 70% at the 0.50 Fibonacci of the 08:00-09:00
+// Management: bank about 70% at the 0.50 Fibonacci of the selected session
 // reference range; leave about 30% to the opposite reference-side objective.
 input double InpPartialPercent=70.0;
 input double InpRunnerPercent=30.0;
@@ -930,7 +930,7 @@ void ProcessSession(SS_SESSION &s,const bool london,const MqlRates &bar)
    bool bearish=bar.close<bar.open;
 
    // No clock expiry. A developing setup ends only by structural consumption
-   // or when the next local 08:00 reference lifecycle replaces it.
+   // or when the next session-local reference lifecycle replaces it.
    if(s.side==SS_BUY && s.stage>=SS_SWEEP_FOUND && s.stage<SS_DONE && bar.high>=s.ref_high)
    {
       s.stage=SS_DONE;
