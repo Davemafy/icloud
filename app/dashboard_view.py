@@ -945,6 +945,76 @@ _JOURNAL_CONTEXT_SCRIPT = r'''
 '''.strip()
 
 
+
+_OPERATIONAL_CLARITY_CARD = (
+    '<h2>Execution decision clarity <span class="pill paper">READ ONLY</span></h2>'
+    '<div class="grid">'
+    '<div class="card gold"><h3>First evidenced entry hold</h3>'
+    '<div class="kpi warn" id="opsDecisionHold">CHECKING</div>'
+    '<p class="note" id="opsDecisionWhy">Waiting for execution telemetry.</p>'
+    '<p class="note">The checklist and historical owner never authorize a trade. Only the MT5 Sequence order gate can do so.</p></div>'
+    '<div class="card"><h3>Historical thesis ownership</h3>'
+    '<div id="opsOwner">Waiting...</div>'
+    '<p class="note">Ownership is persisted lifecycle information, not a fresh entry trigger.</p></div>'
+    '<div class="card"><h3>Fresh entry evidence</h3>'
+    '<div id="opsFresh">Waiting...</div>'
+    '<p class="note" id="opsGate">Sequence gate unavailable.</p></div>'
+    '</div>'
+    '<h2>Strategy-specific demo research <span class="pill paper">OBSERVATION ONLY</span></h2>'
+    '<div class="grid">'
+    '<div class="card"><h3>Institutional SMC — Sequence</h3><div id="opsInstitutional">Waiting...</div></div>'
+    '<div class="card"><h3>Standalone Session Sniper</h3><div id="opsSession">NOT CONNECTED</div>'
+    '<p class="note">The Session Sniper VPS CSV is isolated; no results are silently borrowed from the Institutional journal.</p></div>'
+    '<div class="card"><h3>Combined MT5 account exposure</h3>'
+    '<div class="warn" id="opsCombinedRisk">NOT VERIFIED</div>'
+    '<p class="note">Account-wide enforcement is not installed. Both independent strategies need verified shared-risk coordination before combined exposure is safe to claim.</p></div>'
+    '</div>'
+)
+
+_OPERATIONAL_CLARITY_SCRIPT = r"""
+<script id="operational-clarity-script">
+(function(){
+  const get=id=>document.getElementById(id);
+  const set=(id,v)=>{const e=get(id);if(e)e.textContent=String(v===undefined||v===null?'—':v)};
+  const yn=v=>v===true?'YES':(v===false?'NO':'UNKNOWN');
+  const val=v=>v===undefined||v===null?'—':v;
+  async function refreshOperationalClarity(){
+    try{
+      const resp=await fetch('/dashboard/operational-clarity',{cache:'no-store'});
+      if(!resp.ok)throw new Error('HTTP '+resp.status);
+      const data=await resp.json();
+      const d=data.decision||{},o=d.historical_owner||{},f=d.fresh_entry||{};
+      set('opsDecisionHold',d.primary_hold?.code||'UNVERIFIED');
+      set('opsDecisionWhy',d.primary_hold?.explanation||'No currently verified order permission.');
+      set('opsOwner',(o.locked?'LOCKED '+val(o.direction):'NO ACQUIRED OWNER')+
+          ' | '+val(o.zone_id)+' | '+val(o.lifecycle));
+      set('opsFresh','HTF reacquired: '+yn(f.current_htf_reacquired)+
+          ' • Macro handoff: '+yn(f.macro_handoff)+
+          ' • Fresh M1: '+yn(f.m1_location_ready));
+      set('opsGate','Sequence: '+val(f.sequence_gate_stage)+
+          ' • '+val(f.sequence_gate_reason)+' • Broker order permission: UNVERIFIED');
+      const p=data.performance||{},i=p.institutional_smc||{},ss=p.session_sniper||{},a=p.combined_account_risk||{};
+      const fmt=(v)=>v===undefined||v===null?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:2});
+      set('opsInstitutional',(i.closed_groups===null||i.closed_groups===undefined?'Closed journal records: '+val(i.closed_journal_records):'Closed execution groups: '+val(i.closed_groups))+' | Win rate: '+
+         (i.win_rate_pct===undefined||i.win_rate_pct===null?'—':fmt(i.win_rate_pct)+'%')+
+         ' | Demo P/L: '+fmt(i.net_demo_pnl));
+      set('opsSession',ss.status==='NOT_CONNECTED'?
+          'NOT CONNECTED — waiting for independent Session Sniper journal evidence':val(ss.status));
+      set('opsCombinedRisk',a.enforcement_active===true?
+          'EXPOSURE GUARD VERIFIED': 'NOT VERIFIED — SHARED GUARD NOT ACTIVE');
+    }catch(e){
+      set('opsDecisionHold','TELEMETRY UNAVAILABLE');
+      set('opsDecisionWhy','Read-only status unavailable; this is not evidence of order permission.');
+      set('opsSession','NOT CONNECTED / STATUS UNAVAILABLE');
+      set('opsCombinedRisk','NOT VERIFIED');
+    }
+  }
+  refreshOperationalClarity();
+  window.setInterval(refreshOperationalClarity,10000);
+})();
+</script>
+""".strip()
+
 def compact_dashboard_html(html: str) -> str:
     """Presentation-only cleanup for the human dashboard.
 
@@ -957,6 +1027,9 @@ def compact_dashboard_html(html: str) -> str:
     cleaned = _EXECUTION_CONTRACT_CARD.sub("", html, count=1)
     cleaned = cleaned.replace(_EXECUTION_CONTRACT_BINDING, _EXECUTION_POLICY_BINDING)
     cleaned = cleaned.replace(_FRESHNESS_LABEL_BINDING, _FRESHNESS_LABEL_REPLACEMENT)
+
+    if 'id="opsDecisionHold"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
+        cleaned = cleaned.replace(_JOURNAL_ANCHOR, _OPERATIONAL_CLARITY_CARD + "\n" + _JOURNAL_ANCHOR, 1)
 
     if 'id="mitigationAudit"' not in cleaned and _JOURNAL_ANCHOR in cleaned:
         cleaned = cleaned.replace(_JOURNAL_ANCHOR, _MITIGATION_AUDIT_CARD + "\n" + _JOURNAL_ANCHOR, 1)
@@ -975,5 +1048,8 @@ def compact_dashboard_html(html: str) -> str:
 
     if 'id="journal-context-readonly-script"' not in cleaned and "</body>" in cleaned:
         cleaned = cleaned.replace("</body>", _JOURNAL_CONTEXT_SCRIPT + "\n</body>", 1)
+
+    if 'id="operational-clarity-script"' not in cleaned and "</body>" in cleaned:
+        cleaned = cleaned.replace("</body>", _OPERATIONAL_CLARITY_SCRIPT + "\n</body>", 1)
 
     return cleaned
