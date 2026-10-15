@@ -1,14 +1,14 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5"
+EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_15_InformationPanel_Demo.mq5"
 DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 INSTALLER = ROOT / "mt5" / "standalone" / "Install_SessionSniper_MT5.ps1"
 
 
-def test_session_sniper_is_standalone_demo_only_and_v013():
+def test_session_sniper_is_standalone_demo_only_and_v015():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "1.14"' in src
+    assert '#property version   "1.15"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "ACCOUNT_MARGIN_MODE_RETAIL_HEDGING" in src
     assert "InpMagicNumber=6510010" in src
@@ -76,10 +76,10 @@ def test_7030_management_runner_is_trail_only():
     assert "InpStopAfterFirstWinningTrade=false" in src
 
 
-def test_installer_remains_isolated_and_points_to_v013():
+def test_installer_remains_isolated_and_points_to_v015():
     installer = INSTALLER.read_text(encoding="utf-8")
-    assert "SessionSniperEA_v0_14_TodayOnlyReference_Demo.mq5" in installer
-    assert '#property version   "1.14"' in installer
+    assert "SessionSniperEA_v0_15_InformationPanel_Demo.mq5" in installer
+    assert '#property version   "1.15"' in installer
     assert "Sequence 3.78 system" in installer
     assert "Experts\\TradeZone\\SessionSniper" in installer
 
@@ -88,3 +88,20 @@ def test_documentation_exists():
     text = DOC.read_text(encoding="utf-8")
     assert "London + New York" in text
     assert "does **not** replace, modify, or share execution state" in text
+
+
+def test_information_panel_is_independent_and_current_day_only():
+    src = EA.read_text(encoding="utf-8")
+    assert "SS_DrawInformationPanel()" in src
+    assert "SS_RemoveInformationPanel()" in src
+    assert "SS_PanelStatus" in src
+    assert "REFERENCE_DATA_INCOMPLETE" in src
+    assert "SS_INFO_BACKGROUND" in src
+    assert "SS_INFO_ROW_" in src
+    assert "g_london.local_day_key" in src
+    assert "g_newyork.local_day_key" in src
+    assert "if(now<s.ref_end_server) return false;" in src
+    assert "if(!s.reference_ready) return;" in src
+    # The stable Sequence EA is not referenced or called by the new panel.
+    assert "/mt5/plan" not in src
+    assert "SendOrders" not in src
