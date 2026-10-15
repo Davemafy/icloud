@@ -87,10 +87,10 @@ def test_7030_management_runner_is_trail_only():
     assert "InpStopAfterFirstWinningTrade=false" in src
 
 
-def test_installer_remains_isolated_and_points_to_v015():
+def test_installer_remains_isolated_and_points_to_v016():
     installer = INSTALLER.read_text(encoding="utf-8")
     assert "SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5" in installer
-    assert "Drag SessionSniperEA_v0_15_InformationPanel_Demo onto" in installer
+    assert "Drag SessionSniperEA_v0_16_IndependentSessionClocks_Demo onto" in installer
     assert "Never run both versions together" in installer
     assert '#property version   "1.16"' in installer
     assert "Sequence 3.78 system" in installer
