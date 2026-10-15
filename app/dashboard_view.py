@@ -995,7 +995,7 @@ _OPERATIONAL_CLARITY_SCRIPT = r"""
           ' • '+val(f.sequence_gate_reason)+' • Broker order permission: UNVERIFIED');
       const p=data.performance||{},i=p.institutional_smc||{},ss=p.session_sniper||{},a=p.combined_account_risk||{};
       const fmt=(v)=>v===undefined||v===null?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:2});
-      set('opsInstitutional','Closed groups: '+val(i.closed_groups)+' | Win rate: '+
+      set('opsInstitutional',(i.closed_groups===null||i.closed_groups===undefined?'Closed journal records: '+val(i.closed_journal_records):'Closed execution groups: '+val(i.closed_groups))+' | Win rate: '+
          (i.win_rate_pct===undefined||i.win_rate_pct===null?'—':fmt(i.win_rate_pct)+'%')+
          ' | Demo P/L: '+fmt(i.net_demo_pnl));
       set('opsSession',ss.status==='NOT_CONNECTED'?
