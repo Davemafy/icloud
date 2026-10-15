@@ -1,14 +1,14 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_15_InformationPanel_Demo.mq5"
+EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5"
 DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 INSTALLER = ROOT / "mt5" / "standalone" / "Install_SessionSniper_MT5.ps1"
 
 
-def test_session_sniper_is_standalone_demo_only_and_v015():
+def test_session_sniper_is_standalone_demo_only_and_v016():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "1.15"' in src
+    assert '#property version   "1.16"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "ACCOUNT_MARGIN_MODE_RETAIL_HEDGING" in src
     assert "InpMagicNumber=6510010" in src
@@ -17,11 +17,22 @@ def test_session_sniper_is_standalone_demo_only_and_v015():
     assert "/mt5/heartbeat" not in src
 
 
-def test_reference_clock_is_0800_session_local_and_dst_aware():
+def test_independent_london_0900_ny_0800_session_clock_and_dst():
     src = EA.read_text(encoding="utf-8")
-    assert "InpReferenceHourLocal=8" in src
-    assert "InpReferenceMinuteLocal=0" in src
+    assert "InpLondonReferenceHourLocal=9" in src
+    assert "InpLondonReferenceMinuteLocal=0" in src
+    assert "InpNewYorkReferenceHourLocal=8" in src
+    assert "InpNewYorkReferenceMinuteLocal=0" in src
     assert "InpReferenceMinutes=60" in src
+    assert "reference_hour=london?InpLondonReferenceHourLocal:InpNewYorkReferenceHourLocal;" in src
+    assert "reference_minute=london?InpLondonReferenceMinuteLocal:InpNewYorkReferenceMinuteLocal;" in src
+    assert "LocalNaive(local_now,reference_hour,reference_minute)" in src
+    assert "InpReferenceHourLocal=" not in src
+    assert "InpReferenceMinuteLocal=" not in src
+    assert "InpNewYorkCashOpenHourLocal=9" in src
+    assert "InpNewYorkCashOpenMinuteLocal=30" in src
+    assert 'SS_LocalReferenceLabel(true)' in src
+    assert 'SS_LocalReferenceLabel(false)' in src
     assert "LondonDstForLocalDate" in src
     assert "NewYorkDstForLocalDate" in src
     assert "SessionUtcOffsetSeconds" in src
@@ -78,10 +89,10 @@ def test_7030_management_runner_is_trail_only():
 
 def test_installer_remains_isolated_and_points_to_v015():
     installer = INSTALLER.read_text(encoding="utf-8")
-    assert "SessionSniperEA_v0_15_InformationPanel_Demo.mq5" in installer
+    assert "SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5" in installer
     assert "Drag SessionSniperEA_v0_15_InformationPanel_Demo onto" in installer
     assert "Never run both versions together" in installer
-    assert '#property version   "1.15"' in installer
+    assert '#property version   "1.16"' in installer
     assert "Sequence 3.78 system" in installer
     assert "Experts\\TradeZone\\SessionSniper" in installer
 
@@ -107,3 +118,9 @@ def test_information_panel_is_independent_and_current_day_only():
     # The stable Sequence EA is not referenced or called by the new panel.
     assert "/mt5/plan" not in src
     assert "SendOrders" not in src
+
+
+def test_v015_rollback_source_retained_unchanged():
+    previous=(ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_15_InformationPanel_Demo.mq5").read_text(encoding="utf-8")
+    assert '#property version   "1.15"' in previous
+    assert "InpReferenceHourLocal=8" in previous
