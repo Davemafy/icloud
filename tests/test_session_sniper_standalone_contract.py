@@ -124,3 +124,16 @@ def test_v015_rollback_source_retained_unchanged():
     previous=(ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_15_InformationPanel_Demo.mq5").read_text(encoding="utf-8")
     assert '#property version   "1.15"' in previous
     assert "InpReferenceHourLocal=8" in previous
+
+
+def test_documented_session_local_to_nigeria_dst_clock_contract():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    wat=ZoneInfo("Africa/Lagos")
+    london=ZoneInfo("Europe/London")
+    ny=ZoneInfo("America/New_York")
+    for day,london_hour,new_york_hour in [(15,9,13)]:
+        assert datetime(2026,10,day,9,tzinfo=london).astimezone(wat).hour==london_hour
+        assert datetime(2026,10,day,8,tzinfo=ny).astimezone(wat).hour==new_york_hour
+    assert datetime(2026,11,2,9,tzinfo=london).astimezone(wat).hour==10
+    assert datetime(2026,11,2,8,tzinfo=ny).astimezone(wat).hour==14
