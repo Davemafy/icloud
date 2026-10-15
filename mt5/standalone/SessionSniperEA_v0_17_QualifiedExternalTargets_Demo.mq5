@@ -509,6 +509,16 @@ bool LoadReferenceCandle(SS_SESSION &s)
      :"NO_QUALIFIED_EXTERNAL_H1_SWING_OR_FVG";
    s.reference_ready=true;
    s.stage=SS_ARMED;
+   // Exactly one publication audit per reference. The losing option remains
+   // observational: never substitute an unqualified price for a missing level.
+   JournalEvent(s,"REFERENCE_ARMED",
+      "selection=NEAREST_VALID_SWING_OR_FVG_DISTAL"+
+      "|buy="+(s.ext_low_valid?ExtKindName(s.ext_low_kind)+"@"+DoubleToString(s.ext_low,_Digits):"NONE")+
+      "|buy_fvg_remaining_top="+(s.ext_low_proximal>0?DoubleToString(s.ext_low_proximal,_Digits):"NONE")+
+      "|buy_source_h1="+(s.ext_low_source_time>0?TimeToString(s.ext_low_source_time,TIME_DATE|TIME_MINUTES):"NONE")+
+      "|sell="+(s.ext_high_valid?ExtKindName(s.ext_high_kind)+"@"+DoubleToString(s.ext_high,_Digits):"NONE")+
+      "|sell_fvg_remaining_bottom="+(s.ext_high_proximal>0?DoubleToString(s.ext_high_proximal,_Digits):"NONE")+
+      "|sell_source_h1="+(s.ext_high_source_time>0?TimeToString(s.ext_high_source_time,TIME_DATE|TIME_MINUTES):"NONE"));
    return true;
 }
 
@@ -750,36 +760,40 @@ void DrawSessionLevels(const SS_SESSION &s)
    UpsertSessionHLine(prefix+"REF_LOW",s.ref_low,STYLE_SOLID,2,s.name+" REF LOW");
    UpsertSessionHLine(prefix+"REF_MID",s.ref_mid,STYLE_DOT,1,s.name+" REF 0.50");
 
+   // Erase obsolete v0.15/v0.16 distal plot objects when migrating.
+   ObjectDelete(0,prefix+"EXT_HIGH_FVG_DISTAL");
+   ObjectDelete(0,prefix+"EXT_LOW_FVG_DISTAL");
+
    if(s.ext_high_valid)
    {
       UpsertSessionHLine(prefix+"EXT_HIGH",s.ext_high,STYLE_DASH,1,
-                         s.name+" EXT HIGH "+ExtKindName(s.ext_high_kind)+" PROX");
-      if(s.ext_high_kind==SS_EXT_FVG || s.ext_high_kind==SS_EXT_FVG_SWING_CLUSTER)
-         UpsertSessionHLine(prefix+"EXT_HIGH_FVG_DISTAL",s.ext_high_distal,STYLE_DOT,1,
-                            s.name+" EXT HIGH FVG DISTAL");
+                         s.name+" EXT HIGH "+ExtKindName(s.ext_high_kind)+" OBJECTIVE");
+      if(s.ext_high_proximal>0)
+         UpsertSessionHLine(prefix+"EXT_HIGH_FVG_PROX",s.ext_high_proximal,STYLE_DOT,1,
+                            s.name+" BEARISH FVG REMAINING BOTTOM");
       else
-         ObjectDelete(0,prefix+"EXT_HIGH_FVG_DISTAL");
+         ObjectDelete(0,prefix+"EXT_HIGH_FVG_PROX");
    }
    else
    {
       ObjectDelete(0,prefix+"EXT_HIGH");
-      ObjectDelete(0,prefix+"EXT_HIGH_FVG_DISTAL");
+      ObjectDelete(0,prefix+"EXT_HIGH_FVG_PROX");
    }
 
    if(s.ext_low_valid)
    {
       UpsertSessionHLine(prefix+"EXT_LOW",s.ext_low,STYLE_DASH,1,
-                         s.name+" EXT LOW "+ExtKindName(s.ext_low_kind)+" PROX");
-      if(s.ext_low_kind==SS_EXT_FVG || s.ext_low_kind==SS_EXT_FVG_SWING_CLUSTER)
-         UpsertSessionHLine(prefix+"EXT_LOW_FVG_DISTAL",s.ext_low_distal,STYLE_DOT,1,
-                            s.name+" EXT LOW FVG DISTAL");
+                         s.name+" EXT LOW "+ExtKindName(s.ext_low_kind)+" OBJECTIVE");
+      if(s.ext_low_proximal>0)
+         UpsertSessionHLine(prefix+"EXT_LOW_FVG_PROX",s.ext_low_proximal,STYLE_DOT,1,
+                            s.name+" BULLISH FVG REMAINING TOP");
       else
-         ObjectDelete(0,prefix+"EXT_LOW_FVG_DISTAL");
+         ObjectDelete(0,prefix+"EXT_LOW_FVG_PROX");
    }
    else
    {
       ObjectDelete(0,prefix+"EXT_LOW");
-      ObjectDelete(0,prefix+"EXT_LOW_FVG_DISTAL");
+      ObjectDelete(0,prefix+"EXT_LOW_FVG_PROX");
    }
 }
 
@@ -1176,7 +1190,7 @@ void WriteState()
    int h=FileOpen("TradeZone\\SessionSniper\\state.txt",FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(h==INVALID_HANDLE) return;
 
-   FileWriteString(h,"version=0.14\r\n");
+   FileWriteString(h,"version=0.17\r\n");
    FileWriteString(h,"paper_only=1\r\n");
    FileWriteString(h,"symbol="+g_symbol+"\r\n");
    FileWriteString(h,"restart_safe="+(PositionExistsByMagic()?"0":"1")+"\r\n");
@@ -1194,6 +1208,10 @@ void WriteState()
    FileWriteString(h,"london_ext_low="+(g_london.ext_low_valid?DoubleToString(g_london.ext_low,_Digits):"NONE")+"\r\n");
    FileWriteString(h,"london_ext_low_kind="+ExtKindName(g_london.ext_low_kind)+"\r\n");
    FileWriteString(h,"london_ext_low_distal="+((g_london.ext_low_valid && g_london.ext_low_distal>0)?DoubleToString(g_london.ext_low_distal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"london_ext_low_fvg_remaining_top="+(g_london.ext_low_proximal>0?DoubleToString(g_london.ext_low_proximal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"london_ext_high_fvg_remaining_bottom="+(g_london.ext_high_proximal>0?DoubleToString(g_london.ext_high_proximal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"london_ext_low_source_h1="+(g_london.ext_low_source_time>0?TimeToString(g_london.ext_low_source_time,TIME_DATE|TIME_MINUTES):"NONE")+"\r\n");
+   FileWriteString(h,"london_ext_high_source_h1="+(g_london.ext_high_source_time>0?TimeToString(g_london.ext_high_source_time,TIME_DATE|TIME_MINUTES):"NONE")+"\r\n");
 
    FileWriteString(h,"ny_day="+IntegerToString(g_newyork.local_day_key)+"\r\n");
    FileWriteString(h,"ny_stage="+IntegerToString((int)g_newyork.stage)+"\r\n");
@@ -1206,6 +1224,10 @@ void WriteState()
    FileWriteString(h,"ny_ext_low="+(g_newyork.ext_low_valid?DoubleToString(g_newyork.ext_low,_Digits):"NONE")+"\r\n");
    FileWriteString(h,"ny_ext_low_kind="+ExtKindName(g_newyork.ext_low_kind)+"\r\n");
    FileWriteString(h,"ny_ext_low_distal="+((g_newyork.ext_low_valid && g_newyork.ext_low_distal>0)?DoubleToString(g_newyork.ext_low_distal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"ny_ext_low_fvg_remaining_top="+(g_newyork.ext_low_proximal>0?DoubleToString(g_newyork.ext_low_proximal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"ny_ext_high_fvg_remaining_bottom="+(g_newyork.ext_high_proximal>0?DoubleToString(g_newyork.ext_high_proximal,_Digits):"NONE")+"\r\n");
+   FileWriteString(h,"ny_ext_low_source_h1="+(g_newyork.ext_low_source_time>0?TimeToString(g_newyork.ext_low_source_time,TIME_DATE|TIME_MINUTES):"NONE")+"\r\n");
+   FileWriteString(h,"ny_ext_high_source_h1="+(g_newyork.ext_high_source_time>0?TimeToString(g_newyork.ext_high_source_time,TIME_DATE|TIME_MINUTES):"NONE")+"\r\n");
    FileClose(h);
 }
 
@@ -1237,9 +1259,13 @@ string SS_PanelStatus(const SS_SESSION &s,const datetime now)
    if(now<s.ref_end_server) return "BUILDING REFERENCE";
    if(!s.reference_ready)
    {
-      if(s.last_reason=="REFERENCE_DATA_INCOMPLETE") return "DATA INCOMPLETE";
+      if(s.last_reason=="REFERENCE_DATA_INCOMPLETE" || s.last_reason=="H1_DATA_INCOMPLETE")
+         return "DATA INCOMPLETE";
+      if(s.last_reason=="REFERENCE_RANGE_INVALID" || s.last_reason=="H1_POINT_UNAVAILABLE")
+         return "DATA INVALID";
       return "WAITING FOR CLOSED DATA";
    }
+   if(s.stage==SS_ARMED && !s.ext_low_valid && !s.ext_high_valid) return "NO H1 EXTERNAL";
    if(s.stage==SS_ARMED) return "ARMED";
    if(s.stage==SS_SWEEP_FOUND) return "SWEEP FOUND";
    if(s.stage==SS_RECLAIMED) return "RECLAIMED";
@@ -1312,7 +1338,7 @@ void SS_DrawInformationPanel()
    ObjectSetInteger(0,bg,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,bg,OBJPROP_HIDDEN,true);
 
-   SS_DrawPanelRow(0,"SESSION SNIPER v0.17  |  DEMO ONLY",clrWhite);
+   SS_DrawPanelRow(0,"SESSION SNIPER v0.17 | DEMO | H1 SWING / FVG DISTAL",clrWhite);
    SS_DrawPanelRow(1,"LONDON "+SS_LocalReferenceLabel(true)+"  | "+IntegerToString(g_london.local_day_key)+" | "+SS_PanelStatus(g_london,now),clrLightSkyBlue);
    SS_DrawPanelRow(2,SS_ReferenceLine(g_london),clrWhite);
    SS_DrawPanelRow(3,SS_ExternalLine(g_london),clrSilver);
