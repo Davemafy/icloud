@@ -192,10 +192,10 @@ try{
   Write-Host ''
   Write-Host 'NEXT IN MT5:' -ForegroundColor Cyan
   Write-Host '1. Navigator > Expert Advisors > right-click > Refresh.' -ForegroundColor White
-  Write-Host '2. Open a NEW XAUUSD M1 chart. Do not use the existing Trade Zone chart.' -ForegroundColor White
-  Write-Host '3. Drag SessionSniperEA_v0_14_TodayOnlyReference_Demo onto that chart.' -ForegroundColor White
+  Write-Host '2. When Session Sniper has NO OPEN POSITIONS, remove v0.14 from its old chart, then open a NEW XAUUSD M1 chart.' -ForegroundColor White
+  Write-Host '3. Drag SessionSniperEA_v0_15_InformationPanel_Demo onto the NEW chart. Never run both versions together.' -ForegroundColor White
   Write-Host '4. Confirm Algo Trading is allowed and the account is DEMO.' -ForegroundColor White
-  Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged.' -ForegroundColor White
+  Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged. If v0.14 has open positions, wait and do NOT detach it.' -ForegroundColor White
   Write-Host ''
   Write-Host 'Reference: London 08:00-09:00 London-local and New York 08:00-09:00 New-York-local, DST-aware. Nearest valid external H1 swing or still-unfilled H1 FVG wins on each side. Management: ~70% TP at reference 0.50 midpoint; ~30% trail-only structural runner with no hard TP. No arbitrary setup timeout.' -ForegroundColor Green
   PauseExit 0
