@@ -888,7 +888,10 @@ bool ExecuteSessionTrade(SS_SESSION &s,const datetime now_bar,const bool aggress
 
    if(s.side==SS_BUY)
    {
-      stop=MathMin(s.sweep_extreme,s.breaker_wick_extreme)-buffer;
+      // Aggressive has no breaker yet: anchor SL to the ACTUAL sweep wick.
+      double anchor=(aggressive || s.breaker_wick_extreme<=0)
+                    ?s.sweep_extreme:MathMin(s.sweep_extreme,s.breaker_wick_extreme);
+      stop=anchor-buffer;
       full_target=s.ref_high;
       if(!(stop<entry && partial_target>entry && full_target>partial_target))
       {
@@ -898,7 +901,9 @@ bool ExecuteSessionTrade(SS_SESSION &s,const datetime now_bar,const bool aggress
    }
    else if(s.side==SS_SELL)
    {
-      stop=MathMax(s.sweep_extreme,s.breaker_wick_extreme)+buffer;
+      double anchor=(aggressive || s.breaker_wick_extreme<=0)
+                    ?s.sweep_extreme:MathMax(s.sweep_extreme,s.breaker_wick_extreme);
+      stop=anchor+buffer;
       full_target=s.ref_low;
       if(!(stop>entry && partial_target<entry && full_target<partial_target))
       {
