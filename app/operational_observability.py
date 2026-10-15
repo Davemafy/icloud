@@ -103,8 +103,10 @@ def strategy_split_summary(institutional_performance: dict | None) -> dict:
         "institutional_smc": {
             "source": "EXISTING_INSTITUTIONAL_POSITION_JOURNAL",
             "status": "AVAILABLE" if p else "UNAVAILABLE",
-            "execution_groups": p.get("execution_count", p.get("trade_count")),
-            "closed_groups": p.get("closed_execution_count", p.get("closed_trades")),
+            "execution_groups": p.get("execution_count"),
+            "closed_groups": p.get("closed_executions"),
+            "journal_records": p.get("trade_count"),
+            "closed_journal_records": p.get("closed_trades"),
             "win_rate_pct": p.get("execution_win_rate", p.get("win_rate")),
             "net_demo_pnl": p.get("net_demo_pnl"),
             "by_setup": p.get("by_setup") or {},
