@@ -1,14 +1,14 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5"
+EA = ROOT / "mt5" / "standalone" / "SessionSniperEA_v0_17_QualifiedExternalTargets_Demo.mq5"
 DOC = ROOT / "docs" / "SESSION_SNIPER_STANDALONE_V0_10.md"
 INSTALLER = ROOT / "mt5" / "standalone" / "Install_SessionSniper_MT5.ps1"
 
 
-def test_session_sniper_is_standalone_demo_only_and_v016():
+def test_session_sniper_is_standalone_demo_only_and_v017():
     src = EA.read_text(encoding="utf-8")
-    assert '#property version   "1.16"' in src
+    assert '#property version   "1.17"' in src
     assert "ACCOUNT_TRADE_MODE_DEMO" in src
     assert "ACCOUNT_MARGIN_MODE_RETAIL_HEDGING" in src
     assert "InpMagicNumber=6510010" in src
@@ -38,18 +38,49 @@ def test_independent_london_0900_ny_0800_session_clock_and_dst():
     assert "SessionUtcOffsetSeconds" in src
 
 
-def test_nearest_external_reference_can_be_swing_or_unfilled_fvg():
+def test_nearest_external_reference_uses_unswept_h1_wick_or_fvg_distal():
     src = EA.read_text(encoding="utf-8")
     assert "SS_EXT_SWING" in src
     assert "SS_EXT_FVG" in src
-    assert "SS_EXT_FVG_SWING_CLUSTER" in src
-    assert "ARMED_NEAREST_H1_SWING_OR_FVG" in src
-    assert "remaining_prox" in src
-    assert "fully_filled" in src
-    assert "fvg_low_prox>=swing_low" in src
-    assert "fvg_high_prox<=swing_high" in src
-    assert "EXT_LOW_FVG_DISTAL" in src
-    assert "EXT_HIGH_FVG_DISTAL" in src
+    # Stronger swing: confirmed by two H1 candles on each side, and unswept.
+    assert "for(int i=2;i<n-2;i++)" in src
+    assert "h1[i].low<h1[i-2].low" in src
+    assert "h1[i].low<h1[i+2].low" in src
+    assert "h1[j].low<=h1[i].low" in src
+    assert "h1[j].high>=h1[i].high" in src
+    assert "h1[i].low<s.ref_low" in src
+    assert "h1[i].high>s.ref_high" in src
+    assert "if(!swept && h1[i].low>swing_low)" in src
+    assert "if(!swept && h1[i].high<swing_high)" in src
+
+    # FVG: the BOTTOM of bullish or TOP of bearish is the sweep objective;
+    # later price action must not fully fill the gap.
+    assert "double bull_bottom=h1[i-2].high;" in src
+    assert "double bear_top=h1[i-2].low;" in src
+    assert "if(h1[j].low<=bull_bottom)" in src
+    assert "if(h1[j].high>=bear_top)" in src
+    assert "if(s.ref_low<=bull_bottom)filled=true;" in src
+    assert "if(s.ref_high>=bear_top)filled=true;" in src
+    assert "fvg_low_objective=bull_bottom;" in src
+    assert "fvg_high_objective=bear_top;" in src
+    assert "if(swing_low_valid && (!fvg_low_valid || swing_low>=fvg_low_objective))" in src
+    assert "if(swing_high_valid && (!fvg_high_valid || swing_high<=fvg_high_objective))" in src
+    assert "s.ext_low=fvg_low_objective;" in src
+    assert "s.ext_high=fvg_high_objective;" in src
+    assert "s.ext_low_proximal=fvg_low_remaining_top;" in src
+    assert "s.ext_high_proximal=fvg_high_remaining_bottom;" in src
+
+    # Snapshot of the broker H1 candles must be completed BEFORE the reference.
+    assert "h1[n-1].time+PeriodSeconds(PERIOD_H1)>s.ref_start_server" in src
+    assert "if(n<7)" in src
+    assert 's.last_reason="H1_DATA_INCOMPLETE";' in src
+    assert "s.selection_audit=" in src
+    assert 'JournalEvent(s,"REFERENCE_ARMED"' in src
+    assert 'FileWriteString(h,"version=0.17' in src
+    assert '"london_candidate_audit="' in src
+    assert '"ny_candidate_audit="' in src
+    assert "EXT_LOW_FVG_PROX" in src
+    assert "EXT_HIGH_FVG_PROX" in src
 
 
 def test_full_closed_m1_confirmation_sequence_remains_required():
@@ -87,12 +118,12 @@ def test_7030_management_runner_is_trail_only():
     assert "InpStopAfterFirstWinningTrade=false" in src
 
 
-def test_installer_remains_isolated_and_points_to_v016():
+def test_installer_remains_isolated_and_points_to_v017():
     installer = INSTALLER.read_text(encoding="utf-8")
-    assert "SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5" in installer
-    assert "Drag SessionSniperEA_v0_16_IndependentSessionClocks_Demo onto" in installer
+    assert "SessionSniperEA_v0_17_QualifiedExternalTargets_Demo.mq5" in installer
+    assert "Drag SessionSniperEA_v0_17_QualifiedExternalTargets_Demo onto" in installer
     assert "Never run both versions together" in installer
-    assert '#property version   "1.16"' in installer
+    assert '#property version   "1.17"' in installer
     assert "Sequence 3.78 system" in installer
     assert "Experts\\TradeZone\\SessionSniper" in installer
 
