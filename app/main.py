@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import SETTINGS
 from .dashboard_view import compact_dashboard_html
+from .operational_observability import operational_clarity
 from .execution_owner_mirror import owner_plan_text, recover_owner_from_sequence_heartbeat
 from .db import init_db, latest_heartbeats, latest_snapshot, recent_feedback, save_feedback, save_heartbeat, save_snapshot
 from .engine import active_plan_text
@@ -1321,6 +1322,21 @@ def journal_trades(limit: int = 50):
 @app.get("/journal/performance")
 def journal_performance():
     return performance_summary()
+
+
+@app.get("/dashboard/operational-clarity")
+def operational_clarity_read_only():
+    """Independent operator diagnostics; never used by /mt5/plan or order gates."""
+    try:
+        journal = _journal_snapshot()
+    except Exception:
+        journal = None
+    try:
+        summary = performance_summary()
+    except Exception:
+        summary = None
+    return operational_clarity(journal, summary)
+
 
 
 @app.get("/journal/export.csv")
