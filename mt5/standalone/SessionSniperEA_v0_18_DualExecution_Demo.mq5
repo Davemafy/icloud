@@ -1294,7 +1294,7 @@ void WriteState()
    int h=FileOpen("TradeZone\\SessionSniper\\state.txt",FILE_WRITE|FILE_TXT|FILE_ANSI);
    if(h==INVALID_HANDLE) return;
 
-   FileWriteString(h,"version=0.17\r\n");
+   FileWriteString(h,"version=0.18\r\n");
    FileWriteString(h,"paper_only=1\r\n");
    FileWriteString(h,"symbol="+g_symbol+"\r\n");
    FileWriteString(h,"restart_safe="+(PositionExistsByMagic()?"0":"1")+"\r\n");
@@ -1419,6 +1419,13 @@ void SS_DrawPanelRow(const int row,const string value,const color ink)
    ObjectSetString(0,name,OBJPROP_TEXT,value);
 }
 
+string SS_EntryModeName()
+{
+   if(InpEntryMode==SS_AGGRESSIVE_ONLY) return "AGGRESSIVE ONLY";
+   if(InpEntryMode==SS_NORMAL_ONLY) return "NORMAL ONLY";
+   return "DUAL AUTO";
+}
+
 string SS_LocalReferenceLabel(const bool london)
 {
    int h=london?InpLondonReferenceHourLocal:InpNewYorkReferenceHourLocal;
@@ -1447,7 +1454,7 @@ void SS_DrawInformationPanel()
    ObjectSetInteger(0,bg,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,bg,OBJPROP_HIDDEN,true);
 
-   SS_DrawPanelRow(0,"SESSION SNIPER v0.18 | DEMO | H1 EXTERNAL + DUAL M1",clrWhite);
+   SS_DrawPanelRow(0,"SESSION SNIPER v0.18 | "+SS_EntryModeName()+" | DEMO",clrWhite);
    SS_DrawPanelRow(1,"LONDON "+SS_LocalReferenceLabel(true)+"  | "+IntegerToString(g_london.local_day_key)+" | "+SS_PanelStatus(g_london,now),clrLightSkyBlue);
    SS_DrawPanelRow(2,SS_ReferenceLine(g_london),clrWhite);
    SS_DrawPanelRow(3,SS_ExternalLine(g_london),clrSilver);
