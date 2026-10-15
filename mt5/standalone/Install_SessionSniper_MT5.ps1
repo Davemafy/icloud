@@ -2,12 +2,12 @@ param([switch]$SkipCompile)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-$InstallerVersion='SESSION_SNIPER_INSTALLER_0.15'
-$Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.15'
+$InstallerVersion='SESSION_SNIPER_INSTALLER_0.16'
+$Host.UI.RawUI.WindowTitle='Trade Zone - Session Sniper Standalone Installer 0.16'
 
 $Repo='Davemafy/icloud'
-$Ref='0ecd3db7abad6b79775d2faf7f87b7586c3dbe94'
-$SourceName='SessionSniperEA_v0_15_InformationPanel_Demo.mq5'
+$Ref='4c560b8dba4e37e5876d436a557d64c855c49c30'
+$SourceName='SessionSniperEA_v0_16_IndependentSessionClocks_Demo.mq5'
 $SourceUrl="https://raw.githubusercontent.com/$Repo/$Ref/mt5/standalone/$SourceName"
 
 function PauseExit([int]$Code=0){
@@ -156,7 +156,7 @@ function CompileOne([string]$Meta,[string]$Src,[string]$LogDir){
 
 try{
   Write-Host ''
-  Write-Host 'SESSION SNIPER STANDALONE 0.15' -ForegroundColor Cyan
+  Write-Host 'SESSION SNIPER STANDALONE 0.16' -ForegroundColor Cyan
   Write-Host 'DEMO/PAPER ONLY. This installer does NOT modify the current Sequence 3.78 system.' -ForegroundColor Yellow
   Write-Host ''
 
@@ -171,7 +171,7 @@ try{
 
   # MetaEditor requires the Market-compatible xxx.yyy version format even for this DEMO EA.
   $raw=Get-Content $downloaded -Raw
-  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "1.15"',1)
+  $raw=[regex]::Replace($raw,'#property\s+version\s+"[^"]+"','#property version   "1.16"',1)
   Set-Content -LiteralPath $downloaded -Value $raw -Encoding UTF8
 
   $src=Join-Path $dest $SourceName
@@ -192,12 +192,12 @@ try{
   Write-Host ''
   Write-Host 'NEXT IN MT5:' -ForegroundColor Cyan
   Write-Host '1. Navigator > Expert Advisors > right-click > Refresh.' -ForegroundColor White
-  Write-Host '2. When Session Sniper has NO OPEN POSITIONS, remove v0.14 from its old chart, then open a NEW XAUUSD M1 chart.' -ForegroundColor White
+  Write-Host '2. When Session Sniper has NO OPEN POSITIONS, remove v0.15 from its old chart, then open a NEW XAUUSD M1 chart.' -ForegroundColor White
   Write-Host '3. Drag SessionSniperEA_v0_15_InformationPanel_Demo onto the NEW chart. Never run both versions together.' -ForegroundColor White
   Write-Host '4. Confirm Algo Trading is allowed and the account is DEMO.' -ForegroundColor White
-  Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged. If v0.14 has open positions, wait and do NOT detach it.' -ForegroundColor White
+  Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged. If v0.15 has open positions, wait and do NOT detach it.' -ForegroundColor White
   Write-Host ''
-  Write-Host 'Reference: London 08:00-09:00 London-local and New York 08:00-09:00 New-York-local, DST-aware. Nearest valid external H1 swing or still-unfilled H1 FVG wins on each side. Management: ~70% TP at reference 0.50 midpoint; ~30% trail-only structural runner with no hard TP. No arbitrary setup timeout.' -ForegroundColor Green
+  Write-Host 'Reference: London 09:00-10:00 London-local and New York 08:00-09:00 New-York-local, DST-aware. Nearest valid external H1 swing or still-unfilled H1 FVG wins on each side. Management: ~70% TP at reference 0.50 midpoint; ~30% trail-only structural runner with no hard TP. No arbitrary setup timeout.' -ForegroundColor Green
   PauseExit 0
 }catch{
   Write-Host ''
