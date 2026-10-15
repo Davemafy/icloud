@@ -56,3 +56,9 @@ def test_no_synthetic_session_sniper_or_combined_risk():
     assert p["session_sniper"]["execution_groups"] is None
     assert p["session_sniper"]["status"] == "NOT_CONNECTED"
     assert p["combined_account_risk"]["enforcement_active"] is False
+
+
+def test_unverified_grouping_is_never_claimed():
+    p = strategy_split_summary({"trade_count": 67, "closed_trades": 67})
+    assert p["institutional_smc"]["execution_groups"] is None
+    assert p["institutional_smc"]["journal_records"] == 67
