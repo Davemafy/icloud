@@ -73,6 +73,7 @@ struct SS_SESSION
    double   breaker_wick_extreme;
    bool     traded;
    string   last_reason;
+   string   selection_audit;  // Diagnostic alternatives, never entry authority
 };
 
 input string InpTradeSymbol="";
@@ -253,6 +254,7 @@ void ResetSession(SS_SESSION &s,const string name,const int day_key)
    s.breaker_wick_extreme=0;
    s.traded=false;
    s.last_reason="WAIT_REFERENCE";
+   s.selection_audit="";
 }
 
 bool BuildSessionClock(SS_SESSION &s,const bool london,const datetime now_server)
@@ -339,6 +341,11 @@ bool LoadReferenceCandle(SS_SESSION &s)
    MqlRates h1[];
    datetime from=s.ref_start_server-(InpExternalH1LookbackBars+5)*3600;
    int n=CopyRates(g_symbol,PERIOD_H1,from,s.ref_start_server-1,h1);
+   // User-adjustable reference minute might occur *inside* an H1 candle.
+   // Remove such unclosed bars: after-the-fact H1 highs/lows would otherwise
+   // leak future information into the selection made at reference start.
+   while(n>0 && h1[n-1].time+PeriodSeconds(PERIOD_H1)>s.ref_start_server)
+      n--;
    // Two completed bars on either side of each swing need at least five bars.
    // Seven are required to also evaluate a three-candle FVG and its later fill.
    if(n<7)
@@ -503,7 +510,15 @@ bool LoadReferenceCandle(SS_SESSION &s)
       s.ext_high_valid=true;
    }
 
-   // Capture alternatives for diagnosis without allowing them to move price.
+   // Record source candidates and the exact choice, not just the winner.
+   // All prices are from the pre-reference H1 feed, never hard-coded marks.
+   s.selection_audit=
+      "down_swing="+(swing_low_valid?DoubleToString(swing_low,_Digits):"NONE")+
+      "|down_fvg_bottom="+(fvg_low_valid?DoubleToString(fvg_low_objective,_Digits):"NONE")+
+      "|down_choice="+(s.ext_low_valid?ExtKindName(s.ext_low_kind):"NONE")+
+      "|up_swing="+(swing_high_valid?DoubleToString(swing_high,_Digits):"NONE")+
+      "|up_fvg_top="+(fvg_high_valid?DoubleToString(fvg_high_objective,_Digits):"NONE")+
+      "|up_choice="+(s.ext_high_valid?ExtKindName(s.ext_high_kind):"NONE");
    s.last_reason=(s.ext_low_valid || s.ext_high_valid)
      ?"ARMED_NEAREST_UNSWEPT_H1_SWING_OR_FVG_DISTAL"
      :"NO_QUALIFIED_EXTERNAL_H1_SWING_OR_FVG";
@@ -513,6 +528,7 @@ bool LoadReferenceCandle(SS_SESSION &s)
    // observational: never substitute an unqualified price for a missing level.
    JournalEvent(s,"REFERENCE_ARMED",
       "selection=NEAREST_VALID_SWING_OR_FVG_DISTAL"+
+      "|candidates="+s.selection_audit+
       "|buy="+(s.ext_low_valid?ExtKindName(s.ext_low_kind)+"@"+DoubleToString(s.ext_low,_Digits):"NONE")+
       "|buy_fvg_remaining_top="+(s.ext_low_proximal>0?DoubleToString(s.ext_low_proximal,_Digits):"NONE")+
       "|buy_source_h1="+(s.ext_low_source_time>0?TimeToString(s.ext_low_source_time,TIME_DATE|TIME_MINUTES):"NONE")+
@@ -1200,6 +1216,7 @@ void WriteState()
    FileWriteString(h,"london_day="+IntegerToString(g_london.local_day_key)+"\r\n");
    FileWriteString(h,"london_stage="+IntegerToString((int)g_london.stage)+"\r\n");
    FileWriteString(h,"london_reason="+g_london.last_reason+"\r\n");
+   FileWriteString(h,"london_candidate_audit="+g_london.selection_audit+"\r\n");
    FileWriteString(h,"london_ref_high="+DoubleToString(g_london.ref_high,_Digits)+"\r\n");
    FileWriteString(h,"london_ref_low="+DoubleToString(g_london.ref_low,_Digits)+"\r\n");
    FileWriteString(h,"london_ext_high="+(g_london.ext_high_valid?DoubleToString(g_london.ext_high,_Digits):"NONE")+"\r\n");
@@ -1216,6 +1233,7 @@ void WriteState()
    FileWriteString(h,"ny_day="+IntegerToString(g_newyork.local_day_key)+"\r\n");
    FileWriteString(h,"ny_stage="+IntegerToString((int)g_newyork.stage)+"\r\n");
    FileWriteString(h,"ny_reason="+g_newyork.last_reason+"\r\n");
+   FileWriteString(h,"ny_candidate_audit="+g_newyork.selection_audit+"\r\n");
    FileWriteString(h,"ny_ref_high="+DoubleToString(g_newyork.ref_high,_Digits)+"\r\n");
    FileWriteString(h,"ny_ref_low="+DoubleToString(g_newyork.ref_low,_Digits)+"\r\n");
    FileWriteString(h,"ny_ext_high="+(g_newyork.ext_high_valid?DoubleToString(g_newyork.ext_high,_Digits):"NONE")+"\r\n");
