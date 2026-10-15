@@ -110,8 +110,8 @@ def test_7030_management_runner_is_trail_only():
     assert "InpPartialPercent=70.0" in src
     assert "InpRunnerPercent=30.0" in src
     assert "SplitVolume7030" in src
-    assert 'partial_comment="SS "+s.name+" P70"' in src
-    assert 'runner_comment="SS "+s.name+" R30"' in src
+    assert 'partial_comment="SS "+s.name+model_tag+" P70"' in src
+    assert 'runner_comment="SS "+s.name+model_tag+" R30"' in src
     assert "runner_tp=NONE" in src
     assert "ManageRunnerTrail" in src
     assert "LatestProtectedTrailSwing" in src
