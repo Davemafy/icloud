@@ -1058,6 +1058,15 @@ void ProcessSession(SS_SESSION &s,const bool london,const MqlRates &bar)
    if(s.traded || s.stage==SS_DONE) return;
    if(!SessionWindowOpen(s,bar.time)) return;
 
+   // Maintain the actual most adverse wick of a developing sweep sequence.
+   // Both entry models use this structural invalidation point for SL, so a
+   // second spike cannot leave a newly opened order under-protected.
+   if(s.sweep_time>0 && s.stage>=SS_SWEEP_FOUND && s.stage<SS_DONE)
+   {
+      if(s.side==SS_SELL) s.sweep_extreme=MathMax(s.sweep_extreme,bar.high);
+      if(s.side==SS_BUY)  s.sweep_extreme=MathMin(s.sweep_extreme,bar.low);
+   }
+
    bool bullish=bar.close>bar.open;
    bool bearish=bar.close<bar.open;
 
@@ -1368,7 +1377,10 @@ string SS_PanelStatus(const SS_SESSION &s,const datetime now)
    if(now<s.ref_end_server) return "BUILDING REFERENCE";
    if(!s.reference_ready)
    {
-      if(s.last_reason=="REFERENCE_DATA_INCOMPLETE" || s.last_reason=="H1_DATA_INCOMPLETE")
+      if(s.last_reason=="REFERENCE_DATA_INCOMPLETE" ||
+         s.last_reason=="REFERENCE_M1_CANDLE_COUNT_INCOMPLETE" ||
+         s.last_reason=="REFERENCE_M1_MINUTE_GAP" ||
+         s.last_reason=="H1_DATA_INCOMPLETE")
          return "DATA INCOMPLETE";
       if(s.last_reason=="REFERENCE_RANGE_INVALID" || s.last_reason=="H1_POINT_UNAVAILABLE")
          return "DATA INVALID";
