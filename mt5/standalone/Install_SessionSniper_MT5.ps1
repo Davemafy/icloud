@@ -193,7 +193,7 @@ try{
   Write-Host 'NEXT IN MT5:' -ForegroundColor Cyan
   Write-Host '1. Navigator > Expert Advisors > right-click > Refresh.' -ForegroundColor White
   Write-Host '2. When Session Sniper has NO OPEN POSITIONS, remove v0.15 from its old chart, then open a NEW XAUUSD M1 chart.' -ForegroundColor White
-  Write-Host '3. Drag SessionSniperEA_v0_15_InformationPanel_Demo onto the NEW chart. Never run both versions together.' -ForegroundColor White
+  Write-Host '3. Drag SessionSniperEA_v0_16_IndependentSessionClocks_Demo onto the NEW chart. Never run both versions together.' -ForegroundColor White
   Write-Host '4. Confirm Algo Trading is allowed and the account is DEMO.' -ForegroundColor White
   Write-Host '5. Leave the current Institutional SMC Sequence EA 3.78 chart unchanged. If v0.15 has open positions, wait and do NOT detach it.' -ForegroundColor White
   Write-Host ''
